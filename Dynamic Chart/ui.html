@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 16px; }
+    textarea { width: 100%; height: 200px; box-sizing: border-box; }
+    button { padding: 8px 12px; margin-top: 8px; }
+    .hint { color:#666; font-size:11px; margin-top:8px }
+  </style>
+</head>
+<body>
+  <h3>Apply Auto Layout Padding from JSON</h3>
+  <textarea id="json" placeholder='{"items":[{"name":"Bar 1","padding":{"h":10,"v":28}}]}'></textarea>
+  <button id="apply">Apply</button>
+  <div class="hint">
+    Schema: { items: [{ name?|nodeId?, padding: { h?, v?, left?, right?, top?, bottom? } }] }
+  </div>
+  <script>
+    document.getElementById('apply').addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'apply-json', text: document.getElementById('json').value }}, '*');
+    });
+  </script>
+</body>
+</html>
