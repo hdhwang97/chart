@@ -2,23 +2,270 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <title>Apply Chart Padding</title>
   <style>
-    body { font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 16px; }
-    textarea { width: 100%; height: 200px; box-sizing: border-box; }
-    button { padding: 8px 12px; margin-top: 8px; }
-    .hint { color:#666; font-size:11px; margin-top:8px }
+    body { 
+      font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      margin: 16px; 
+    }
+    h3 { margin-top: 0; }
+    div { margin-bottom: 10px; }
+    label { 
+      display: block; 
+      margin-bottom: 4px; 
+      font-weight: 500; 
+    }
+    
+    /* 폼 요소 스타일 */
+    input[type="number"],
+    input[type="text"],
+    select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    
+    /* 버튼 스타일 */
+    button { 
+      padding: 8px 12px; 
+      margin-top: 8px; 
+      border: none;
+      background-color: #007bff;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+    }
+    button:hover { background-color: #0056b3; }
+    
+    button.secondary {
+      background-color: #6c757d;
+    }
+    button.secondary:hover { background-color: #5a6268; }
+
+    /* 개별 바 컨테이너 */
+    .bar-container {
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    
+    /* 스택바의 자식 생성기 */
+    .sub-field-generator {
+      display: flex;
+      gap: 8px;
+    }
+    .sub-field-generator input { width: 100px; }
+    .sub-field-generator button { width: auto; margin-top: 0; }
+
+    /* 자식 입력 필드 컨테이너 */
+    .sub-field-container {
+      margin-top: 10px;
+      padding-left: 10px;
+      border-left: 2px solid #f0f0f0;
+    }
+    
+    .hint { 
+      color:#666; 
+      font-size:11px; 
+      margin-top:12px; 
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
-  <h3>Apply Auto Layout Padding from JSON</h3>
-  <textarea id="json" placeholder='{"items":[{"name":"Bar 1","padding":{"h":10,"v":28}}]}'></textarea>
-  <button id="apply">Apply</button>
-  <div class="hint">
-    Schema: { items: [{ name?|nodeId?, padding: { h?, v?, left?, right?, top?, bottom? } }] }
+  <h3>Apply Chart Padding</h3>
+  
+  <div>
+    <label for="type">Chart Type:</label>
+    <select id="type">
+      <option value="stackedBar" selected>Stacked Bar</option>
+      <option value="bar">Single Bar</option>
+    </select>
   </div>
+  <div>
+    <label for="totalHeight">Total Height (y) px:</label>
+    <input type="number" id="totalHeight" value="800">
+  </div>
+  <div>
+    <label for="baseName">Base Layer Name (Prefix):</label>
+    <input type="text" id="baseName" value="bar_">
+  </div>
+
+  <div>
+    <label for="barCount">Number of Bars (n):</label>
+    <input type="number" id="barCount" value="2" min="1">
+  </div>
+  <button id="generateFields" class="secondary">Generate Data Fields</button>
+
+  <div id="data-fields">
+    </div>
+  
+  <button id="apply">Apply</button>
+  
+  <div class="hint">
+    <b>How to use:</b>
+    <ol style="margin: 4px 0 0 16px; padding: 0;">
+      <li>Fill settings & 'Number of Bars', then click 'Generate'.</li>
+      <li>For Stacked Bars, enter sub-item count and click 'Create'.</li>
+      <li>Fill in all ratio data.</li>
+      <li>Select the container frame (that holds all "bar_n" layers).</li>
+      <li>Click 'Apply'.</li>
+    </ol>
+  </div>
+  
   <script>
+    const dataFieldsContainer = document.getElementById('data-fields');
+
+    // --- [NEW] UI 리사이즈 함수 ---
+    function notifyResize() {
+      // 1. 현재 본문(body)의 실제 스크롤 높이를 계산합니다.
+      // 16px은 하단 여백(margin)을 위한 보너스입니다.
+      const newHeight = document.body.scrollHeight + 16;
+      
+      // 2. 'resize' 타입으로 code.js에 새 높이를 전송합니다.
+      parent.postMessage({ 
+        pluginMessage: { type: 'resize', height: newHeight } 
+      }, '*');
+    }
+
+    // --- 1. 메인 필드 생성기 ---
+    document.getElementById('generateFields').addEventListener('click', () => {
+      const type = document.getElementById('type').value;
+      const baseName = document.getElementById('baseName').value.trim();
+      const barCount = parseInt(document.getElementById('barCount').value) || 0;
+      
+      dataFieldsContainer.innerHTML = ''; // 기존 필드 초기화
+      
+      for (let i = 1; i <= barCount; i++) {
+        const barName = `${baseName}${i}`; // 예: "bar_1"
+        const containerDiv = document.createElement('div');
+        containerDiv.className = 'bar-container';
+        containerDiv.dataset.parentIndex = i; // 각 컨테이너에 인덱스 저장
+
+        if (type === 'bar') {
+          // 'Single Bar'일 경우
+          containerDiv.innerHTML = `
+            <label for="bar_data_${i}">${barName} Ratio (%):</label>
+            <input type="number" id="bar_data_${i}" class="bar-data-input" placeholder="e.g., 50">
+          `;
+        } else {
+          // 'Stacked Bar'일 경우 (자식 생성기 UI 추가)
+          containerDiv.innerHTML = `
+            <label>${barName} Sub-Items:</label>
+            <div class="sub-field-generator">
+              <input type="number" id="sub_count_${i}" placeholder="Sub-item count" min="1" value="3">
+              <button class="secondary sub-generate-button" data-index="${i}">Create</button>
+            </div>
+            <div class="sub-field-container" id="sub_container_${i}">
+              </div>
+          `;
+        }
+        dataFieldsContainer.appendChild(containerDiv);
+      }
+      
+      // [NEW] 필드 생성 후 높이 리사이즈 요청
+      notifyResize();
+    });
+
+    // --- 2. 자식 필드 생성기 (이벤트 위임) ---
+    dataFieldsContainer.addEventListener('click', (event) => {
+      // 'Create' 버튼이 클릭되었는지 확인
+      if (event.target.classList.contains('sub-generate-button')) {
+        const index = event.target.dataset.index;
+        const baseName = document.getElementById('baseName').value.trim();
+        const barName = `${baseName}${index}`; // "bar_1"
+        
+        const countInput = document.getElementById(`sub_count_${index}`);
+        const subCount = parseInt(countInput.value) || 0;
+        
+        const container = document.getElementById(`sub_container_${index}`);
+        container.innerHTML = ''; // 기존 자식 필드 초기화
+        
+        for (let j = 1; j <= subCount; j++) {
+          const subName = `${barName}-${j}`; // "bar_1-1"
+          const fieldDiv = document.createElement('div');
+          fieldDiv.innerHTML = `
+            <label for="sub_data_${index}_${j}">${subName} Ratio (%):</label>
+            <input type="number" id="sub_data_${index}_${j}" 
+                   class="sub-data-input" 
+                   data-parent-index="${index}" 
+                   placeholder="e.g., 10">
+          `;
+          container.appendChild(fieldDiv);
+        }
+        
+        // [NEW] 자식 필드 생성 후 높이 리사이즈 요청
+        notifyResize();
+      }
+    });
+
+    // --- 3. 적용 버튼 스크립트 ---
     document.getElementById('apply').addEventListener('click', () => {
-      parent.postMessage({ pluginMessage: { type: 'apply-json', text: document.getElementById('json').value }}, '*');
+      const type = document.getElementById('type').value;
+      const totalHeight = parseFloat(document.getElementById('totalHeight').value) || 0;
+      const baseName = document.getElementById('baseName').value.trim();
+      
+      let itemsPayload = [];
+      
+      try {
+        if (type === 'bar') {
+          // 'Single Bar' 데이터 수집
+          const dataInputs = document.querySelectorAll('.bar-data-input');
+          for (const input of dataInputs) {
+            const value = input.value.trim();
+            if (value.length === 0) continue; // 빈칸 무시
+            const val = parseFloat(value);
+            if (isNaN(val)) throw new Error(`Invalid number: ${value}`);
+            itemsPayload.push(val);
+          }
+            
+        } else if (type === 'stackedBar') {
+          // 'Stacked Bar' 데이터 수집
+          const barContainers = document.querySelectorAll('.bar-container');
+          for (const container of barContainers) {
+            const index = container.dataset.parentIndex;
+            
+            // 해당 부모('bar_n')에 속한 모든 자식 input을 찾음
+            const subInputs = document.querySelectorAll(`.sub-data-input[data-parent-index="${index}"]`);
+            if (subInputs.length === 0) continue; // 자식이 없으면 무시
+
+            let subRatios = [];
+            for (const input of subInputs) {
+              const value = input.value.trim();
+              if (value.length === 0) continue; // 빈칸 무시
+              const val = parseFloat(value);
+              if (isNaN(val)) throw new Error(`Invalid number: ${value}`);
+              subRatios.push(val);
+            }
+            itemsPayload.push(subRatios);
+          }
+        }
+      } catch (e) {
+        alert(`Data field error: ${e.message}`);
+        return;
+      }
+      
+      // 4. code.js가 요구하는 JSON 객체 생성
+      const payload = {
+        type: type,
+        totalHeight: totalHeight,
+        baseName: baseName,
+        items: itemsPayload
+      };
+      
+      // 5. JSON 문자열로 변환하여 code.js로 전송
+      parent.postMessage({
+        pluginMessage: {
+          type: 'apply-json',
+          text: JSON.stringify(payload)
+        }
+      }, '*');
     });
   </script>
 </body>
