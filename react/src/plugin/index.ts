@@ -1,4 +1,4 @@
-// code.ts
+// plugin/index.ts
 
 type ChartType = 'bar' | 'stackedBar' | 'line';
 type Mode = 'percent' | 'raw';
@@ -232,18 +232,12 @@ function applyStackedBar(
       const nodes = groupsMap
         .get(barIndex)!
         .sort((a, b) => a.segIndex - b.segIndex)
-        .map((n) => n.node);
+        .map((x) => x.node);
 
-      const groupValues = values[g];
-      const segCount = Math.min(groupValues.length, nodes.length);
+      const segValues = values[g];
+      const segCount = Math.min(segValues.length, nodes.length);
 
-      if (groupValues.length !== nodes.length) {
-        logs.push(
-          `- bar_${barIndex}_* 그룹: Mark(${nodes.length}) vs 데이터(${groupValues.length}) 불일치, 공통 구간만 적용`,
-        );
-      }
-
-      const norm = normalizePercent(groupValues, H);
+      const norm = normalizePercent(segValues, H);
       if (norm.note) logs.push(norm.note);
 
       for (let i = 0; i < segCount; i++) {
@@ -253,48 +247,35 @@ function applyStackedBar(
       }
     }
   } else {
-    // raw 모드: 그룹 합 기준 정규화 (maxSum)
-    // 먼저 모든 그룹의 합 계산
-    const sums: number[] = values.map((group) =>
-      group.reduce((acc, v) => acc + Math.max(0, v), 0),
-    );
-    const maxSum = Math.max(...sums, 0);
-
-    if (maxSum <= 0) {
-      logs.push(
-        'StackedBar raw 모드: 모든 그룹 합이 0 이하입니다. 모든 segment padding을 0으로 설정합니다.',
-      );
-      // 그냥 다 0으로
-      for (const { node } of stacked) {
-        if (!isPaddingNode(node)) continue;
-        node.paddingBottom = 0;
-      }
-      return;
-    }
-
+    // raw 모드: 각 바의 총합을 H에 맞춤
     for (let g = 0; g < useGroupCount; g++) {
       const barIndex = barIndices[g];
       const nodes = groupsMap
         .get(barIndex)!
         .sort((a, b) => a.segIndex - b.segIndex)
-        .map((n) => n.node);
+        .map((x) => x.node);
 
-      const groupValues = values[g];
-      const segCount = Math.min(groupValues.length, nodes.length);
+      const segValues = values[g];
+      const segCount = Math.min(segValues.length, nodes.length);
 
-      if (groupValues.length !== nodes.length) {
-        logs.push(
-          `- bar_${barIndex}_* 그룹: Mark(${nodes.length}) vs 데이터(${groupValues.length}) 불일치, 공통 구간만 적용`,
-        );
+      const positive = segValues.map((v) => Math.max(0, v));
+      const sum = positive.reduce((acc, v) => acc + v, 0);
+
+      if (sum <= 0) {
+        for (let i = 0; i < segCount; i++) {
+          const node = nodes[i];
+          if (!isPaddingNode(node)) continue;
+          node.paddingBottom = 0;
+        }
+        continue;
       }
 
+      const px = positive.map((v) => (H * v) / sum);
+
       for (let i = 0; i < segCount; i++) {
-        const v = Math.max(0, groupValues[i]);
-        const ratio = v / maxSum;
-        const valuePx = H * ratio;
         const node = nodes[i];
         if (!isPaddingNode(node)) continue;
-        node.paddingBottom = valuePx;
+        node.paddingBottom = px[i];
       }
     }
   }
@@ -392,11 +373,14 @@ figma.ui.onmessage = (msg: ApplyMessage) => {
 
   const logs: string[] = [];
   try {
-    if (selection.length !== 1) {
+    // 현재 선택된 노드를 다시 확인
+    const currentSelection = figma.currentPage.selection;
+
+    if (currentSelection.length !== 1) {
       throw new Error('그래프 컴포넌트를 한 개 선택한 상태에서 실행해 주세요.');
     }
 
-    const graph = selection[0];
+    const graph = currentSelection[0];
     if (!('height' in graph)) {
       throw new Error('선택된 노드에서 height를 읽을 수 없습니다.');
     }

@@ -1,5 +1,5 @@
 {
-  "name": "hyundong dynamic chart",
+  "name": "hdc-react",
   "id": "hd-dynamic-chart",
   "api": "1.0.0",
   "main": "dist/plugin.js",

@@ -10,7 +10,7 @@ export default function App() {
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
-    // code.js로부터 메시지 수신
+    // Plugin (code.js)로부터 메시지 수신
     window.onmessage = (event) => {
       const msg = event.data.pluginMessage;
       if (!msg) return;
@@ -22,6 +22,7 @@ export default function App() {
   }, []);
 
   const handleApply = () => {
+    // Plugin으로 JSON 데이터 전송
     parent.postMessage(
       {
         pluginMessage: {
@@ -35,10 +36,10 @@ export default function App() {
 
   return (
     <div className="p-3 font-sans text-xs text-gray-900">
-      <h1 className="text-sm font-semibold mb-2">Chart</h1>
+      <h1 className="text-sm font-semibold mb-2">Dynamic Chart</h1>
 
       <div className="text-[11px] text-gray-500 mb-1">
-        예)
+        예시:
         <br />
         {`{ "type": "bar", "mode": "percent", "values": [10, 25, 18] }`}
         <br />
@@ -51,6 +52,7 @@ export default function App() {
         value={jsonInput}
         onChange={(e) => setJsonInput(e.target.value)}
         className="w-full h-40 box-border font-mono text-[11px] p-1.5 border border-gray-300 rounded resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder="JSON 데이터를 입력하세요"
       />
 
       <button
@@ -65,8 +67,8 @@ export default function App() {
         <div
           className={`mt-2.5 p-2 rounded text-[11px] font-mono whitespace-pre-wrap max-h-[150px] overflow-auto ${
             isError
-              ? 'border border-red-300 bg-red-50'
-              : 'border border-gray-200 bg-gray-50'
+              ? 'border border-red-300 bg-red-50 text-red-800'
+              : 'border border-gray-200 bg-gray-50 text-gray-700'
           }`}
         >
           {log}
