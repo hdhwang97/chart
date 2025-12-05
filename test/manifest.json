@@ -1,0 +1,14 @@
+{
+  "name": "Dynamic Chart (Bar / Stacked / Line)",
+  "id": "dynamic-chart-padding-based",
+  "api": "1.0.0",
+  "editorType": ["figma"],
+  "main": "code.js",
+  "ui": "ui.html",
+  "relaunchButtons": [
+    {
+      "command": "open",
+      "name": "Edit Chart Data"
+    }
+  ]
+}
