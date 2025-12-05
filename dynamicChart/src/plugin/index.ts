@@ -30,7 +30,7 @@ if (figma.editorType !== 'figma') {
 const selection = figma.currentPage.selection;
 
 if (selection.length !== 1) {
-  figma.showUI(__html__, { width: 420, height: 420 });
+  figma.showUI(__html__, { width: 420, height: 560 });
   figma.ui.postMessage({
     type: 'log',
     ok: false,
@@ -38,7 +38,7 @@ if (selection.length !== 1) {
       '그래프 컴포넌트를 한 개 선택한 상태에서 플러그인을 실행해 주세요.',
   } as LogMessage);
 } else {
-  figma.showUI(__html__, { width: 420, height: 420 });
+  figma.showUI(__html__, { width: 420, height: 560 });
   figma.ui.postMessage({
     type: 'log',
     ok: true,
