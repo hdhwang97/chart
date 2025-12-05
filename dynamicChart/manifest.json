@@ -1,17 +1,8 @@
 {
-  "name": "Dynamic Chart",
-  "id": "1564531900329634410",
+  "name": "Dynamic Chart Plugin",
+  "id": "dynamicChart_0",
   "api": "1.0.0",
-  "main": "code.js",
-  "capabilities": [],
-  "enableProposedApi": false,
-  "editorType": [
-    "figma"
-  ],
-  "ui": "ui.html",
-  "networkAccess": {
-    "allowedDomains": [
-      "none"
-    ]
-  }
+  "main": "dist/plugin.js",
+  "editorType": ["figma", "figjam"],
+  "ui": "dist/ui.html"
 }

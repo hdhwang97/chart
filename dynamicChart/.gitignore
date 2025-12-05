@@ -1,8 +1,11 @@
-# Node
-*.log
-*.log.*
 node_modules
+dist
 
-out/
-dist/
-code.js
+.env
+.DS_Store
+.vscode
+.idea
+coverage
+npm-debug.log
+yarn-error.log
+*.log

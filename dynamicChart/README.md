@@ -1,40 +1,39 @@
-Below are the steps to get your plugin running. You can also find instructions at:
+# Figma Plugin React Boilerplate
 
-  https://www.figma.com/plugin-docs/plugin-quickstart-guide/
+react boilerplate for react plugin
 
-This plugin template uses Typescript and NPM, two standard tools in creating JavaScript applications.
+## Getting started
 
-First, download Node.js which comes with NPM. This will allow you to install TypeScript and other
-libraries. You can find the download link here:
+1. Create a project based on this boilerplate.
 
-  https://nodejs.org/en/download/
+```bash
+$ npx degit https://github.com/hseoy/figma-plugin-react-boilerplate <project name>
+```
 
-Next, install TypeScript using the command:
+2. Install the dependencies.
 
-  npm install -g typescript
+```bash
+$ yarn install
+```
 
-Finally, in the directory of your plugin, get the latest type definitions for the plugin API by running:
+3. To rebuild it when the files are changed, run `yarn watch`
 
-  npm install --save-dev @figma/plugin-typings
+```bash
+$ yarn watch
+```
 
-If you are familiar with JavaScript, TypeScript will look very familiar. In fact, valid JavaScript code
-is already valid Typescript code.
+4. The plugin is ready to be added to Figma for development.
 
-TypeScript adds type annotations to variables. This allows code editors such as Visual Studio Code
-to provide information about the Figma API while you are writing code, as well as help catch bugs
-you previously didn't notice.
+### Figma for plugin development
 
-For more information, visit https://www.typescriptlang.org/
+1. Open Figma desktop application.
 
-Using TypeScript requires a compiler to convert TypeScript (code.ts) into JavaScript (code.js)
-for the browser to run.
+2. Click on your profile icon dropdown in the top right and select `Plugins` from the list
 
-We recommend writing TypeScript code using Visual Studio code:
+3. Scroll down to the `In development` section and click the plus(+) icon
 
-1. Download Visual Studio Code if you haven't already: https://code.visualstudio.com/.
-2. Open this directory in Visual Studio Code.
-3. Compile TypeScript to JavaScript: Run the "Terminal > Run Build Task..." menu item,
-    then select "npm: watch". You will have to do this again every time
-    you reopen Visual Studio Code.
+4. Choose `Import from manifest`
 
-That's it! Visual Studio Code will regenerate the JavaScript file every time you save.
+5. Locate the manifest.json in your newly created project and then select Open
+
+6. Now you will be able to use this plugin.
