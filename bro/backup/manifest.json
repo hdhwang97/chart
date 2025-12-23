@@ -1,0 +1,20 @@
+{
+  "name": "Dynamic Chart (Spreadsheet UI)",
+  "id": "dynamic-chart-advanced",
+  "api": "1.0.0",
+  "editorType": ["figma"],
+  "main": "code.js",
+  "ui": "ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://cdn.jsdelivr.net"
+    ],
+    "reasoning": "Handsontable UI 라이브러리를 CDN에서 로드하기 위해 jsDelivr 도메인을 허용합니다."
+  },
+  "relaunchButtons": [
+    {
+      "command": "open",
+      "name": "Edit Chart Data"
+    }
+  ]
+}

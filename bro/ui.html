@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Data Setting</title>
+    <style>
+        /* --- 기본 스타일 --- */
+        :root {
+            --color-bg: #FFFFFF;
+            --color-surface: #F9F9F9;
+            --color-text: #333333;
+            --color-text-sub: #888888;
+            --color-border: #E0E0E0;
+            --color-border-strong: #BDBDBD;
+            --color-primary: #18A0FB;
+            --color-primary-hover: #0D86D8;
+            --color-zebra-bg: #F7F9FC;
+            --color-danger: #F24822;
+            
+            --spacer-xs: 4px; --spacer-s: 8px; --spacer-m: 12px;
+            --radius-s: 4px; --radius-m: 6px;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif; font-size: 11px;
+            margin: 0; padding: var(--spacer-m);
+            color: var(--color-text); background-color: var(--color-bg);
+            box-sizing: border-box; display: flex; flex-direction: column;
+            gap: var(--spacer-m); height: 100vh;
+        }
+
+        .icon { width: 12px; height: 12px; fill: currentColor; }
+        .icon-lg { width: 32px; height: 32px; fill: var(--color-primary); margin-bottom: 8px; }
+
+        .card {
+            border: 1px solid var(--color-border); border-radius: var(--radius-m);
+            padding: var(--spacer-m); background-color: #fff;
+            display: flex; flex-direction: column; gap: var(--spacer-s);
+        }
+
+        /* --- 헤더 --- */
+        header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; height: 32px; }
+        h1 { font-size: 14px; font-weight: 600; margin: 0; display: flex; align-items: center; }
+
+        .chart-type-badge {
+            font-size: 10px; font-weight: 500; background-color: var(--color-surface);
+            border: 1px solid var(--color-border); padding: 2px 6px; border-radius: 4px;
+            color: var(--color-text-sub); margin-left: 8px; display: none;
+        }
+
+        button#main-cta {
+            background-color: var(--color-primary); color: white; border: none;
+            padding: 6px 12px; border-radius: 4px; font-weight: 600; cursor: pointer;
+            transition: background-color 0.2s; font-size: 11px;
+        }
+        button#main-cta:hover { background-color: var(--color-primary-hover); }
+        button#main-cta:disabled {
+            background-color: var(--color-surface); color: var(--color-text-sub);
+            border: 1px solid var(--color-border); cursor: not-allowed;
+        }
+
+        button#back-btn {
+            background: none; border: none; color: var(--color-text-sub);
+            cursor: pointer; padding: 4px; margin-right: 4px; display: none;
+        }
+        button#back-btn:hover { color: var(--color-text); }
+
+        /* --- SPA Step 관리 --- */
+        .step { display: none; flex-direction: column; gap: var(--spacer-m); animation: fadeIn 0.3s ease-in-out; }
+        .step.active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- Step 1: 유형 선택 --- */
+        .type-selection-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+        .type-card-btn {
+            background-color: #fff; border: 1px solid var(--color-border);
+            border-radius: var(--radius-m); padding: 24px 12px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; text-align: center;
+        }
+        .type-card-btn:hover {
+            border-color: var(--color-primary); background-color: var(--color-zebra-bg);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .type-card-btn span { font-weight: 600; color: var(--color-text); }
+        .type-desc { font-size: 10px; color: var(--color-text-sub); margin-top: 4px; font-weight: 400; }
+
+        /* --- Step 2: 에디터 --- */
+        .section-title { font-size: 11px; font-weight: 600; color: var(--color-text-sub); margin: 0 0 4px 0; }
+        .upload-row { display: flex; align-items: center; gap: var(--spacer-s); }
+        input[type="file"] { font-size: 11px; width: 100%; }
+
+        #editor-card { padding: 0; overflow: hidden; gap: 0; }
+        .editor-header {
+            padding: 0 var(--spacer-m); border-bottom: 1px solid var(--color-border);
+            display: flex; justify-content: space-between; align-items: center;
+            background-color: #fff; flex-shrink: 0; height: 32px;
+        }
+        .controls-group { display: flex; gap: 12px; align-items: center; }
+        .input-wrapper { display: flex; align-items: center; gap: 6px; }
+        label { font-size: 11px; color: var(--color-text-sub); font-weight: 500; }
+        input[type="number"] {
+            width: 36px; padding: 1px 4px; border: 1px solid var(--color-border);
+            border-radius: var(--radius-s); text-align: center; font-size: 11px; height: 22px;
+        }
+        
+        #grid-wrapper { max-height: 300px; overflow: auto; padding: 0; background-color: #fff; position: relative; }
+        .grid { display: grid; gap: 0; border-top: 1px solid var(--color-border); border-left: 1px solid var(--color-border); width: fit-content; }
+        
+        .grid-header {
+            background-color: #F0F0F0; color: #666; font-weight: 600; font-size: 10px;
+            display: flex; align-items: center; justify-content: center;
+            border-right: 1px solid var(--color-border-strong); border-bottom: 1px solid var(--color-border-strong);
+            height: 24px; position: sticky; top: 0; z-index: 20;
+        }
+        .col-delete-btn {
+            position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+            width: 16px; height: 16px; border: none; background: none; cursor: pointer;
+            color: var(--color-text-sub); display: none; align-items: center; justify-content: center;
+        }
+        .grid-header:hover .col-delete-btn { display: flex; }
+        .col-delete-btn:hover { color: var(--color-danger); }
+
+        .grid input {
+            width: 100%; height: 24px; padding: 0 8px; border: none;
+            border-right: 1px solid var(--color-border-strong); border-bottom: 1px solid var(--color-border);
+            font-size: 11px; text-align: right; background-color: #fff;
+        }
+        .grid input.zebra-row { background-color: var(--color-zebra-bg); }
+        .grid input:focus { outline: 2px solid var(--color-primary); z-index: 10; position: relative; }
+        .grid input:disabled { background-color: #fafafa; color: #aaa; cursor: not-allowed; }
+
+        .add-col-btn {
+            grid-column: -2 / -1; background-color: #fff; border: none;
+            border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border);
+            cursor: pointer; color: var(--color-primary); display: flex; align-items: center; justify-content: center;
+            font-size: 14px; z-index: 1;
+        }
+        .add-col-btn:hover { background-color: var(--color-surface); }
+
+        .add-row-container { grid-column: 1 / -1; height: 28px; display: flex; }
+        .add-row-btn {
+            width: 100%; height: 100%; border: none; border-bottom: 1px solid var(--color-border);
+            background-color: #fff; color: var(--color-primary); cursor: pointer;
+            font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center;
+        }
+        .add-row-btn:hover { background-color: var(--color-surface); }
+
+        .editor-footer {
+            padding: 0 var(--spacer-m); border-top: 1px solid var(--color-border);
+            background-color: #fff; display: flex; justify-content: flex-end; flex-shrink: 0; height: 32px; align-items: center;
+        }
+        #save-btn {
+            background-color: transparent; color: var(--color-text); border: 1px solid var(--color-text);
+            padding: 2px 10px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 11px; min-width: 60px; height: 22px;
+        }
+        #save-btn:hover { background-color: var(--color-surface); }
+        #save-btn.read-mode { background-color: var(--color-primary); color: white; border-color: var(--color-primary); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>
+            <button id="back-btn" title="Back to Selection">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+            </button>
+            Chart Data <span id="chart-type-display" class="chart-type-badge">Bar</span>
+        </h1>
+        <button id="main-cta" disabled>Apply to Figma</button>
+    </header>
+
+    <div id="step-1" class="step active">
+        <div class="card">
+            <h2 class="section-title">Select Chart Type</h2>
+            <div class="type-selection-container">
+                <button class="type-card-btn" onclick="selectType('bar')">
+                    <svg class="icon-lg" viewBox="0 0 24 24"><path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z"/></svg>
+                    <span>Bar Chart</span>
+                    <span class="type-desc">Vertical bars</span>
+                </button>
+                
+                <button class="type-card-btn" onclick="selectType('line')">
+                    <svg class="icon-lg" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                    <span>Line Chart</span>
+                    <span class="type-desc">Points & Lines</span>
+                </button>
+
+                 <button class="type-card-btn" onclick="selectType('stackedBar')">
+                    <svg class="icon-lg" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>
+                    <span>Stacked Bar</span>
+                    <span class="type-desc">Segmented bars</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="step-2" class="step">
+        <div class="card">
+            <h2 class="section-title">Import from CSV</h2>
+            <div class="upload-row">
+                <input type="file" id="csv-upload" accept=".csv">
+                <span style="font-size: 10px; color: #888; white-space: nowrap;">Max 25x25</span>
+            </div>
+        </div>
+
+        <div class="card" id="editor-card">
+            <div class="editor-header">
+                <div class="controls-group">
+                    <div class="input-wrapper">
+                        <label>Rows</label>
+                        <input type="number" id="row-input" value="3" min="1" max="25">
+                    </div>
+                    <div class="input-wrapper">
+                        <label>Cols</label>
+                        <input type="number" id="col-input" value="3" min="1" max="25">
+                    </div>
+                </div>
+            </div>
+
+            <div id="grid-wrapper">
+                <div id="data-grid" class="grid"></div>
+            </div>
+
+            <div class="editor-footer">
+                <button id="save-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 상태 관리 ---
+        const MAX_SIZE = 25;
+        const state = {
+            rows: 3, cols: 3, data: [], 
+            mode: 'edit', chartType: 'bar', dataMode: 'percent',
+            currentStep: 1
+        };
+
+        // DOM Elements
+        const ui = {
+            step1: document.getElementById('step-1'),
+            step2: document.getElementById('step-2'),
+            backBtn: document.getElementById('back-btn'),
+            mainCta: document.getElementById('main-cta'),
+            chartTypeDisplay: document.getElementById('chart-type-display'),
+            csvInput: document.getElementById('csv-upload'),
+            rowInput: document.getElementById('row-input'),
+            colInput: document.getElementById('col-input'),
+            gridWrapper: document.getElementById('grid-wrapper'),
+            gridContainer: document.getElementById('data-grid'),
+            saveBtn: document.getElementById('save-btn')
+        };
+
+        // --- Step Navigation Logic ---
+        function goToStep(stepNum) {
+            state.currentStep = stepNum;
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+            
+            if (stepNum === 1) {
+                // Step 1: 선택 화면
+                ui.step1.classList.add('active');
+                ui.backBtn.style.display = 'none';
+                ui.chartTypeDisplay.style.display = 'none';
+                ui.mainCta.style.display = 'none';
+            } else {
+                // Step 2: 에디터 화면
+                ui.step2.classList.add('active');
+                ui.backBtn.style.display = 'inline-flex';
+                ui.chartTypeDisplay.style.display = 'inline-block';
+                ui.chartTypeDisplay.textContent = state.chartType;
+                ui.mainCta.style.display = 'block';
+                
+                renderGrid();
+                checkCtaValidation();
+            }
+        }
+
+        window.selectType = function(type) {
+            state.chartType = type;
+            // 여기서 code.js로 'create' 메시지를 보내지 않고, 그냥 에디터(Step 2)로 이동만 함
+            // 실제 생성은 Apply를 눌렀을 때 처리하거나, 사용자 경험에 따라 여기서 미리 생성 요청을 보낼 수도 있음
+            // 현재 요구사항은 "선택 후 데이터 입력"이므로 에디터로 이동합니다.
+            goToStep(2);
+        };
+
+        ui.backBtn.addEventListener('click', () => goToStep(1));
+
+        // --- 초기 데이터 ---
+        function initData(r, c) {
+            const newData = [];
+            for (let i = 0; i < r; i++) {
+                const row = new Array(c).fill("");
+                newData.push(row);
+            }
+            return newData;
+        }
+        state.data = initData(state.rows, state.cols);
+
+        // --- 메시지 수신 (Figma -> UI) --
+        window.onmessage = (event) => {
+            const msg = event.data.pluginMessage;
+            if (!msg) return;
+
+            if (msg.type === 'init') {
+                // 1. 차트가 감지됨 (Edit Mode)
+                if (msg.chartType) {
+                    state.chartType = msg.chartType;
+                    
+                    // 2. 역산된 데이터(values)가 있다면 그리드에 반영
+                    if (msg.values && Array.isArray(msg.values)) {
+                        const vals = msg.values;
+                        
+                        // Bar Chart는 1차원 배열로 옴 -> Rows=1, Cols=데이터개수
+                        if (state.chartType === 'bar' || state.chartType === 'line') {
+                            state.rows = 1; 
+                            state.cols = vals.length > 0 ? vals.length : 3;
+                            
+                            // 2차원 배열 구조로 변환하여 state.data에 저장
+                            // 예: [50, 30] -> [ ["50", "30"] ]
+                            state.data = [ vals.map(v => String(v)) ];
+                            
+                            // 만약 Rows를 더 늘리고 싶다면 빈 행 추가 (선택사항)
+                            // for (let i = 1; i < 3; i++) state.data.push(new Array(state.cols).fill(""));
+                            // state.rows = state.data.length;
+                        } 
+                        // Stacked Bar는 2차원 배열로 옴
+                        else if (state.chartType === 'stackedBar') {
+                            state.cols = vals.length;
+                            // 가장 긴 데이터 기준으로 Row 개수 설정
+                            let maxRows = 0;
+                            vals.forEach(col => { if(col.length > maxRows) maxRows = col.length; });
+                            state.rows = maxRows > 0 ? maxRows : 3;
+
+                            // 데이터 매핑 (행열 변환 주의: vals[col][row] -> state.data[row][col])
+                            // 보통 UI 그리드는 행(Row) 중심, 데이터는 열(Column/Bar) 중심일 수 있음
+                            // 여기서는 단순하게 매핑 (상황에 따라 전치 행렬 필요할 수 있음)
+                            const newData = [];
+                            for(let r=0; r<state.rows; r++){
+                                const rowData = [];
+                                for(let c=0; c<state.cols; c++){
+                                    // vals[c]가 존재하고 vals[c][r]이 있으면 값 넣기
+                                    const val = (vals[c] && vals[c][r] !== undefined) ? String(vals[c][r]) : "";
+                                    rowData.push(val);
+                                }
+                                newData.push(rowData);
+                            }
+                            state.data = newData;
+                        }
+
+                        // 모드 업데이트 (Percent로 감지되었다면)
+                        if (msg.inferredMode) state.dataMode = msg.inferredMode;
+                    }
+
+                    // 3. UI 업데이트
+                    updateInputs(); // 상단 Rows/Cols 입력창 숫자 갱신
+                    goToStep(2);    // 에디터 화면으로 이동
+                } else {
+                    // 선택된 게 없다면 -> Step 1
+                    goToStep(1);
+                }
+            }
+            if (msg.type === 'log') {
+                console.log("[Plugin Log]", msg.message);
+            }
+        };
+
+        // --- Grid Logic (기존 유지) ---
+        function renderGrid() {
+            ui.gridContainer.innerHTML = ''; 
+            ui.gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, minmax(60px, 1fr)) 30px`;
+
+            for (let j = 0; j < state.cols; j++) {
+                const headerCell = document.createElement('div');
+                headerCell.className = 'grid-header sticky';
+                const label = document.createElement('span');
+                label.className = 'header-label';
+                label.textContent = j + 1;
+                headerCell.appendChild(label);
+
+                if (state.mode === 'edit') {
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'col-delete-btn';
+                    delBtn.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+                    delBtn.onclick = () => deleteColumn(j);
+                    headerCell.appendChild(delBtn);
+                }
+                ui.gridContainer.appendChild(headerCell);
+            }
+
+            const addColBtn = document.createElement('button');
+            addColBtn.className = 'add-col-btn';
+            addColBtn.innerHTML = '+';
+            addColBtn.style.gridRow = `1 / span ${state.rows + 1}`;
+            if (state.mode === 'read') addColBtn.disabled = true;
+            else addColBtn.onclick = addColumn;
+            ui.gridContainer.appendChild(addColBtn);
+
+            state.data.forEach((row, rowIndex) => {
+                const isZebra = (rowIndex % 2 === 1);
+                row.forEach((cellValue, colIndex) => {
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = cellValue;
+                    input.dataset.row = rowIndex;
+                    input.dataset.col = colIndex;
+                    if (isZebra) input.classList.add('zebra-row');
+                    if (state.mode === 'read') input.disabled = true;
+
+                    input.addEventListener('input', (e) => {
+                        state.data[rowIndex][colIndex] = e.target.value;
+                        checkCtaValidation();
+                    });
+                    ui.gridContainer.appendChild(input);
+                });
+            });
+
+            const addRowContainer = document.createElement('div');
+            addRowContainer.className = 'add-row-container';
+            const addRowBtn = document.createElement('button');
+            addRowBtn.className = 'add-row-btn';
+            addRowBtn.innerHTML = '+ Add Row';
+            if (state.mode === 'read') addRowBtn.disabled = true;
+            else addRowBtn.onclick = addRow;
+            addRowContainer.appendChild(addRowBtn);
+            ui.gridContainer.appendChild(addRowContainer);
+            
+            checkCtaValidation();
+            updateInputs();
+        }
+
+        function handleDimensionInput() {
+            let newRows = parseInt(ui.rowInput.value);
+            let newCols = parseInt(ui.colInput.value);
+            if (newRows < 1) newRows = 1; if (newRows > MAX_SIZE) newRows = MAX_SIZE;
+            if (newCols < 1) newCols = 1; if (newCols > MAX_SIZE) newCols = MAX_SIZE;
+            updateGridSize(newRows, newCols);
+        }
+
+        // 데이터 보존하며 크기 변경
+        function updateGridSize(newRows, newCols) {
+            const newData = [];
+            for (let i = 0; i < newRows; i++) {
+                const newRow = [];
+                for (let j = 0; j < newCols; j++) {
+                    // 기존 데이터 범위 내라면 값 유지, 아니면 빈 값
+                    if (i < state.rows && j < state.cols) {
+                        // [수정] newData.push -> newRow.push
+                        // 안전하게 접근하기 위해 옵셔널 체이닝(?.) 사용 권장
+                        newRow.push(state.data[i]?.[j] || ""); 
+                    } else {
+                        // [수정] newData.push -> newRow.push
+                        newRow.push("");
+                    }
+                }
+                newData.push(newRow);
+            }
+            
+            state.rows = newRows;
+            state.cols = newCols;
+            state.data = newData;
+            renderGrid();
+        }
+
+        function addColumn() {
+            if (state.cols >= MAX_SIZE) return;
+            updateGridSize(state.rows, state.cols + 1);
+            setTimeout(() => ui.gridWrapper.scrollTo({ left: ui.gridWrapper.scrollWidth, behavior: 'smooth' }), 0);
+        }
+        function addRow() {
+            if (state.rows >= MAX_SIZE) return;
+            updateGridSize(state.rows + 1, state.cols);
+        }
+        function deleteColumn(colIndex) {
+            if (state.cols <= 1) return;
+            state.data.forEach(row => row.splice(colIndex, 1));
+            state.cols--;
+            renderGrid();
+        }
+        function updateInputs() {
+            ui.rowInput.value = state.rows;
+            ui.colInput.value = state.cols;
+        }
+
+        function handleCsvUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) { parseAndApplyCsv(e.target.result); };
+            reader.readAsText(file);
+        }
+
+        function parseAndApplyCsv(csvText) {
+            const rows = csvText.split(/\r?\n/).filter(r => r.trim() !== '');
+            if (rows.length === 0) return;
+            let newRowsCount = rows.length;
+            let newColsCount = rows[0].split(',').length;
+            if (newRowsCount > MAX_SIZE) newRowsCount = MAX_SIZE;
+            if (newColsCount > MAX_SIZE) newColsCount = MAX_SIZE;
+
+            const newData = [];
+            for (let i = 0; i < newRowsCount; i++) {
+                const cells = rows[i].split(',');
+                const newRow = cells.slice(0, newColsCount); 
+                newData.push(newRow);
+            }
+            state.data = newData;
+            state.rows = newRowsCount;
+            state.cols = newColsCount;
+            renderGrid();
+        }
+
+        function toggleMode() {
+            if (state.mode === 'edit') {
+                state.mode = 'read';
+                ui.saveBtn.textContent = "Edit Mode"; 
+                ui.saveBtn.classList.add('read-mode');
+                ui.rowInput.disabled = true; ui.colInput.disabled = true;
+            } else {
+                state.mode = 'edit';
+                ui.saveBtn.textContent = "Save";
+                ui.saveBtn.classList.remove('read-mode');
+                ui.rowInput.disabled = false; ui.colInput.disabled = false;
+            }
+            renderGrid(); checkCtaValidation(); 
+        }
+
+        function checkCtaValidation() {
+            if (state.mode !== 'read') { ui.mainCta.disabled = true; return; }
+            let isAllFilled = true;
+            for (let i = 0; i < state.rows; i++) {
+                for (let j = 0; j < state.cols; j++) {
+                    if (!state.data[i][j] || state.data[i][j].trim() === "") {
+                        isAllFilled = false; break;
+                    }
+                }
+                if (!isAllFilled) break;
+            }
+            ui.mainCta.disabled = !isAllFilled;
+        }
+
+        function submitData() {
+            let payloadValues;
+            const numberData = state.data.map(row => 
+                row.map(cell => {
+                    const num = Number(cell);
+                    return isNaN(num) ? 0 : num;
+                })
+            );
+
+            if (state.chartType === 'stackedBar') {
+                payloadValues = numberData;
+            } else {
+                payloadValues = numberData.flat();
+            }
+
+            parent.postMessage({ 
+                pluginMessage: { 
+                    type: 'apply', 
+                    payload: {
+                        type: state.chartType,
+                        mode: state.dataMode,
+                        values: payloadValues,
+                        rows: state.rows,
+                        cols: state.cols
+                    }
+                } 
+            }, '*');
+        }
+
+        ui.saveBtn.addEventListener('click', toggleMode);
+        ui.csvInput.addEventListener('change', handleCsvUpload);
+        ui.mainCta.addEventListener('click', submitData);
+        ui.rowInput.addEventListener('input', handleDimensionInput);
+        ui.colInput.addEventListener('input', handleDimensionInput);
+
+        // 초기 시작: Step 1 (Figma 메시지 수신 시 자동으로 Step 2로 이동 가능)
+        goToStep(1);
+
+    </script>
+</body>
+</html>

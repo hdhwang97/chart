@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>Dynamic Chart Wizard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css" />
+  <style>
+    /* === Global Styles === */
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #ffffff;
+      color: #111827;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* === View Container === */
+    .view {
+      display: none; /* 기본적으로 숨김 */
+      flex-direction: column;
+      height: 100%;
+      padding: 20px;
+      box-sizing: border-box;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+
+    .view.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(2px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* === Typography === */
+    h1 { font-size: 18px; font-weight: 600; margin: 0 0 8px 0; color: #111827; }
+    p { font-size: 13px; color: #6B7280; margin: 0 0 24px 0; line-height: 1.5; }
+    h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px 0; }
+
+    /* === Components === */
+    .btn {
+      display: inline-flex; justify-content: center; align-items: center;
+      padding: 10px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;
+      border: 1px solid transparent; transition: all 0.2s;
+    }
+    .btn-primary { background: #18A0FB; color: white; border: none; width: 100%; }
+    .btn-primary:hover { background: #0D8DE3; }
+    .btn-secondary { background: #fff; border: 1px solid #D1D5DB; color: #374151; }
+    .btn-secondary:hover { background: #F3F4F6; }
+    .btn-link { background: none; color: #6B7280; font-size: 12px; text-decoration: underline; margin-top: 10px; cursor: pointer; border: none;}
+
+    /* === Type Selection Cards === */
+    .type-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 24px; }
+    .type-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px; border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .type-card:hover { border-color: #18A0FB; background: #F0F9FF; }
+    .type-card.selected { border-color: #18A0FB; background: #EFF6FF; ring: 2px solid #18A0FB; }
+    .type-icon { width: 32px; height: 32px; background: #E0E7FF; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: bold; color: #4338CA; }
+    
+    /* === Editor Toolbar === */
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .toolbar-left { display: flex; gap: 8px; }
+    select { padding: 4px 8px; border: 1px solid #D1D5DB; border-radius: 4px; font-size: 12px; }
+
+    /* === Handsontable Wrapper === */
+    #grid-wrapper {
+      flex: 1;
+      border: 1px solid #E5E7EB; border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      position: relative;
+    }
+
+    /* === Footer Actions === */
+    .footer { margin-top: auto; display: flex; gap: 8px; }
+    .footer .btn { flex: 1; }
+
+    /* === Badge === */
+    .badge {
+      display: inline-block; padding: 4px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 600; background: #F3F4F6; color: #374151;
+      margin-bottom: 16px;
+    }
+
+    /* Utility */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div id="view-intro" class="view">
+    <div style="text-align: center; margin-top: 40px;">
+      <div style="font-size: 40px; margin-bottom: 16px;">📊</div>
+      <h1>새 차트 만들기</h1>
+      <p>선택된 차트가 없습니다.<br>새로운 차트 인스턴스를 생성하시겠습니까?</p>
+      <button class="btn btn-primary" onclick="goToTypeSelect()">시작하기 (Create)</button>
+    </div>
+  </div>
+
+  <div id="view-type" class="view">
+    <h2>차트 종류 선택</h2>
+    <p>생성할 차트의 스타일을 선택해주세요.</p>
+
+    <div class="type-grid">
+      <div class="type-card" onclick="selectType('bar', this)">
+        <div class="type-icon">B</div>
+        <div><strong>Bar Chart</strong><br><span style="font-size:11px; color:#666">기본 막대 그래프</span></div>
+      </div>
+      <div class="type-card" onclick="selectType('stackedBar', this)">
+        <div class="type-icon">S</div>
+        <div><strong>Stacked Bar</strong><br><span style="font-size:11px; color:#666">누적 막대 그래프</span></div>
+      </div>
+      <div class="type-card" onclick="selectType('line', this)">
+        <div class="type-icon">L</div>
+        <div><strong>Line Chart</strong><br><span style="font-size:11px; color:#666">꺾은선 그래프</span></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <button class="btn btn-secondary" onclick="showView('view-intro')">취소</button>
+      <button class="btn btn-primary" id="btn-to-editor" disabled onclick="goToEditorFromType()">다음 (Next)</button>
+    </div>
+  </div>
+
+  <div id="view-summary" class="view">
+    <div class="badge">EDIT MODE</div>
+    <h1>차트 정보</h1>
+    <p>선택된 차트의 데이터를 수정합니다.</p>
+    
+    <div style="background: #F9FAFB; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+      <div style="font-size: 12px; color: #6B7280;">현재 타입</div>
+      <div id="summary-type" style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">-</div>
+      
+      <div style="font-size: 12px; color: #6B7280;">데이터 모드</div>
+      <div id="summary-mode" style="font-size: 14px; font-weight: 500;">-</div>
+    </div>
+
+    <button class="btn btn-primary" onclick="goToEditorFromSummary()">데이터 수정하기 (Edit)</button>
+  </div>
+
+  <div id="view-editor" class="view">
+    <div class="toolbar">
+      <h2 style="margin:0;">Data Editor</h2>
+      <div class="toolbar-left">
+        <select id="data-mode-select">
+          <option value="percent">Percent (%)</option>
+          <option value="raw">Raw Value</option>
+        </select>
+        <button class="btn btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="triggerUpload()">CSV Import</button>
+        <input type="file" id="csv-input" accept=".csv" style="display:none" />
+      </div>
+    </div>
+
+    <div id="grid-wrapper"></div>
+    <div style="font-size:11px; color:#999; margin-bottom:8px; text-align:right;">* 행/열을 우클릭하여 추가/삭제 가능</div>
+
+    <div class="footer">
+      <button class="btn btn-secondary" onclick="goBackFromEditor()">뒤로</button>
+      <button class="btn btn-primary" id="btn-apply" onclick="applyData()">Generate</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+  
+  <script>
+    // === State Management ===
+    let state = {
+      mode: 'create', // 'create' | 'edit'
+      chartType: null,
+      dataMode: 'percent',
+      values: null,
+      height: null
+    };
+    
+    let hot = null; // Handsontable instance
+
+    // === View Router ===
+    function showView(viewId) {
+      document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+      document.getElementById(viewId).classList.add('active');
+    }
+
+    // === Step Actions ===
+
+    // 1. Create Flow
+    function goToTypeSelect() {
+      showView('view-type');
+    }
+
+    function selectType(type, cardEl) {
+      state.chartType = type;
+      // UI Update
+      document.querySelectorAll('.type-card').forEach(el => el.classList.remove('selected'));
+      cardEl.classList.add('selected');
+      document.getElementById('btn-to-editor').disabled = false;
+    }
+
+    function goToEditorFromType() {
+      if (!state.chartType) return;
+      state.mode = 'create';
+      document.getElementById('btn-apply').textContent = 'Generate';
+      
+      // Init empty grid based on type
+      const initialData = (state.chartType === 'stackedBar') 
+        ? [[10, 20], [30, 40], [50, 60]] 
+        : [10, 30, 50, 20, 40];
+      
+      initGrid(normalizeDataForGrid(initialData));
+      showView('view-editor');
+      requestAnimationFrame(() => hot.render()); // Re-render for layout fix
+    }
+
+    // 2. Edit Flow
+    function goToEditorFromSummary() {
+      // Data is already loaded in state.values from init
+      document.getElementById('btn-apply').textContent = 'Save';
+      initGrid(normalizeDataForGrid(state.values));
+      
+      // Set Mode Select
+      document.getElementById('data-mode-select').value = state.dataMode || 'percent';
+      
+      showView('view-editor');
+      requestAnimationFrame(() => hot.render());
+    }
+
+    function goBackFromEditor() {
+      if (state.mode === 'create') {
+        showView('view-type');
+      } else {
+        showView('view-summary');
+      }
+    }
+
+    // === Data Logic ===
+    
+    function normalizeDataForGrid(values) {
+      // Ensure 2D Array for Handsontable
+      if (!Array.isArray(values)) return [[]];
+      if (Array.isArray(values[0])) return values; // Already 2D
+      // If 1D, make it a column (N x 1) or Row (1 x N)? 
+      // Handsontable handles 1D array as rows of object, so we wrap.
+      // Let's interpret 1D array as a single column for ease of editing
+      return values.map(v => [v]);
+    }
+
+    function denormalizeDataFromGrid(gridData) {
+      // Remove empty rows/cols and convert to numbers
+      const type = state.chartType;
+      
+      if (type === 'stackedBar') {
+        // Keep 2D structure
+        return gridData.map(row => row.map(v => Number(v)||0));
+      } else {
+        // Flatten to 1D
+        let flat = [];
+        gridData.forEach(row => {
+          row.forEach(cell => {
+            if (cell !== null && cell !== '') flat.push(Number(cell)||0);
+          });
+        });
+        return flat;
+      }
+    }
+
+    // === Handsontable Init ===
+    function initGrid(data) {
+      const container = document.getElementById('grid-wrapper');
+      if (hot) hot.destroy();
+
+      hot = new Handsontable(container, {
+        data: data,
+        rowHeaders: true,
+        colHeaders: true,
+        height: '100%',
+        width: '100%',
+        licenseKey: 'non-commercial-and-evaluation',
+        contextMenu: true,
+        stretchH: 'all',
+        autoRowSize: true,
+        autoColumnSize: true,
+      });
+    }
+
+    // === CSV Handling ===
+    function triggerUpload() { document.getElementById('csv-input').click(); }
+    
+    document.getElementById('csv-input').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const text = evt.target.result;
+        const rows = text.split(/\r?\n/).map(l => l.split(',').map(v => {
+            const n = Number(v.trim());
+            return isNaN(n) ? v.trim() : n;
+        }));
+        hot.loadData(rows);
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    };
+
+    // === Apply / Generate ===
+    function applyData() {
+      const rawData = hot.getData();
+      const payload = {
+        type: state.chartType,
+        mode: document.getElementById('data-mode-select').value,
+        values: denormalizeDataFromGrid(rawData)
+      };
+
+      parent.postMessage({ pluginMessage: { type: 'apply', payload } }, '*');
+      
+      // If Create, maybe go back to start? Or stay? 
+      // Usually stay to allow tweaking.
+    }
+
+    // === Message Handler (Init) ===
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (msg.type === 'init') {
+        
+        // Save initial state
+        state.values = msg.values;
+        state.chartType = msg.chartType;
+        state.dataMode = msg.inferredMode;
+        state.height = msg.height;
+
+        if (msg.uiMode === 'create') {
+          state.mode = 'create';
+          showView('view-intro');
+        } else {
+          // Edit Mode
+          state.mode = 'edit';
+          // Update Summary View
+          document.getElementById('summary-type').textContent = 
+            msg.chartType === 'stackedBar' ? 'Stacked Bar' : 
+            msg.chartType === 'line' ? 'Line Chart' : 'Bar Chart';
+          
+          document.getElementById('summary-mode').textContent = 
+            msg.inferredMode === 'percent' ? 'Percent (%)' : 'Raw Value';
+          
+          showView('view-summary');
+        }
+      }
+    };
+  </script>
+</body>
+</html>

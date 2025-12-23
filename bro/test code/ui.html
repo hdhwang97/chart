@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Data Setting</title>
+    <style>
+        /* Figma UI 스타일 모방 (Inter 폰트 및 색상 시스템) */
+        :root {
+            --color-bg: #FFFFFF;
+            --color-text: #333333;
+            --color-border: #E6E6E6;
+            --color-primary: #18A0FB;
+            --color-primary-hover: #0D86D8;
+            --color-disabled: #B3B3B3;
+            --color-disabled-bg: #F5F5F5;
+            --spacer-xs: 4px;
+            --spacer-s: 8px;
+            --spacer-m: 16px;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            margin: 0;
+            padding: var(--spacer-m);
+            color: var(--color-text);
+            background-color: var(--color-bg);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            height: 100vh; /* 전체 높이 사용 */
+            overflow: hidden;
+        }
+
+        /* 1. 타이틀 영역 & Main CTA */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacer-m);
+            flex-shrink: 0;
+        }
+
+        h1 {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        /* 차트 타입 뱃지 */
+        .chart-type-badge {
+            font-size: 10px;
+            font-weight: normal;
+            background-color: var(--color-disabled-bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #666;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        button#main-cta {
+            background-color: var(--color-primary);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button#main-cta:hover {
+            background-color: var(--color-primary-hover);
+        }
+
+        button#main-cta:disabled {
+            background-color: var(--color-border); /* 비활성 시 회색 */
+            color: var(--color-disabled);
+            cursor: not-allowed;
+        }
+
+        /* 2. 업로드 패널 */
+        .panel {
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: var(--spacer-m);
+            margin-bottom: var(--spacer-m);
+            flex-shrink: 0;
+        }
+
+        .upload-row {
+            display: flex;
+            align-items: center;
+            gap: var(--spacer-s);
+        }
+
+        input[type="file"] {
+            font-size: 11px;
+        }
+
+        /* 3. 데이터 입력 패널 - 설정 영역 */
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacer-s);
+            flex-shrink: 0;
+        }
+
+        .input-group {
+            display: flex;
+            gap: var(--spacer-s);
+            align-items: center;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        label {
+            font-size: 11px;
+            color: #888;
+        }
+
+        input[type="number"] {
+            width: 40px;
+            padding: 4px;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        input[type="number"]:disabled {
+            background-color: var(--color-disabled-bg);
+        }
+
+        button.secondary-btn {
+            background-color: white;
+            border: 1px solid var(--color-text);
+            color: var(--color-text);
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button.secondary-btn:hover {
+            background-color: var(--color-disabled-bg);
+        }
+
+        button.secondary-btn:disabled {
+            border-color: var(--color-border);
+            color: var(--color-disabled);
+            cursor: not-allowed;
+        }
+
+        /* 4. 테이블 그리드 컨테이너 */
+        #grid-container {
+            flex-grow: 1; /* 남은 공간 모두 차지 */
+            overflow: auto; /* 내부 스크롤 */
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            padding: var(--spacer-s);
+            margin-bottom: var(--spacer-m);
+            position: relative;
+        }
+
+        .grid {
+            display: grid;
+            gap: 2px;
+            /* grid-template-columns는 JS에서 동적으로 설정됨 */
+        }
+
+        .grid input {
+            width: 100%;
+            min-width: 60px; /* 셀 최소 너비 */
+            padding: 6px;
+            border: 1px solid var(--color-border);
+            box-sizing: border-box; /* 패딩 포함 계산 */
+            font-size: 12px;
+        }
+
+        .grid input:focus {
+            border-color: var(--color-primary);
+            outline: none;
+        }
+
+        /* Read 모드 스타일 */
+        .grid input:disabled {
+            background-color: var(--color-disabled-bg);
+            color: #666;
+            border-color: transparent;
+        }
+
+        /* 5. 하단 Save 버튼 영역 */
+        footer {
+            display: flex;
+            justify-content: flex-end;
+            flex-shrink: 0;
+        }
+
+        #save-btn {
+            width: 100%;
+            background-color: #333;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        #save-btn:hover {
+            background-color: #555;
+        }
+        
+        #save-btn.read-mode {
+            background-color: var(--color-primary);
+            content: "Edit Mode"; /* 텍스트 변경용 클래스 활용 가능 */
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 1. 타이틀 영역 -->
+    <header>
+        <div>
+            <h1>데이터 설정 <span id="chart-type-display" class="chart-type-badge">Bar</span></h1>
+        </div>
+        <!-- 비활성 조건: 셀 중 하나라도 비어있으면 비활성 / Read 모드여야 활성 -->
+        <button id="main-cta" disabled>데이터 적용</button>
+    </header>
+
+    <!-- 2. 업로드 패널 -->
+    <div class="panel">
+        <div class="upload-row">
+            <input type="file" id="csv-upload" accept=".csv">
+            <span style="font-size: 10px; color: #888;">(최대 25x25)</span>
+        </div>
+    </div>
+
+    <!-- 3. 데이터 입력 패널 -->
+    <div class="controls">
+        <div class="input-group">
+            <div class="input-wrapper">
+                <label>Rows</label>
+                <input type="number" id="row-input" value="3" min="1" max="25">
+            </div>
+            <div class="input-wrapper">
+                <label>Cols</label>
+                <input type="number" id="col-input" value="3" min="1" max="25">
+            </div>
+        </div>
+        <button id="apply-btn" class="secondary-btn">Apply</button>
+    </div>
+
+    <!-- 테이블 데이터 그리드 -->
+    <div id="grid-container">
+        <div id="data-grid" class="grid">
+            <!-- JS로 Input들이 생성됩니다 -->
+        </div>
+    </div>
+
+    <!-- 4. Save (모드 전환) 버튼 -->
+    <footer>
+        <button id="save-btn">Save</button>
+    </footer>
+
+    <script>
+        // --- 상태 관리 ---
+        const MAX_SIZE = 25;
+        
+        // 앱 상태
+        const state = {
+            rows: 3,
+            cols: 3,
+            data: [], // 2차원 배열 [['a', 'b'], ['c', 'd']]
+            mode: 'edit', // 'edit' | 'read'
+            chartType: 'bar', // code.ts로부터 init 메시지를 받아 업데이트 됨
+            dataMode: 'raw' // 'raw' | 'percent' (현재 UI에선 raw로 고정)
+        };
+
+        // 초기 데이터 (3x3 빈 값)
+        function initData(r, c) {
+            const newData = [];
+            for (let i = 0; i < r; i++) {
+                const row = new Array(c).fill("");
+                newData.push(row);
+            }
+            return newData;
+        }
+
+        state.data = initData(state.rows, state.cols);
+
+        // --- DOM 요소 ---
+        const ui = {
+            mainCta: document.getElementById('main-cta'),
+            csvInput: document.getElementById('csv-upload'),
+            rowInput: document.getElementById('row-input'),
+            colInput: document.getElementById('col-input'),
+            applyBtn: document.getElementById('apply-btn'),
+            gridContainer: document.getElementById('data-grid'),
+            saveBtn: document.getElementById('save-btn'),
+            chartTypeDisplay: document.getElementById('chart-type-display')
+        };
+
+        // --- 메시지 수신 (Figma -> UI) ---
+        window.onmessage = (event) => {
+            const msg = event.data.pluginMessage;
+            if (!msg) return;
+
+            // 초기화 메시지 수신 시 차트 타입 동기화
+            if (msg.type === 'init') {
+                if (msg.chartType) {
+                    state.chartType = msg.chartType;
+                    ui.chartTypeDisplay.textContent = msg.chartType;
+                }
+                
+                // (선택사항) 기존 데이터가 있으면 불러올 수도 있음
+                // 현재는 빈 상태로 시작하거나 기본값 유지
+            }
+
+            if (msg.type === 'log') {
+                console.log("[Plugin Log]", msg.message);
+            }
+        };
+
+        // --- 기능 구현 ---
+
+        /** 1. 그리드 렌더링 함수 */
+        function renderGrid() {
+            ui.gridContainer.innerHTML = ''; // 초기화
+            
+            // CSS Grid 컬럼 설정
+            ui.gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, 1fr)`;
+
+            state.data.forEach((row, rowIndex) => {
+                row.forEach((cellValue, colIndex) => {
+                    const input = document.createElement('input');
+                    input.type = 'text'; // 숫자가 권장되지만, 자유로운 입력을 위해 text 유지
+                    input.value = cellValue;
+                    input.dataset.row = rowIndex;
+                    input.dataset.col = colIndex;
+                    
+                    // 모드에 따른 비활성화 처리
+                    if (state.mode === 'read') {
+                        input.disabled = true;
+                    }
+
+                    // 입력 이벤트 (데이터 바인딩)
+                    input.addEventListener('input', (e) => {
+                        state.data[rowIndex][colIndex] = e.target.value;
+                        checkCtaValidation(); // 입력 변경 시마다 체크
+                    });
+
+                    ui.gridContainer.appendChild(input);
+                });
+            });
+            
+            checkCtaValidation(); // 렌더링 후 CTA 상태 체크
+        }
+
+        /** 2. Apply 버튼 동작 (행/열 크기 변경) */
+        function handleApply() {
+            let newRows = parseInt(ui.rowInput.value);
+            let newCols = parseInt(ui.colInput.value);
+
+            // 유효성 검증 (1~25)
+            if (newRows < 1 || newRows > MAX_SIZE || newCols < 1 || newCols > MAX_SIZE) {
+                return; 
+            }
+
+            // 새 데이터 배열 생성 (기존 데이터 유지)
+            const newData = [];
+            for (let i = 0; i < newRows; i++) {
+                const newRow = [];
+                for (let j = 0; j < newCols; j++) {
+                    // 기존 데이터가 있으면 가져오고, 없으면 빈 값
+                    if (i < state.rows && j < state.cols) {
+                        newRow.push(state.data[i][j]);
+                    } else {
+                        newRow.push("");
+                    }
+                }
+                newData.push(newRow);
+            }
+
+            // 상태 업데이트
+            state.rows = newRows;
+            state.cols = newCols;
+            state.data = newData;
+
+            renderGrid();
+        }
+
+        /** 3. CSV 업로드 및 파싱 */
+        function handleCsvUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                parseAndApplyCsv(text);
+            };
+            reader.readAsText(file);
+        }
+
+        function parseAndApplyCsv(csvText) {
+            const rows = csvText.split(/\r?\n/).filter(r => r.trim() !== '');
+            if (rows.length === 0) return;
+
+            let newRowsCount = rows.length;
+            let newColsCount = rows[0].split(',').length;
+
+            if (newRowsCount > MAX_SIZE) newRowsCount = MAX_SIZE;
+            if (newColsCount > MAX_SIZE) newColsCount = MAX_SIZE;
+
+            const newData = [];
+            for (let i = 0; i < newRowsCount; i++) {
+                const cells = rows[i].split(',');
+                const newRow = cells.slice(0, newColsCount); 
+                newData.push(newRow);
+            }
+
+            state.data = newData;
+            state.rows = newRowsCount;
+            state.cols = newColsCount;
+            
+            ui.rowInput.value = newRowsCount;
+            ui.colInput.value = newColsCount;
+
+            renderGrid();
+        }
+
+        /** 4. 모드 전환 (Save 버튼) */
+        function toggleMode() {
+            if (state.mode === 'edit') {
+                // Edit -> Read
+                state.mode = 'read';
+                ui.saveBtn.textContent = "Edit Mode"; 
+                ui.saveBtn.style.backgroundColor = "var(--color-primary)";
+                
+                // 설정 비활성화
+                ui.rowInput.disabled = true;
+                ui.colInput.disabled = true;
+                ui.applyBtn.disabled = true;
+                
+            } else {
+                // Read -> Edit
+                state.mode = 'edit';
+                ui.saveBtn.textContent = "Save";
+                ui.saveBtn.style.backgroundColor = "#333";
+
+                // 설정 활성화
+                ui.rowInput.disabled = false;
+                ui.colInput.disabled = false;
+                ui.applyBtn.disabled = false;
+            }
+
+            renderGrid(); 
+            checkCtaValidation(); 
+        }
+
+        /** 5. Main CTA 활성/비활성 검증 */
+        function checkCtaValidation() {
+            // 조건 1: Read 모드여야 함
+            if (state.mode !== 'read') {
+                ui.mainCta.disabled = true;
+                return;
+            }
+
+            // 조건 2: 모든 셀이 비어있지 않아야 함
+            let isAllFilled = true;
+            for (let i = 0; i < state.rows; i++) {
+                for (let j = 0; j < state.cols; j++) {
+                    if (!state.data[i][j] || state.data[i][j].trim() === "") {
+                        isAllFilled = false;
+                        break;
+                    }
+                }
+                if (!isAllFilled) break;
+            }
+
+            ui.mainCta.disabled = !isAllFilled;
+        }
+
+        /** 6. 데이터 전송 (CTA 클릭) - Code.ts 규격에 맞춰 전송 */
+        function submitData() {
+            let payloadValues;
+
+            // 문자열 데이터를 숫자로 변환 (실패 시 0)
+            const numberData = state.data.map(row => 
+                row.map(cell => {
+                    const num = Number(cell);
+                    return isNaN(num) ? 0 : num;
+                })
+            );
+
+            // 차트 타입에 따른 데이터 구조화
+            if (state.chartType === 'stackedBar') {
+                // StackedBar: 2차원 배열 그대로 사용
+                payloadValues = numberData;
+            } else {
+                // Bar, Line: 1차원 배열로 평탄화 (Flat)
+                // 예: 3x1, 1x3, 2x2 상관없이 순서대로 쭉 나열
+                payloadValues = numberData.flat();
+            }
+
+            // Figma Plugin 로직(code.ts)으로 데이터 전송
+            parent.postMessage({ 
+                pluginMessage: { 
+                    type: 'apply', // code.ts가 수신하는 타입
+                    payload: {
+                        type: state.chartType,
+                        mode: state.dataMode,
+                        values: payloadValues
+                        // height는 code.ts에서 자동 감지하므로 생략 가능
+                    }
+                } 
+            }, '*');
+        }
+
+        // --- 이벤트 리스너 등록 ---
+        ui.applyBtn.addEventListener('click', handleApply);
+        ui.saveBtn.addEventListener('click', toggleMode);
+        ui.csvInput.addEventListener('change', handleCsvUpload);
+        ui.mainCta.addEventListener('click', submitData);
+
+        // 초기 렌더링
+        renderGrid();
+
+    </script>
+</body>
+</html>
