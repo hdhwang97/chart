@@ -84,14 +84,42 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
         .type-card-btn span { font-weight: 600; color: var(--color-text); }
-        .type-desc { font-size: 10px; color: var(--color-text-sub); margin-top: 4px; font-weight: 400; }
+        
+        /* --- Step 2: CSV Import UI --- */
+        .csv-import-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background-color: var(--color-surface);
+            padding: 8px 12px;
+            border-radius: var(--radius-m);
+            border: 1px dashed var(--color-border);
+        }
 
-        /* --- Step 2: 에디터 --- */
-        .section-title { font-size: 11px; font-weight: 600; color: var(--color-text-sub); margin: 0 0 4px 0; }
-        .upload-row { display: flex; align-items: center; gap: var(--spacer-s); }
-        input[type="file"] { font-size: 11px; width: 100%; }
+        .csv-status-empty { color: var(--color-text-sub); font-size: 11px; }
+        .csv-status-loaded { color: var(--color-primary); font-weight: 600; font-size: 11px; }
 
+        .csv-btn-primary {
+            background-color: #fff;
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--color-text);
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .csv-btn-primary:hover {
+            border-color: var(--color-text-sub);
+            background-color: #f0f0f0;
+        }
+
+        /* --- Step 2: Editor --- */
         #editor-card { padding: 0; overflow: hidden; gap: 0; }
+        .section-title { font-size: 11px; font-weight: 600; color: var(--color-text-sub); margin: 0 0 4px 0; }
+        
         .editor-header {
             padding: 0 var(--spacer-m); border-bottom: 1px solid var(--color-border);
             display: flex; justify-content: space-between; align-items: center;
@@ -178,30 +206,28 @@
                 <button class="type-card-btn" onclick="selectType('bar')">
                     <svg class="icon-lg" viewBox="0 0 24 24"><path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z"/></svg>
                     <span>Bar Chart</span>
-                    <span class="type-desc">Vertical bars</span>
                 </button>
-                
                 <button class="type-card-btn" onclick="selectType('line')">
                     <svg class="icon-lg" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
                     <span>Line Chart</span>
-                    <span class="type-desc">Points & Lines</span>
                 </button>
-
                  <button class="type-card-btn" onclick="selectType('stackedBar')">
                     <svg class="icon-lg" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>
                     <span>Stacked Bar</span>
-                    <span class="type-desc">Segmented bars</span>
                 </button>
             </div>
         </div>
     </div>
 
     <div id="step-2" class="step">
+        
         <div class="card">
             <h2 class="section-title">Import from CSV</h2>
-            <div class="upload-row">
-                <input type="file" id="csv-upload" accept=".csv">
-                <span style="font-size: 10px; color: #888; white-space: nowrap;">Max 25x25</span>
+            <div class="csv-import-container">
+                <span id="csv-status-text" class="csv-status-empty">csv를 업로드해주세요.</span>
+                
+                <label for="csv-upload" class="csv-btn-primary">Choose CSV</label>
+                <input type="file" id="csv-upload" accept=".csv" style="display: none;">
             </div>
         </div>
 
@@ -230,22 +256,25 @@
     </div>
 
     <script>
-        // --- 상태 관리 ---
         const MAX_SIZE = 25;
         const state = {
             rows: 3, cols: 3, data: [], 
-            mode: 'edit', chartType: 'bar', dataMode: 'percent',
-            currentStep: 1
+            mode: 'edit', chartType: 'bar', dataMode: 'percent', 
+            currentStep: 1,
+            csvFileName: null 
         };
 
-        // DOM Elements
         const ui = {
             step1: document.getElementById('step-1'),
             step2: document.getElementById('step-2'),
             backBtn: document.getElementById('back-btn'),
             mainCta: document.getElementById('main-cta'),
             chartTypeDisplay: document.getElementById('chart-type-display'),
+            
+            // [중요] ID 매핑 확인
             csvInput: document.getElementById('csv-upload'),
+            csvStatusText: document.getElementById('csv-status-text'),
+            
             rowInput: document.getElementById('row-input'),
             colInput: document.getElementById('col-input'),
             gridWrapper: document.getElementById('grid-wrapper'),
@@ -253,19 +282,39 @@
             saveBtn: document.getElementById('save-btn')
         };
 
-        // --- Step Navigation Logic ---
+        // CSV UI 상태 업데이트 함수 (안전장치 추가)
+        function updateCsvUi() {
+            // UI 요소가 없으면 실행 중단 (에러 방지)
+            if (!ui.csvStatusText) return;
+
+            const isUploaded = !!state.csvFileName;
+
+            if (isUploaded) {
+                // True 상태
+                ui.csvStatusText.textContent = state.csvFileName;
+                ui.csvStatusText.className = 'csv-status-loaded';
+            } else {
+                // False 상태
+                ui.csvStatusText.textContent = "csv를 업로드해주세요.";
+                ui.csvStatusText.className = 'csv-status-empty';
+            }
+        }
+
         function goToStep(stepNum) {
             state.currentStep = stepNum;
             document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
             
             if (stepNum === 1) {
-                // Step 1: 선택 화면
                 ui.step1.classList.add('active');
                 ui.backBtn.style.display = 'none';
                 ui.chartTypeDisplay.style.display = 'none';
                 ui.mainCta.style.display = 'none';
+                
+                // Step 1 복귀 시 CSV 상태 초기화
+                state.csvFileName = null;
+                updateCsvUi();
+
             } else {
-                // Step 2: 에디터 화면
                 ui.step2.classList.add('active');
                 ui.backBtn.style.display = 'inline-flex';
                 ui.chartTypeDisplay.style.display = 'inline-block';
@@ -279,15 +328,12 @@
 
         window.selectType = function(type) {
             state.chartType = type;
-            // 여기서 code.js로 'create' 메시지를 보내지 않고, 그냥 에디터(Step 2)로 이동만 함
-            // 실제 생성은 Apply를 눌렀을 때 처리하거나, 사용자 경험에 따라 여기서 미리 생성 요청을 보낼 수도 있음
-            // 현재 요구사항은 "선택 후 데이터 입력"이므로 에디터로 이동합니다.
+            state.dataMode = 'raw'; 
             goToStep(2);
         };
 
         ui.backBtn.addEventListener('click', () => goToStep(1));
 
-        // --- 초기 데이터 ---
         function initData(r, c) {
             const newData = [];
             for (let i = 0; i < r; i++) {
@@ -298,49 +344,29 @@
         }
         state.data = initData(state.rows, state.cols);
 
-        // --- 메시지 수신 (Figma -> UI) --
         window.onmessage = (event) => {
             const msg = event.data.pluginMessage;
             if (!msg) return;
 
             if (msg.type === 'init') {
-                // 1. 차트가 감지됨 (Edit Mode)
                 if (msg.chartType) {
                     state.chartType = msg.chartType;
                     
-                    // 2. 역산된 데이터(values)가 있다면 그리드에 반영
                     if (msg.values && Array.isArray(msg.values)) {
                         const vals = msg.values;
-                        
-                        // Bar Chart는 1차원 배열로 옴 -> Rows=1, Cols=데이터개수
                         if (state.chartType === 'bar' || state.chartType === 'line') {
                             state.rows = 1; 
                             state.cols = vals.length > 0 ? vals.length : 3;
-                            
-                            // 2차원 배열 구조로 변환하여 state.data에 저장
-                            // 예: [50, 30] -> [ ["50", "30"] ]
                             state.data = [ vals.map(v => String(v)) ];
-                            
-                            // 만약 Rows를 더 늘리고 싶다면 빈 행 추가 (선택사항)
-                            // for (let i = 1; i < 3; i++) state.data.push(new Array(state.cols).fill(""));
-                            // state.rows = state.data.length;
-                        } 
-                        // Stacked Bar는 2차원 배열로 옴
-                        else if (state.chartType === 'stackedBar') {
+                        } else if (state.chartType === 'stackedBar') {
                             state.cols = vals.length;
-                            // 가장 긴 데이터 기준으로 Row 개수 설정
                             let maxRows = 0;
                             vals.forEach(col => { if(col.length > maxRows) maxRows = col.length; });
                             state.rows = maxRows > 0 ? maxRows : 3;
-
-                            // 데이터 매핑 (행열 변환 주의: vals[col][row] -> state.data[row][col])
-                            // 보통 UI 그리드는 행(Row) 중심, 데이터는 열(Column/Bar) 중심일 수 있음
-                            // 여기서는 단순하게 매핑 (상황에 따라 전치 행렬 필요할 수 있음)
                             const newData = [];
                             for(let r=0; r<state.rows; r++){
                                 const rowData = [];
                                 for(let c=0; c<state.cols; c++){
-                                    // vals[c]가 존재하고 vals[c][r]이 있으면 값 넣기
                                     const val = (vals[c] && vals[c][r] !== undefined) ? String(vals[c][r]) : "";
                                     rowData.push(val);
                                 }
@@ -349,15 +375,11 @@
                             state.data = newData;
                         }
 
-                        // 모드 업데이트 (Percent로 감지되었다면)
                         if (msg.inferredMode) state.dataMode = msg.inferredMode;
                     }
-
-                    // 3. UI 업데이트
-                    updateInputs(); // 상단 Rows/Cols 입력창 숫자 갱신
-                    goToStep(2);    // 에디터 화면으로 이동
+                    updateInputs();
+                    goToStep(2);
                 } else {
-                    // 선택된 게 없다면 -> Step 1
                     goToStep(1);
                 }
             }
@@ -366,7 +388,6 @@
             }
         };
 
-        // --- Grid Logic (기존 유지) ---
         function renderGrid() {
             ui.gridContainer.innerHTML = ''; 
             ui.gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, minmax(60px, 1fr)) 30px`;
@@ -374,11 +395,7 @@
             for (let j = 0; j < state.cols; j++) {
                 const headerCell = document.createElement('div');
                 headerCell.className = 'grid-header sticky';
-                const label = document.createElement('span');
-                label.className = 'header-label';
-                label.textContent = j + 1;
-                headerCell.appendChild(label);
-
+                headerCell.innerHTML = `<span class="header-label">${j + 1}</span>`;
                 if (state.mode === 'edit') {
                     const delBtn = document.createElement('button');
                     delBtn.className = 'col-delete-btn';
@@ -427,7 +444,6 @@
             ui.gridContainer.appendChild(addRowContainer);
             
             checkCtaValidation();
-            updateInputs();
         }
 
         function handleDimensionInput() {
@@ -438,25 +454,19 @@
             updateGridSize(newRows, newCols);
         }
 
-        // 데이터 보존하며 크기 변경
         function updateGridSize(newRows, newCols) {
             const newData = [];
             for (let i = 0; i < newRows; i++) {
                 const newRow = [];
                 for (let j = 0; j < newCols; j++) {
-                    // 기존 데이터 범위 내라면 값 유지, 아니면 빈 값
                     if (i < state.rows && j < state.cols) {
-                        // [수정] newData.push -> newRow.push
-                        // 안전하게 접근하기 위해 옵셔널 체이닝(?.) 사용 권장
-                        newRow.push(state.data[i]?.[j] || ""); 
+                        newRow.push((state.data[i] && state.data[i][j] !== undefined) ? state.data[i][j] : "");
                     } else {
-                        // [수정] newData.push -> newRow.push
                         newRow.push("");
                     }
                 }
                 newData.push(newRow);
             }
-            
             state.rows = newRows;
             state.cols = newCols;
             state.data = newData;
@@ -466,16 +476,19 @@
         function addColumn() {
             if (state.cols >= MAX_SIZE) return;
             updateGridSize(state.rows, state.cols + 1);
+            updateInputs();
             setTimeout(() => ui.gridWrapper.scrollTo({ left: ui.gridWrapper.scrollWidth, behavior: 'smooth' }), 0);
         }
         function addRow() {
             if (state.rows >= MAX_SIZE) return;
             updateGridSize(state.rows + 1, state.cols);
+            updateInputs();
         }
         function deleteColumn(colIndex) {
             if (state.cols <= 1) return;
             state.data.forEach(row => row.splice(colIndex, 1));
             state.cols--;
+            updateInputs();
             renderGrid();
         }
         function updateInputs() {
@@ -486,6 +499,12 @@
         function handleCsvUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
+
+            // 1. 상태 업데이트
+            state.csvFileName = file.name;
+            // 2. UI 즉시 반영 (True 상태)
+            updateCsvUi();
+
             const reader = new FileReader();
             reader.onload = function(e) { parseAndApplyCsv(e.target.result); };
             reader.readAsText(file);
@@ -505,10 +524,20 @@
                 const newRow = cells.slice(0, newColsCount); 
                 newData.push(newRow);
             }
+            
             state.data = newData;
             state.rows = newRowsCount;
             state.cols = newColsCount;
+            state.dataMode = 'raw'; 
+            
+            updateInputs(); 
             renderGrid();
+            
+            // 데이터 처리 후에도 UI 상태 재확인 (안전장치)
+            updateCsvUi();
+
+            // 재업로드를 위해 input value만 비움 (파일명은 state로 유지됨)
+            ui.csvInput.value = '';
         }
 
         function toggleMode() {
@@ -575,7 +604,6 @@
         ui.rowInput.addEventListener('input', handleDimensionInput);
         ui.colInput.addEventListener('input', handleDimensionInput);
 
-        // 초기 시작: Step 1 (Figma 메시지 수신 시 자동으로 Step 2로 이동 가능)
         goToStep(1);
 
     </script>
