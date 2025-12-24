@@ -4,254 +4,152 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chart Data Setting</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#18A0FB',
+                        'primary-hover': '#0D86D8',
+                        surface: '#F9F9F9',
+                        border: '#E0E0E0',
+                        'border-strong': '#BDBDBD',
+                        danger: '#F24822',
+                        text: '#333333',
+                        'text-sub': '#888888'
+                    },
+                    fontSize: {
+                        xxs: '10px',
+                        xs: '11px',
+                        sm: '12px'
+                    },
+                    boxShadow: {
+                        'left-scroll': '-4px 0 12px -4px rgba(0, 0, 0, 0.1)',
+                        'top-scroll': '0 -4px 12px -4px rgba(0, 0, 0, 0.1)'
+                    }
+                }
+            }
+        }
+    </script>
+
     <style>
-        /* --- 기본 스타일 --- */
-        :root {
-            --color-bg: #FFFFFF;
-            --color-surface: #F9F9F9;
-            --color-text: #333333;
-            --color-text-sub: #888888;
-            --color-border: #E0E0E0;
-            --color-border-strong: #BDBDBD;
-            --color-primary: #18A0FB;
-            --color-primary-hover: #0D86D8;
-            --color-zebra-bg: #F7F9FC;
-            --color-danger: #F24822;
-            
-            --spacer-xs: 4px; --spacer-s: 8px; --spacer-m: 12px;
-            --radius-s: 4px; --radius-m: 6px;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif; font-size: 11px;
-            margin: 0; padding: var(--spacer-m);
-            color: var(--color-text); background-color: var(--color-bg);
-            box-sizing: border-box; display: flex; flex-direction: column;
-            gap: var(--spacer-m); height: 100vh;
-        }
-
-        .icon { width: 12px; height: 12px; fill: currentColor; }
-        .icon-lg { width: 32px; height: 32px; fill: var(--color-primary); margin-bottom: 8px; }
-
-        .card {
-            border: 1px solid var(--color-border); border-radius: var(--radius-m);
-            padding: var(--spacer-m); background-color: #fff;
-            display: flex; flex-direction: column; gap: var(--spacer-s);
-        }
-
-        /* --- 헤더 --- */
-        header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; height: 32px; }
-        h1 { font-size: 14px; font-weight: 600; margin: 0; display: flex; align-items: center; }
-
-        .chart-type-badge {
-            font-size: 10px; font-weight: 500; background-color: var(--color-surface);
-            border: 1px solid var(--color-border); padding: 2px 6px; border-radius: 4px;
-            color: var(--color-text-sub); margin-left: 8px; display: none;
-        }
-
-        button#main-cta {
-            background-color: var(--color-primary); color: white; border: none;
-            padding: 6px 12px; border-radius: 4px; font-weight: 600; cursor: pointer;
-            transition: background-color 0.2s; font-size: 11px;
-        }
-        button#main-cta:hover { background-color: var(--color-primary-hover); }
-        button#main-cta:disabled {
-            background-color: var(--color-surface); color: var(--color-text-sub);
-            border: 1px solid var(--color-border); cursor: not-allowed;
-        }
-
-        button#back-btn {
-            background: none; border: none; color: var(--color-text-sub);
-            cursor: pointer; padding: 4px; margin-right: 4px; display: none;
-        }
-        button#back-btn:hover { color: var(--color-text); }
-
-        /* --- SPA Step 관리 --- */
-        .step { display: none; flex-direction: column; gap: var(--spacer-m); animation: fadeIn 0.3s ease-in-out; }
-        .step.active { display: flex; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* --- Step 1: 유형 선택 --- */
-        .type-selection-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
-        .type-card-btn {
-            background-color: #fff; border: 1px solid var(--color-border);
-            border-radius: var(--radius-m); padding: 24px 12px;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            cursor: pointer; transition: all 0.2s; text-align: center;
-        }
-        .type-card-btn:hover {
-            border-color: var(--color-primary); background-color: var(--color-zebra-bg);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        .type-card-btn span { font-weight: 600; color: var(--color-text); }
+        body { font-family: 'Inter', sans-serif; }
+        .step { display: none; opacity: 0; transform: translateY(2px); transition: all 0.3s ease-in-out; }
+        .step.active { display: flex; opacity: 1; transform: translateY(0); }
         
-        /* --- Step 2: CSV Import UI --- */
-        .csv-import-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background-color: var(--color-surface);
-            padding: 8px 12px;
-            border-radius: var(--radius-m);
-            border: 1px dashed var(--color-border);
-        }
-
-        .csv-status-empty { color: var(--color-text-sub); font-size: 11px; }
-        .csv-status-loaded { color: var(--color-primary); font-weight: 600; font-size: 11px; }
-
-        .csv-btn-primary {
-            background-color: #fff;
-            border: 1px solid var(--color-border);
-            border-radius: 4px;
-            padding: 4px 10px;
-            font-size: 10px;
-            font-weight: 500;
-            color: var(--color-text);
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
-        }
-        .csv-btn-primary:hover {
-            border-color: var(--color-text-sub);
-            background-color: #f0f0f0;
-        }
-
-        /* --- Step 2: Editor --- */
-        #editor-card { padding: 0; overflow: hidden; gap: 0; }
-        .section-title { font-size: 11px; font-weight: 600; color: var(--color-text-sub); margin: 0 0 4px 0; }
-        
-        .editor-header {
-            padding: 0 var(--spacer-m); border-bottom: 1px solid var(--color-border);
-            display: flex; justify-content: space-between; align-items: center;
-            background-color: #fff; flex-shrink: 0; height: 32px;
-        }
-        .controls-group { display: flex; gap: 12px; align-items: center; }
-        .input-wrapper { display: flex; align-items: center; gap: 6px; }
-        label { font-size: 11px; color: var(--color-text-sub); font-weight: 500; }
-        input[type="number"] {
-            width: 36px; padding: 1px 4px; border: 1px solid var(--color-border);
-            border-radius: var(--radius-s); text-align: center; font-size: 11px; height: 22px;
-        }
-        
-        #grid-wrapper { max-height: 300px; overflow: auto; padding: 0; background-color: #fff; position: relative; }
-        .grid { display: grid; gap: 0; border-top: 1px solid var(--color-border); border-left: 1px solid var(--color-border); width: fit-content; }
-        
-        .grid-header {
-            background-color: #F0F0F0; color: #666; font-weight: 600; font-size: 10px;
-            display: flex; align-items: center; justify-content: center;
-            border-right: 1px solid var(--color-border-strong); border-bottom: 1px solid var(--color-border-strong);
-            height: 24px; position: sticky; top: 0; z-index: 20;
-        }
-        .col-delete-btn {
-            position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
-            width: 16px; height: 16px; border: none; background: none; cursor: pointer;
-            color: var(--color-text-sub); display: none; align-items: center; justify-content: center;
-        }
-        .grid-header:hover .col-delete-btn { display: flex; }
-        .col-delete-btn:hover { color: var(--color-danger); }
-
-        .grid input {
-            width: 100%; height: 24px; padding: 0 8px; border: none;
-            border-right: 1px solid var(--color-border-strong); border-bottom: 1px solid var(--color-border);
-            font-size: 11px; text-align: right; background-color: #fff;
-        }
-        .grid input.zebra-row { background-color: var(--color-zebra-bg); }
-        .grid input:focus { outline: 2px solid var(--color-primary); z-index: 10; position: relative; }
-        .grid input:disabled { background-color: #fafafa; color: #aaa; cursor: not-allowed; }
-
-        .add-col-btn {
-            grid-column: -2 / -1; background-color: #fff; border: none;
-            border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border);
-            cursor: pointer; color: var(--color-primary); display: flex; align-items: center; justify-content: center;
-            font-size: 14px; z-index: 1;
-        }
-        .add-col-btn:hover { background-color: var(--color-surface); }
-
-        .add-row-container { grid-column: 1 / -1; height: 28px; display: flex; }
-        .add-row-btn {
-            width: 100%; height: 100%; border: none; border-bottom: 1px solid var(--color-border);
-            background-color: #fff; color: var(--color-primary); cursor: pointer;
-            font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center;
-        }
-        .add-row-btn:hover { background-color: var(--color-surface); }
-
-        .editor-footer {
-            padding: 0 var(--spacer-m); border-top: 1px solid var(--color-border);
-            background-color: #fff; display: flex; justify-content: flex-end; flex-shrink: 0; height: 32px; align-items: center;
-        }
-        #save-btn {
-            background-color: transparent; color: var(--color-text); border: 1px solid var(--color-text);
-            padding: 2px 10px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 11px; min-width: 60px; height: 22px;
-        }
-        #save-btn:hover { background-color: var(--color-surface); }
-        #save-btn.read-mode { background-color: var(--color-primary); color: white; border-color: var(--color-primary); }
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
     </style>
 </head>
-<body>
+<body class="bg-white text-text p-3 flex flex-col gap-3 h-screen box-border text-xs overflow-hidden">
 
-    <header>
-        <h1>
-            <button id="back-btn" title="Back to Selection">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+    <header class="flex justify-between items-center h-8 shrink-0">
+        <h1 class="text-sm font-semibold flex items-center m-0">
+            <button id="back-btn" class="hidden text-text-sub hover:text-text bg-transparent border-0 cursor-pointer p-1 mr-1" title="Back">
+                <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
             </button>
-            Chart Data <span id="chart-type-display" class="chart-type-badge">Bar</span>
+            Chart Data 
+            <span id="chart-type-display" class="hidden text-xxs font-medium bg-surface border border-border px-1.5 py-0.5 rounded ml-2 text-text-sub">Bar</span>
         </h1>
-        <button id="main-cta" disabled>Apply to Figma</button>
+        <button id="main-cta" disabled class="bg-primary text-white px-3 py-1.5 rounded font-semibold text-xs cursor-pointer transition-colors hover:bg-primary-hover disabled:bg-surface disabled:text-text-sub disabled:border disabled:border-border disabled:cursor-not-allowed">
+            Apply to Figma
+        </button>
     </header>
 
-    <div id="step-1" class="step active">
-        <div class="card">
-            <h2 class="section-title">Select Chart Type</h2>
-            <div class="type-selection-container">
-                <button class="type-card-btn" onclick="selectType('bar')">
-                    <svg class="icon-lg" viewBox="0 0 24 24"><path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z"/></svg>
-                    <span>Bar Chart</span>
+    <div id="step-1" class="step active flex-col gap-3 w-full">
+        <div class="border border-border rounded-md p-3 bg-white flex flex-col gap-2">
+            <h2 class="text-xs font-semibold text-text-sub m-0 mb-1">Select Chart Type</h2>
+            <div class="grid grid-cols-2 gap-3 mt-2">
+                <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('bar')">
+                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z"/></svg>
+                    <span class="font-semibold text-text">Bar Chart</span>
                 </button>
-                <button class="type-card-btn" onclick="selectType('line')">
-                    <svg class="icon-lg" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
-                    <span>Line Chart</span>
+                <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('line')">
+                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                    <span class="font-semibold text-text">Line Chart</span>
                 </button>
-                 <button class="type-card-btn" onclick="selectType('stackedBar')">
-                    <svg class="icon-lg" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>
-                    <span>Stacked Bar</span>
+                <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('stackedBar')">
+                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>
+                    <span class="font-semibold text-text">Stacked Bar</span>
                 </button>
             </div>
         </div>
     </div>
 
-    <div id="step-2" class="step">
+    <div id="step-2" class="step flex-col gap-3 w-full h-full overflow-hidden">
         
-        <div class="card">
-            <h2 class="section-title">Import from CSV</h2>
-            <div class="csv-import-container">
-                <span id="csv-status-text" class="csv-status-empty">csv를 업로드해주세요.</span>
+        <div class="border border-border rounded-md p-3 bg-white flex flex-col gap-2 shrink-0">
+            <h2 class="text-xs font-semibold text-text-sub m-0 mb-1">Import from CSV</h2>
+            <div class="flex items-center justify-between bg-surface px-3 py-2 rounded-md border border-dashed border-border group">
+                <span id="csv-status-text" class="text-xs text-text-sub truncate mr-2">csv를 업로드해주세요.</span>
                 
-                <label for="csv-upload" class="csv-btn-primary">Choose CSV</label>
-                <input type="file" id="csv-upload" accept=".csv" style="display: none;">
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="csv-delete-btn" class="hidden w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 hover:bg-danger hover:text-white text-gray-500 transition-colors cursor-pointer" title="Remove CSV">
+                        <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    </button>
+
+                    <label for="csv-upload" class="bg-white border border-border rounded px-2.5 py-1 text-xxs font-medium text-text cursor-pointer hover:border-text-sub hover:bg-gray-100 transition-all whitespace-nowrap">
+                        Choose CSV
+                    </label>
+                    <input type="file" id="csv-upload" accept=".csv" class="hidden">
+                </div>
             </div>
         </div>
 
-        <div class="card" id="editor-card">
-            <div class="editor-header">
-                <div class="controls-group">
-                    <div class="input-wrapper">
-                        <label>Rows</label>
-                        <input type="number" id="row-input" value="3" min="1" max="25">
+        <div id="editor-card" class="border border-border rounded-md bg-white flex flex-col flex-1 overflow-hidden">
+            <div class="px-3 border-b border-border flex justify-between items-center bg-white shrink-0 h-8">
+                <div class="flex gap-3 items-center">
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-xs text-text-sub font-medium">Rows</label>
+                        <input type="number" id="row-input" value="3" min="1" max="25" class="w-9 px-1 py-0.5 border border-border rounded text-center text-xs h-5.5 focus:border-primary focus:outline-none">
                     </div>
-                    <div class="input-wrapper">
-                        <label>Cols</label>
-                        <input type="number" id="col-input" value="3" min="1" max="25">
+                    <div class="flex items-center gap-1.5">
+                        <label class="text-xs text-text-sub font-medium">Cols</label>
+                        <input type="number" id="col-input" value="3" min="1" max="25" class="w-9 px-1 py-0.5 border border-border rounded text-center text-xs h-5.5 focus:border-primary focus:outline-none">
                     </div>
                 </div>
             </div>
 
-            <div id="grid-wrapper">
-                <div id="data-grid" class="grid"></div>
+            <div id="grid-container-wrapper" class="flex flex-1 relative overflow-hidden bg-white max-h-[300px]">
+                
+                <div id="grid-scroll-area" class="flex-1 overflow-auto relative scroll-smooth">
+                    <div id="data-grid" class="grid gap-0 border-t border-l border-border w-fit">
+                        </div>
+                </div>
+
+                <div class="w-8 shrink-0 border-l border-b border-t border-border bg-white flex flex-col z-20 shadow-left-scroll">
+                    <div class="h-6 border-b border-border-strong bg-surface flex items-center justify-center shrink-0">
+                        <svg class="w-3 h-3 fill-text-sub" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    </div>
+                    <button id="add-col-fixed-btn" class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors" title="Add Column">
+                        +
+                    </button>
+                </div>
             </div>
 
-            <div class="editor-footer">
-                <button id="save-btn">Save</button>
+            <div class="h-7 flex shrink-0 border-t border-border bg-white z-20 shadow-top-scroll">
+                <button id="add-row-fixed-btn" class="flex-1 text-primary hover:bg-surface flex items-center justify-center cursor-pointer text-xs font-medium focus:outline-none active:bg-blue-50 transition-colors">
+                    + Add Row
+                </button>
+                <div class="w-8 shrink-0 border-l border-border bg-surface"></div>
             </div>
+
+            <div class="px-3 border-t border-border bg-white flex justify-end shrink-0 h-8 items-center">
+                <button id="save-btn" class="bg-transparent text-text border border-text px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-surface transition-colors">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="restore-toast" class="hidden fixed bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-4 py-3 rounded-md shadow-lg z-50 flex items-center gap-4 transition-all duration-300 opacity-0 translate-y-2">
+        <span>데이터를 다시 적용하겠습니까?</span>
+        <div class="flex items-center gap-3">
+            <button id="toast-yes-btn" class="font-bold text-primary hover:text-blue-300 cursor-pointer">예</button>
+            <button id="toast-close-btn" class="text-gray-400 hover:text-white cursor-pointer">✕</button>
         </div>
     </div>
 
@@ -261,7 +159,8 @@
             rows: 3, cols: 3, data: [], 
             mode: 'edit', chartType: 'bar', dataMode: 'percent', 
             currentStep: 1,
-            csvFileName: null 
+            csvFileName: null,
+            uiMode: 'create' // [NEW] create | edit
         };
 
         const ui = {
@@ -270,59 +169,123 @@
             backBtn: document.getElementById('back-btn'),
             mainCta: document.getElementById('main-cta'),
             chartTypeDisplay: document.getElementById('chart-type-display'),
-            
-            // [중요] ID 매핑 확인
             csvInput: document.getElementById('csv-upload'),
             csvStatusText: document.getElementById('csv-status-text'),
-            
+            csvDeleteBtn: document.getElementById('csv-delete-btn'), 
             rowInput: document.getElementById('row-input'),
             colInput: document.getElementById('col-input'),
-            gridWrapper: document.getElementById('grid-wrapper'),
+            
+            gridScrollArea: document.getElementById('grid-scroll-area'),
             gridContainer: document.getElementById('data-grid'),
-            saveBtn: document.getElementById('save-btn')
+            
+            addColFixedBtn: document.getElementById('add-col-fixed-btn'),
+            addRowFixedBtn: document.getElementById('add-row-fixed-btn'),
+            saveBtn: document.getElementById('save-btn'),
+
+            // Toast Elements
+            toast: document.getElementById('restore-toast'),
+            toastYesBtn: document.getElementById('toast-yes-btn'),
+            toastCloseBtn: document.getElementById('toast-close-btn'),
         };
 
-        // CSV UI 상태 업데이트 함수 (안전장치 추가)
-        function updateCsvUi() {
-            // UI 요소가 없으면 실행 중단 (에러 방지)
-            if (!ui.csvStatusText) return;
+        let tempLastValues = null; 
 
-            const isUploaded = !!state.csvFileName;
+        // --- Toast Functions ---
+        function showToast() {
+            ui.toast.classList.remove('hidden');
+            setTimeout(() => {
+                ui.toast.classList.remove('opacity-0', 'translate-y-2');
+            }, 50);
+        }
 
-            if (isUploaded) {
-                // True 상태
-                ui.csvStatusText.textContent = state.csvFileName;
-                ui.csvStatusText.className = 'csv-status-loaded';
-            } else {
-                // False 상태
-                ui.csvStatusText.textContent = "csv를 업로드해주세요.";
-                ui.csvStatusText.className = 'csv-status-empty';
+        function hideToast() {
+            ui.toast.classList.add('opacity-0', 'translate-y-2');
+            setTimeout(() => {
+                ui.toast.classList.add('hidden');
+            }, 300);
+        }
+
+        ui.toastCloseBtn.addEventListener('click', hideToast);
+
+        ui.toastYesBtn.addEventListener('click', () => {
+            if (tempLastValues && Array.isArray(tempLastValues)) {
+                // 1. 데이터 복원 (1차원 배열 기준)
+                const len = tempLastValues.length;
+                const newRows = state.rows; 
+                const newCols = len > 0 ? len : 3;
+
+                const newData = [];
+                const rowData = tempLastValues.map(v => String(v));
+                
+                for(let r=0; r<newRows; r++) {
+                    if (r === 0) newData.push(rowData); 
+                    else newData.push(new Array(newCols).fill(""));
+                }
+
+                state.cols = newCols;
+                state.data = newData;
+                state.dataMode = 'raw'; 
+
+                // 2. UI 업데이트
+                updateInputs();
+                renderGrid();
+                checkCtaValidation();
+                
+                // 3. 즉시 Apply 실행
+                submitData();
+
+                hideToast();
             }
+        });
+        // -----------------------
+
+        function updateCsvUi() {
+            if (!ui.csvStatusText) return;
+            const isUploaded = !!state.csvFileName;
+            
+            if (isUploaded) {
+                ui.csvStatusText.textContent = state.csvFileName;
+                ui.csvStatusText.className = 'text-xs text-primary font-semibold';
+                ui.csvDeleteBtn.classList.remove('hidden');
+            } else {
+                ui.csvStatusText.textContent = "csv를 업로드해주세요.";
+                ui.csvStatusText.className = 'text-xs text-text-sub truncate mr-2';
+                ui.csvDeleteBtn.classList.add('hidden');
+            }
+        }
+
+        function removeCsv() {
+            state.csvFileName = null;
+            ui.csvInput.value = '';
+            updateCsvUi();
         }
 
         function goToStep(stepNum) {
             state.currentStep = stepNum;
             document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
-            
             if (stepNum === 1) {
                 ui.step1.classList.add('active');
-                ui.backBtn.style.display = 'none';
-                ui.chartTypeDisplay.style.display = 'none';
+                ui.backBtn.classList.add('hidden');
+                ui.chartTypeDisplay.classList.add('hidden');
                 ui.mainCta.style.display = 'none';
                 
-                // Step 1 복귀 시 CSV 상태 초기화
-                state.csvFileName = null;
-                updateCsvUi();
-
+                removeCsv();
+                
+                parent.postMessage({ pluginMessage: { type: 'resize', width: 300, height: 400 } }, '*');
             } else {
                 ui.step2.classList.add('active');
-                ui.backBtn.style.display = 'inline-flex';
-                ui.chartTypeDisplay.style.display = 'inline-block';
+                ui.backBtn.classList.remove('hidden');
+                ui.chartTypeDisplay.classList.remove('hidden');
                 ui.chartTypeDisplay.textContent = state.chartType;
-                ui.mainCta.style.display = 'block';
                 
+                // [NEW] 상태에 따라 버튼 텍스트 변경
+                ui.mainCta.style.display = 'block';
+                ui.mainCta.textContent = state.uiMode === 'create' ? "Generate to Figma" : "Apply to Figma";
+
                 renderGrid();
                 checkCtaValidation();
+                
+                parent.postMessage({ pluginMessage: { type: 'resize', width: 600, height: 520 } }, '*');
             }
         }
 
@@ -332,7 +295,10 @@
             goToStep(2);
         };
 
-        ui.backBtn.addEventListener('click', () => goToStep(1));
+        ui.backBtn.addEventListener('click', () => {
+            goToStep(1);
+            hideToast();
+        });
 
         function initData(r, c) {
             const newData = [];
@@ -347,11 +313,15 @@
         window.onmessage = (event) => {
             const msg = event.data.pluginMessage;
             if (!msg) return;
-
+            
             if (msg.type === 'init') {
+                // [NEW] 초기화 시 모드 저장
+                state.uiMode = msg.uiMode || 'create';
+
                 if (msg.chartType) {
                     state.chartType = msg.chartType;
                     
+                    // 역산 데이터 적용
                     if (msg.values && Array.isArray(msg.values)) {
                         const vals = msg.values;
                         if (state.chartType === 'bar' || state.chartType === 'line') {
@@ -374,46 +344,49 @@
                             }
                             state.data = newData;
                         }
-
-                        if (msg.inferredMode) state.dataMode = msg.inferredMode;
                     }
+                    
                     updateInputs();
-                    goToStep(2);
+                    goToStep(2); // 수정 모드면 Step 2로 직행
+
+                    // [Toast Logic]
+                    if (msg.isModified && msg.lastValues && msg.values) {
+                        tempLastValues = msg.lastValues;
+                        
+                        const currentJson = JSON.stringify(msg.values);
+                        const lastJson = JSON.stringify(msg.lastValues);
+                        
+                        if (currentJson !== lastJson) {
+                            setTimeout(showToast, 500);
+                        }
+                    }
+
                 } else {
-                    goToStep(1);
+                    goToStep(1); // 생성 모드면 Step 1로 시작
                 }
-            }
-            if (msg.type === 'log') {
-                console.log("[Plugin Log]", msg.message);
             }
         };
 
         function renderGrid() {
             ui.gridContainer.innerHTML = ''; 
-            ui.gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, minmax(60px, 1fr)) 30px`;
+            ui.gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, minmax(60px, 1fr))`;
 
+            // 1. 헤더 생성
             for (let j = 0; j < state.cols; j++) {
                 const headerCell = document.createElement('div');
-                headerCell.className = 'grid-header sticky';
-                headerCell.innerHTML = `<span class="header-label">${j + 1}</span>`;
+                headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-semibold text-text-sub group relative';
+                headerCell.innerHTML = `<span>${j + 1}</span>`;
                 if (state.mode === 'edit') {
                     const delBtn = document.createElement('button');
-                    delBtn.className = 'col-delete-btn';
-                    delBtn.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+                    delBtn.className = 'absolute right-0.5 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
+                    delBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
                     delBtn.onclick = () => deleteColumn(j);
                     headerCell.appendChild(delBtn);
                 }
                 ui.gridContainer.appendChild(headerCell);
             }
 
-            const addColBtn = document.createElement('button');
-            addColBtn.className = 'add-col-btn';
-            addColBtn.innerHTML = '+';
-            addColBtn.style.gridRow = `1 / span ${state.rows + 1}`;
-            if (state.mode === 'read') addColBtn.disabled = true;
-            else addColBtn.onclick = addColumn;
-            ui.gridContainer.appendChild(addColBtn);
-
+            // 2. 데이터 셀 생성
             state.data.forEach((row, rowIndex) => {
                 const isZebra = (rowIndex % 2 === 1);
                 row.forEach((cellValue, colIndex) => {
@@ -422,9 +395,10 @@
                     input.value = cellValue;
                     input.dataset.row = rowIndex;
                     input.dataset.col = colIndex;
-                    if (isZebra) input.classList.add('zebra-row');
-                    if (state.mode === 'read') input.disabled = true;
-
+                    let classes = 'w-full h-6 px-2 border-0 border-r border-b border-border-strong text-xs text-right bg-white focus:outline-none focus:ring-1 focus:ring-primary focus:z-10 relative';
+                    if (isZebra) classes += ' bg-surface'; 
+                    if (state.mode === 'read') classes += ' bg-gray-50 text-gray-400 cursor-not-allowed';
+                    input.className = classes;
                     input.addEventListener('input', (e) => {
                         state.data[rowIndex][colIndex] = e.target.value;
                         checkCtaValidation();
@@ -432,16 +406,6 @@
                     ui.gridContainer.appendChild(input);
                 });
             });
-
-            const addRowContainer = document.createElement('div');
-            addRowContainer.className = 'add-row-container';
-            const addRowBtn = document.createElement('button');
-            addRowBtn.className = 'add-row-btn';
-            addRowBtn.innerHTML = '+ Add Row';
-            if (state.mode === 'read') addRowBtn.disabled = true;
-            else addRowBtn.onclick = addRow;
-            addRowContainer.appendChild(addRowBtn);
-            ui.gridContainer.appendChild(addRowContainer);
             
             checkCtaValidation();
         }
@@ -477,13 +441,20 @@
             if (state.cols >= MAX_SIZE) return;
             updateGridSize(state.rows, state.cols + 1);
             updateInputs();
-            setTimeout(() => ui.gridWrapper.scrollTo({ left: ui.gridWrapper.scrollWidth, behavior: 'smooth' }), 0);
+            setTimeout(() => {
+                ui.gridScrollArea.scrollTo({ left: ui.gridScrollArea.scrollWidth, behavior: 'smooth' });
+            }, 50);
         }
+
         function addRow() {
             if (state.rows >= MAX_SIZE) return;
             updateGridSize(state.rows + 1, state.cols);
             updateInputs();
+            setTimeout(() => {
+                ui.gridScrollArea.scrollTo({ top: ui.gridScrollArea.scrollHeight, behavior: 'smooth' });
+            }, 50);
         }
+
         function deleteColumn(colIndex) {
             if (state.cols <= 1) return;
             state.data.forEach(row => row.splice(colIndex, 1));
@@ -499,12 +470,8 @@
         function handleCsvUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
-
-            // 1. 상태 업데이트
             state.csvFileName = file.name;
-            // 2. UI 즉시 반영 (True 상태)
             updateCsvUi();
-
             const reader = new FileReader();
             reader.onload = function(e) { parseAndApplyCsv(e.target.result); };
             reader.readAsText(file);
@@ -517,26 +484,19 @@
             let newColsCount = rows[0].split(',').length;
             if (newRowsCount > MAX_SIZE) newRowsCount = MAX_SIZE;
             if (newColsCount > MAX_SIZE) newColsCount = MAX_SIZE;
-
             const newData = [];
             for (let i = 0; i < newRowsCount; i++) {
                 const cells = rows[i].split(',');
                 const newRow = cells.slice(0, newColsCount); 
                 newData.push(newRow);
             }
-            
             state.data = newData;
             state.rows = newRowsCount;
             state.cols = newColsCount;
             state.dataMode = 'raw'; 
-            
             updateInputs(); 
             renderGrid();
-            
-            // 데이터 처리 후에도 UI 상태 재확인 (안전장치)
             updateCsvUi();
-
-            // 재업로드를 위해 input value만 비움 (파일명은 state로 유지됨)
             ui.csvInput.value = '';
         }
 
@@ -544,13 +504,25 @@
             if (state.mode === 'edit') {
                 state.mode = 'read';
                 ui.saveBtn.textContent = "Edit Mode"; 
-                ui.saveBtn.classList.add('read-mode');
+                ui.saveBtn.className = 'bg-primary text-white border border-primary px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-primary-hover transition-colors';
                 ui.rowInput.disabled = true; ui.colInput.disabled = true;
+                
+                [ui.addColFixedBtn, ui.addRowFixedBtn].forEach(btn => {
+                    btn.disabled = true;
+                    btn.classList.add('text-text-sub', 'cursor-not-allowed');
+                    btn.classList.remove('text-primary', 'hover:bg-surface', 'cursor-pointer');
+                });
             } else {
                 state.mode = 'edit';
                 ui.saveBtn.textContent = "Save";
-                ui.saveBtn.classList.remove('read-mode');
+                ui.saveBtn.className = 'bg-transparent text-text border border-text px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-surface transition-colors';
                 ui.rowInput.disabled = false; ui.colInput.disabled = false;
+                
+                [ui.addColFixedBtn, ui.addRowFixedBtn].forEach(btn => {
+                    btn.disabled = false;
+                    btn.classList.remove('text-text-sub', 'cursor-not-allowed');
+                    btn.classList.add('text-primary', 'hover:bg-surface', 'cursor-pointer');
+                });
             }
             renderGrid(); checkCtaValidation(); 
         }
@@ -577,16 +549,18 @@
                     return isNaN(num) ? 0 : num;
                 })
             );
-
             if (state.chartType === 'stackedBar') {
                 payloadValues = numberData;
             } else {
                 payloadValues = numberData.flat();
             }
 
+            // [NEW] 모드에 따라 전송 타입 분기 ('generate' vs 'apply')
+            const msgType = state.uiMode === 'create' ? 'generate' : 'apply';
+
             parent.postMessage({ 
                 pluginMessage: { 
-                    type: 'apply', 
+                    type: msgType, 
                     payload: {
                         type: state.chartType,
                         mode: state.dataMode,
@@ -600,12 +574,16 @@
 
         ui.saveBtn.addEventListener('click', toggleMode);
         ui.csvInput.addEventListener('change', handleCsvUpload);
+        ui.csvDeleteBtn.addEventListener('click', removeCsv);
         ui.mainCta.addEventListener('click', submitData);
         ui.rowInput.addEventListener('input', handleDimensionInput);
         ui.colInput.addEventListener('input', handleDimensionInput);
+        
+        ui.addColFixedBtn.addEventListener('click', addColumn);
+        ui.addRowFixedBtn.addEventListener('click', addRow);
 
-        goToStep(1);
-
+        // 초기 시작 (code.ts의 init 메시지를 기다림)
+        // goToStep(1); 
     </script>
 </body>
 </html>
