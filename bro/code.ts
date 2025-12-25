@@ -4,27 +4,25 @@
 // 1. CONFIG & CONSTANTS (사용자 설정)
 // ==========================================
 
-// [설정 1] 마스터 컴포넌트 이름 및 키
 const MASTER_COMPONENT_CONFIG = {
   NAME: "Chart_test", 
-  KEY: "" // 로컬이면 비워두세요.
+  KEY: "" 
 };
 
-// [설정 2] 캐싱 키 (재검색 방지용)
 const STORAGE_KEY_COMPONENT_ID = "cached_chart_component_id";
 
-// [설정 3] Variant 속성 이름
-const VARIANT_PROPERTY_NAME = "Type"; 
+// Variant Properties Key Names
+const VARIANT_PROPERTY_TYPE = "Type"; 
+const VARIANT_PROPERTY_MARK_NUM = "markNum"; // Bar 차트용 (Row 개수)
+const VARIANT_PROPERTY_LINE_NUM = "lineNum"; // Line 차트용 (Series 번호)
 
-// [설정 4] UI 값 -> Figma Variant 값 (소문자 변경 완료)
 const VARIANT_MAPPING: { [key: string]: string } = {
-  'bar': 'bar',           // 기존 'Bar' -> 'bar'
-  'line': 'line',         // 기존 'Line' -> 'line'
-  'stackedBar': 'stacked' // 기존 'Stacked' -> 'stacked'
+  'bar': 'bar',           
+  'line': 'line',         
+  'stackedBar': 'stacked' 
 };
 
-// ------------------------------------------
-
+// Line Direction Values
 const LINE_VARIANT_KEY_DEFAULT = "direction"; 
 const LINE_VARIANT_VALUES = {
   UP: "up",
@@ -32,19 +30,28 @@ const LINE_VARIANT_VALUES = {
   FLAT: "flat"
 } as const;
 
+// [수정] 데이터 저장을 위한 키 추가 (Drawing Values 분리)
 const PLUGIN_DATA_KEYS = {
   MODIFIED: "isChartModified",
-  LAST_VALUES: "lastAppliedValues"
+  LAST_VALUES: "lastAppliedValues",       // UI 복구용 (원본 Raw 데이터)
+  LAST_DRAWING_VALUES: "lastDrawingValues", // 리사이즈용 (화면 표시 데이터)
+  LAST_MODE: "lastAppliedMode"            // 모드 (raw / percent)
 } as const;
 
 const MARK_NAME_PATTERNS = {
-  BAR: /^bar$/,
-  LINE: /^line$/, 
+  // Bar Chart Patterns
+  BAR_INSTANCE: /^bar$/, 
+  BAR_ITEM_SINGLE: /^bar$/,
+  BAR_ITEM_MULTI: /^bar[-_]?0*(\d+)$/,
+
+  // Line Chart Patterns (line, line-01, line-02...)
+  LINE: /^line[-_]?0*(\d*)$/, 
+
   COL_ALL: /^col-0*(\d+)$/,
   STACKED: /^bar_(\d+)_(\d+)$/,
 };
 
-// 리사이즈 감지용 변수
+// 리사이즈 감지 변수
 let prevWidth = 0;
 let prevHeight = 0;
 let currentSelectionId: string | null = null;
@@ -79,25 +86,21 @@ function setLayerVisibility(root: SceneNode, prefix: string, activeCount: number
   });
 }
 
-// [NEW] 최적화된 컴포넌트 찾기 (캐싱 + 현재페이지 우선 검색)
+// 컴포넌트 찾기 (캐싱 적용)
 async function findMasterComponent(): Promise<ComponentNode | ComponentSetNode | null> {
     const { KEY, NAME } = MASTER_COMPONENT_CONFIG;
 
-    // 1. [Fastest] 저장된 ID가 있는지 확인 (캐싱)
     const cachedId = await figma.clientStorage.getAsync(STORAGE_KEY_COMPONENT_ID);
     if (cachedId) {
         const cachedNode = figma.getNodeById(cachedId);
         if (cachedNode && (cachedNode.type === "COMPONENT" || cachedNode.type === "COMPONENT_SET")) {
-            console.log(`🚀 Instant Load (from Cache): "${cachedNode.name}"`);
+            console.log(`🚀 Instant Load: "${cachedNode.name}"`);
             return cachedNode as ComponentNode | ComponentSetNode;
         } else {
-            // ID가 유효하지 않다면(삭제됨) 캐시 초기화
-            console.log("Cache invalid, searching again...");
             await figma.clientStorage.setAsync(STORAGE_KEY_COMPONENT_ID, undefined);
         }
     }
 
-    // 2. Key로 찾기 (라이브러리)
     if (KEY) {
         try {
             const importComponent = await figma.importComponentByKeyAsync(KEY);
@@ -105,18 +108,14 @@ async function findMasterComponent(): Promise<ComponentNode | ComponentSetNode |
         } catch (e) {}
     }
 
-    console.log(`Searching for component/set with name: "${NAME}"...`);
+    console.log(`Searching for: "${NAME}"...`);
     const startTime = Date.now();
-    let found: SceneNode | null = null;
-
-    // 3. [Fast] 현재 페이지 먼저 검색 (대부분 여기 있음)
-    found = figma.currentPage.findOne(n => 
+    
+    let found = figma.currentPage.findOne(n => 
         (n.type === "COMPONENT" || n.type === "COMPONENT_SET") && n.name === NAME
     );
 
-    // 4. [Slow] 현재 페이지에 없다면 전체 검색 (24초 걸리던 부분)
     if (!found) {
-        console.log("Not found in current page. Searching entire document (this may take time)...");
         found = figma.root.findOne(n => 
             (n.type === "COMPONENT" || n.type === "COMPONENT_SET") && n.name === NAME
         );
@@ -126,10 +125,9 @@ async function findMasterComponent(): Promise<ComponentNode | ComponentSetNode |
 
     if (found) {
         console.log(`✅ Found: "${found.name}" (${duration}ms)`);
-        // 찾았으면 ID 저장 (다음번엔 0초)
         await figma.clientStorage.setAsync(STORAGE_KEY_COMPONENT_ID, found.id);
     } else {
-        console.error(`❌ Failed! Could not find "${NAME}". (${duration}ms)`);
+        console.error(`❌ Failed: "${NAME}" not found. (${duration}ms)`);
     }
 
     return found as (ComponentNode | ComponentSetNode);
@@ -145,26 +143,20 @@ function isChartInstance(node: SceneNode): boolean {
 }
 
 function detectChartType(node: SceneNode): string | null {
-  let foundType: string | null = null;
-  let stop = false;
-
-  // Variant 속성으로 먼저 판단
-  if (node.type === "INSTANCE" && node.componentProperties[VARIANT_PROPERTY_NAME]) {
-      const val = node.componentProperties[VARIANT_PROPERTY_NAME].value;
+  if (node.type === "INSTANCE" && node.componentProperties[VARIANT_PROPERTY_TYPE]) {
+      const val = node.componentProperties[VARIANT_PROPERTY_TYPE].value;
       const key = Object.keys(VARIANT_MAPPING).find(k => VARIANT_MAPPING[k] === val);
       if (key) return key;
   }
 
-  // 내부 레이어 이름으로 판단
+  let foundType: string | null = null;
+  let stop = false;
   traverse(node, (n) => {
-    if (stop) return;
-    if (!n.visible) return;
-
-    if (MARK_NAME_PATTERNS.LINE.test(n.name)) { foundType = "line"; stop = true; return; }
-    if (MARK_NAME_PATTERNS.BAR.test(n.name)) { foundType = "bar"; stop = true; return; }
-    if (MARK_NAME_PATTERNS.STACKED.test(n.name)) { foundType = "stackedBar"; stop = true; return; }
+    if (stop || !n.visible) return;
+    if (MARK_NAME_PATTERNS.LINE.test(n.name)) { foundType = "line"; stop = true; }
+    else if (MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name)) { foundType = "bar"; stop = true; }
+    else if (MARK_NAME_PATTERNS.STACKED.test(n.name)) { foundType = "stackedBar"; stop = true; }
   });
-
   return foundType;
 }
 
@@ -184,26 +176,25 @@ function collectColumns(root: SceneNode) {
 // 4. HELPER: FIND MARK
 // ==========================================
 
-function findMarkInCol(colNode: SceneNode, markPattern: RegExp): (SceneNode & LayoutMixin) | null {
-    let tabNode: SceneNode | null = null;
-    const children = "children" in colNode ? (colNode as FrameNode).children : [];
-    
+function findChildByNamePattern(parentNode: SceneNode, pattern: RegExp): (SceneNode & LayoutMixin) | null {
     // @ts-ignore
-    if (colNode.findOne) tabNode = colNode.findOne(n => n.name === "tab");
-    else tabNode = children.find(n => n.name === "tab") || null;
-    
-    if (!tabNode) return null;
-
-    let markNode: (SceneNode & LayoutMixin) | null = null;
+    if (parentNode.findOne) return parentNode.findOne(n => pattern.test(n.name));
     // @ts-ignore
-    if (tabNode.findOne) markNode = tabNode.findOne(n => n.visible && markPattern.test(n.name));
-    // @ts-ignore
-    else if ("children" in tabNode) markNode = tabNode.children.find(n => n.visible && markPattern.test(n.name));
-
-    // @ts-ignore
-    if (markNode && markNode.paddingBottom !== undefined) return markNode;
-    
+    if ("children" in parentNode) return parentNode.children.find(n => pattern.test(n.name));
     return null;
+}
+
+function findAllLineLayers(parentNode: SceneNode): (SceneNode & LayoutMixin)[] {
+    const results: (SceneNode & LayoutMixin)[] = [];
+    if ("children" in parentNode) {
+        // @ts-ignore
+        parentNode.children.forEach(child => {
+            if (MARK_NAME_PATTERNS.LINE.test(child.name)) {
+                results.push(child as (SceneNode & LayoutMixin));
+            }
+        });
+    }
+    return results;
 }
 
 // ==========================================
@@ -221,60 +212,145 @@ function normalizeRaw(values: number[], H: number): number[] {
   return positive.map((v) => (H * v) / maxVal);
 }
 
+// Bar Logic
 function applyBar(config: any, H: number, graph: SceneNode) {
-  const values = config.values.map((v:any) => Number(v) || 0);
+  let values2D: any[][] = [];
+  if (config.values.length > 0 && Array.isArray(config.values[0])) {
+      values2D = config.values;
+  } else {
+      values2D = [config.values];
+  }
+
+  const rowCount = values2D.length;
+  const colCount = values2D[0].length;
   const columns = collectColumns(graph);
   
   if (H <= 0) return;
-  const normPx = config.mode === "percent" ? normalizePercent(values, H) : normalizeRaw(values, H);
-  
-  for (let i = 0; i < values.length; i++) {
-    const colIndex = i + 1; 
-    const val = normPx[i];
-    const targetCol = columns.find(c => c.index === colIndex);
-    if (!targetCol) continue;
 
-    const barNode = findMarkInCol(targetCol.node, MARK_NAME_PATTERNS.BAR);
-    if (barNode) { barNode.paddingBottom = val; }
-  }
+  const flatValues = values2D.flat().map((v: any) => Number(v) || 0);
+  const normMap = config.mode === "percent" 
+        ? normalizePercent(flatValues, H) 
+        : normalizeRaw(flatValues, H);
+
+  columns.forEach(col => {
+      const colIdx = col.index - 1; 
+      if (colIdx >= colCount) return;
+
+      const tabNode = "children" in col.node 
+          ? (col.node as FrameNode).children.find(n => n.name === "tab") 
+          : null;
+      
+      if (!tabNode || !("children" in tabNode)) return;
+
+      const barInstance = tabNode.children.find(n => MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name)) as InstanceNode;
+
+      if (!barInstance || barInstance.type !== "INSTANCE") return;
+
+      try {
+          barInstance.setProperties({ [VARIANT_PROPERTY_MARK_NUM]: String(rowCount) });
+      } catch(e) {}
+
+      for (let r = 0; r < rowCount; r++) {
+          const valPx = normMap[(r * colCount) + colIdx];
+          
+          let targetBar: (SceneNode & LayoutMixin) | undefined;
+
+          if (rowCount === 1) {
+              targetBar = barInstance.children.find(n => MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(n.name)) as (SceneNode & LayoutMixin);
+          } else {
+              const targetNum = r + 1;
+              const multiPattern = new RegExp(`^bar[-_]?0*(${targetNum})$`); 
+              targetBar = barInstance.children.find(n => multiPattern.test(n.name)) as (SceneNode & LayoutMixin);
+          }
+
+          if (targetBar && targetBar.paddingBottom !== undefined) {
+              targetBar.visible = true;
+              targetBar.paddingBottom = valPx;
+          }
+      }
+  });
 }
 
+// Line Logic
 function applyLine(config: any, H: number, graph: SceneNode) {
-  const rawValues = config.values.map((v:any) => Number(v) || 0);
-  const columns = collectColumns(graph); 
+  let values2D: any[][] = [];
+  if (config.values.length > 0 && Array.isArray(config.values[0])) {
+      values2D = config.values;
+  } else {
+      values2D = [config.values];
+  }
+
+  const rowCount = values2D.length;     
+  const colCount = values2D[0].length;  
+  const columns = collectColumns(graph);
 
   if (H <= 0) return;
-  const normPx = config.mode === "percent" ? normalizePercent(rawValues, H) : normalizeRaw(rawValues, H);
-  const segmentCount = Math.max(0, rawValues.length - 1);
+
+  const flatValues = values2D.flat().map((v: any) => Number(v) || 0);
+  const normMap = config.mode === "percent" 
+        ? normalizePercent(flatValues, H) 
+        : normalizeRaw(flatValues, H);
+
+  const segmentCount = Math.max(0, colCount - 1);
 
   for (let i = 0; i < segmentCount; i++) {
       const colIndex = i + 1; 
-      const startVal = normPx[i];
-      const endVal = normPx[i+1];
-
       const targetCol = columns.find(c => c.index === colIndex);
       if (!targetCol) continue;
 
-      const lineNode = findMarkInCol(targetCol.node, MARK_NAME_PATTERNS.LINE);
-      if (!lineNode) continue;
+      let parentNode: SceneNode = targetCol.node;
+      // @ts-ignore
+      const tabNode = targetCol.node.children ? (targetCol.node as FrameNode).children.find(n => n.name === "tab") : null;
+      if (tabNode) parentNode = tabNode;
 
-      const minY = Math.min(startVal, endVal);
-      const maxY = Math.max(startVal, endVal);
-      
-      lineNode.paddingBottom = minY;
-      lineNode.paddingTop = H - maxY;
+      const lineLayers = findAllLineLayers(parentNode);
 
-      if (lineNode.type === "INSTANCE") {
-          let dir = LINE_VARIANT_VALUES.FLAT;
-          if (endVal > startVal) dir = LINE_VARIANT_VALUES.UP;
-          else if (endVal < startVal) dir = LINE_VARIANT_VALUES.DOWN;
-          
-          try {
-             const props: any = {};
-             props[LINE_VARIANT_KEY_DEFAULT] = dir;
-             lineNode.setProperties(props);
-          } catch(e) {}
+      for (let r = 0; r < rowCount; r++) {
+          const startVal = normMap[(r * colCount) + i];
+          const endVal = normMap[(r * colCount) + (i + 1)];
+
+          const minY = Math.min(startVal, endVal);
+          const maxY = Math.max(startVal, endVal);
+
+          const targetNum = r + 1;
+          const targetLayer = lineLayers.find(layer => {
+              const match = MARK_NAME_PATTERNS.LINE.exec(layer.name);
+              if (!match) return false;
+              const numStr = match[1]; 
+              const layerNum = numStr ? parseInt(numStr, 10) : 1; 
+              return layerNum === targetNum;
+          });
+
+          if (targetLayer) {
+              targetLayer.visible = true; 
+              targetLayer.paddingBottom = minY;
+              targetLayer.paddingTop = H - maxY;
+
+              if (targetLayer.type === "INSTANCE") {
+                  let dir = LINE_VARIANT_VALUES.FLAT;
+                  if (endVal > startVal) dir = LINE_VARIANT_VALUES.UP;
+                  else if (endVal < startVal) dir = LINE_VARIANT_VALUES.DOWN;
+                  
+                  try {
+                     const props: any = {};
+                     props[LINE_VARIANT_KEY_DEFAULT] = dir;       
+                     props[VARIANT_PROPERTY_LINE_NUM] = String(targetNum); 
+                     targetLayer.setProperties(props);
+                  } catch(e) {}
+              }
+          }
       }
+
+      lineLayers.forEach(layer => {
+          const match = MARK_NAME_PATTERNS.LINE.exec(layer.name);
+          if (match) {
+              const numStr = match[1];
+              const layerNum = numStr ? parseInt(numStr, 10) : 1;
+              if (layerNum > rowCount) {
+                  layer.visible = false;
+              }
+          }
+      });
   }
 }
 
@@ -291,15 +367,24 @@ function handleApplyData(payload: any, graph: SceneNode) {
         // @ts-ignore
         const H = graph.height - xh;
 
-        const count = payload.type === "line" ? Math.max(0, payload.values.length - 1) : payload.values.length;
+        const count = payload.type === 'line' ? Math.max(0, payload.cols - 1) : payload.cols;
         setLayerVisibility(graph, "col-", count);
 
+        // [Drawing] 그래프를 그릴 때는 payload.values 사용 (화면에 보이는 값, 예: 100%)
         if (payload.type === "bar") applyBar(payload, H, graph);
         else if (payload.type === "line") applyLine(payload, H, graph);
         else if (payload.type === "stackedBar") applyStackedBar(payload, H, graph);
 
+        // [Saving] 데이터 저장 로직 분리
+        // 1. lastValues: UI 복구용 원본 데이터 (payload.rawValues가 있으면 사용, 없으면 values)
+        // 2. lastDrawingValues: 리사이즈용 표시 데이터 (payload.values)
+        const storageValues = payload.rawValues ? payload.rawValues : payload.values;
+        const drawingValues = payload.values;
+
         graph.setPluginData(PLUGIN_DATA_KEYS.MODIFIED, "true");
-        graph.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(payload.values));
+        graph.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(storageValues)); 
+        graph.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(drawingValues));
+        graph.setPluginData(PLUGIN_DATA_KEYS.LAST_MODE, payload.mode); 
 
         return true;
     } catch (e: any) {
@@ -310,7 +395,7 @@ function handleApplyData(payload: any, graph: SceneNode) {
 }
 
 // ==========================================
-// 6. INFER LOGIC
+// 6. INFER LOGIC (Read from Figma)
 // ==========================================
 
 function inferValuesFromGraph(chartType: string, fullHeight: number, graph: SceneNode) {
@@ -326,46 +411,134 @@ function inferValuesFromGraph(chartType: string, fullHeight: number, graph: Scen
   if (!cols.length) return null;
 
   if (chartType === "line") {
-      const values: number[] = [];
-      cols.forEach((c, index) => {
-          const lineNode = findMarkInCol(c.node, MARK_NAME_PATTERNS.LINE);
-          if (lineNode && lineNode.type === "INSTANCE") {
-              const pb = lineNode.paddingBottom;
-              const pt = lineNode.paddingTop;
-              const minVal = pb;
-              const maxVal = H - pt;
-              const props = lineNode.componentProperties;
-              let foundDir = "";
-              for (const valueObj of Object.values(props)) {
-                  const rawVal = String(valueObj.value).toLowerCase().trim();
-                  if (rawVal === LINE_VARIANT_VALUES.UP) foundDir = LINE_VARIANT_VALUES.UP;
-                  else if (rawVal === LINE_VARIANT_VALUES.DOWN) foundDir = LINE_VARIANT_VALUES.DOWN;
+      let maxRows = 1;
+      
+      cols.forEach(c => {
+          let parent = c.node;
+          // @ts-ignore
+          const tab = c.node.children ? (c.node as FrameNode).children.find(n => n.name === "tab") : null;
+          if(tab) parent = tab;
+          
+          const layers = findAllLineLayers(parent);
+          layers.forEach(l => {
+              if(!l.visible) return;
+              const match = MARK_NAME_PATTERNS.LINE.exec(l.name);
+              if(match) {
+                  const num = match[1] ? parseInt(match[1], 10) : 1;
+                  if(num > maxRows) maxRows = num;
               }
-              let startPx = 0; let endPx = 0;
-              if (foundDir === LINE_VARIANT_VALUES.UP) { startPx = minVal; endPx = maxVal; }
-              else if (foundDir === LINE_VARIANT_VALUES.DOWN) { startPx = maxVal; endPx = minVal; }
-              else { startPx = minVal; endPx = minVal; }
-
-              if (index === 0) { values.push(startPx); values.push(endPx); }
-              else { values.push(endPx); }
-          } else {
-              if (index === 0) values.push(0); values.push(0);
-          }
+          });
       });
-      const normalizedValues = values.map(v => Math.round((v / H) * 100 * 10) / 10);
-      return { mode: "percent", values: normalizedValues };
+
+      const extractedValues: number[][] = Array.from({ length: maxRows }, () => []);
+
+      for (let r = 0; r < maxRows; r++) {
+          const targetNum = r + 1;
+
+          cols.forEach((c, index) => {
+              let parentNode: SceneNode = c.node;
+              // @ts-ignore
+              const tabNode = c.node.children ? (c.node as FrameNode).children.find(n => n.name === "tab") : null;
+              if (tabNode) parentNode = tabNode;
+
+              const lineLayers = findAllLineLayers(parentNode);
+              
+              const targetLayer = lineLayers.find(layer => {
+                  const match = MARK_NAME_PATTERNS.LINE.exec(layer.name);
+                  if (!match) return false;
+                  const layerNum = match[1] ? parseInt(match[1], 10) : 1;
+                  return layerNum === targetNum;
+              });
+
+              let startVal = 0;
+              let endVal = 0;
+
+              if (targetLayer && targetLayer.visible && targetLayer.type === "INSTANCE") {
+                  const pb = targetLayer.paddingBottom;
+                  const pt = targetLayer.paddingTop;    
+                  
+                  const props = targetLayer.componentProperties;
+                  let foundDir = "";
+                  for (const valueObj of Object.values(props)) {
+                      const rawVal = String(valueObj.value).toLowerCase().trim();
+                      if (rawVal === LINE_VARIANT_VALUES.UP) foundDir = LINE_VARIANT_VALUES.UP;
+                      else if (rawVal === LINE_VARIANT_VALUES.DOWN) foundDir = LINE_VARIANT_VALUES.DOWN;
+                  }
+                  
+                  const minPx = pb;
+                  const maxPx = H - pt;
+                  
+                  const minVal = Math.round((minPx / H) * 100 * 10) / 10;
+                  const maxVal = Math.round((maxPx / H) * 100 * 10) / 10;
+
+                  if (foundDir === LINE_VARIANT_VALUES.UP) {
+                      startVal = minVal;
+                      endVal = maxVal;
+                  } else if (foundDir === LINE_VARIANT_VALUES.DOWN) {
+                      startVal = maxVal;
+                      endVal = minVal;
+                  } else {
+                      startVal = minVal;
+                      endVal = minVal;
+                  }
+              }
+
+              if (index === 0) {
+                  extractedValues[r].push(startVal);
+              }
+              extractedValues[r].push(endVal);
+          });
+      }
+      return { mode: "percent", values: extractedValues };
   }
 
   if (chartType === "bar") {
-    const values = cols.map(c => {
-        const barNode = findMarkInCol(c.node, MARK_NAME_PATTERNS.BAR);
-        if (barNode) {
-             const ratio = barNode.paddingBottom / H;
-             return Math.round(ratio * 100 * 10) / 10;
+    let rowCount = 1;
+    for(const col of cols) {
+        const tabNode = "children" in col.node ? (col.node as FrameNode).children.find(n => n.name === "tab") : null;
+        if(tabNode) {
+            const barInstance = tabNode.children.find(n => MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name)) as InstanceNode;
+            if(barInstance && barInstance.type === "INSTANCE") {
+                if(barInstance.componentProperties[VARIANT_PROPERTY_MARK_NUM]) {
+                    const val = barInstance.componentProperties[VARIANT_PROPERTY_MARK_NUM].value;
+                    rowCount = parseInt(String(val), 10) || 1;
+                }
+                break; 
+            }
         }
-        return 0;
+    }
+
+    const extractedValues: number[][] = Array.from({ length: rowCount }, () => []);
+
+    cols.forEach((c) => {
+        const tabNode = "children" in c.node ? (c.node as FrameNode).children.find(n => n.name === "tab") : null;
+        let barInstance: InstanceNode | null = null;
+        if (tabNode) {
+            barInstance = tabNode.children.find(n => MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name)) as InstanceNode;
+        }
+
+        for (let r = 0; r < rowCount; r++) {
+            let val = 0;
+            if (barInstance) {
+                let targetBar: (SceneNode & LayoutMixin) | undefined;
+                if (rowCount === 1) {
+                    targetBar = barInstance.children.find(n => MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(n.name)) as (SceneNode & LayoutMixin);
+                } else {
+                    const targetNum = r + 1;
+                    const multiPattern = new RegExp(`^bar[-_]?0*(${targetNum})$`);
+                    targetBar = barInstance.children.find(n => multiPattern.test(n.name)) as (SceneNode & LayoutMixin);
+                }
+
+                if (targetBar && targetBar.paddingBottom !== undefined) {
+                    const ratio = targetBar.paddingBottom / H;
+                    val = Math.round(ratio * 100 * 10) / 10;
+                }
+            }
+            extractedValues[r].push(val);
+        }
     });
-    return { mode: "percent", values };
+
+    return { mode: "percent", values: extractedValues };
   }
   return null;
 }
@@ -380,11 +553,13 @@ figma.showUI(__html__, { width: 300, height: 400 });
 function updateUI() {
   const selection = figma.currentPage.selection;
   let chartType = null;
-  let values = null;
+  
+  let inferredValues = null; 
+  let lastValues = null; 
+  let lastMode = "raw"; 
+
   let height = null;
   let isModified = false;
-  let lastValues = null;
-  
   let uiMode = "create";
 
   if (selection.length === 1) {
@@ -395,28 +570,36 @@ function updateUI() {
             uiMode = "edit";
             // @ts-ignore
             height = node.height; 
-            const inferred = inferValuesFromGraph(chartType, height, node);
-            // @ts-ignore
-            if (inferred) values = inferred.values;
+            
+            const inferredObj = inferValuesFromGraph(chartType, height, node);
+            if (inferredObj) inferredValues = inferredObj.values;
 
             const modifiedFlag = node.getPluginData(PLUGIN_DATA_KEYS.MODIFIED);
             const lastDataStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
+            const lastModeStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
+
             isModified = modifiedFlag === "true";
+            
             if (lastDataStr) {
-                try { lastValues = JSON.parse(lastDataStr); } catch(e) {}
+                try { 
+                    lastValues = JSON.parse(lastDataStr); 
+                    if (lastModeStr) lastMode = lastModeStr;
+                } catch(e) {}
             }
         }
     }
   }
 
+  // UI에는 항상 '저장된 Raw 값(lastValues)'을 보냅니다.
   figma.ui.postMessage({
     type: "init",
     uiMode,
     chartType,
-    values,
+    inferredValues,
+    lastValues, 
+    lastMode,   
     height,
-    isModified, 
-    lastValues
+    isModified
   });
 }
 
@@ -437,30 +620,25 @@ figma.ui.onmessage = async (msg: any) => {
     const graph = sel[0];
     const success = handleApplyData(payload, graph);
     if(success) {
-        figma.notify("차트 데이터 업데이트 완료");
+        figma.notify("데이터 적용 완료");
         updateUI();
     }
   }
 
-  // [CASE 2] Generate (신규 생성) - 캐싱 및 최적화 적용
   if (msg.type === "generate") {
       try {
           const payload = msg.payload;
-          
-          // 1. 컴포넌트 찾기 (캐싱 활용)
           const masterComponent = await findMasterComponent();
           if (!masterComponent) {
               figma.notify(`'${MASTER_COMPONENT_CONFIG.NAME}' 컴포넌트를 찾을 수 없습니다.`);
               return;
           }
 
-          // 2. 인스턴스 생성
           let newInstance: InstanceNode;
-
           if (masterComponent.type === "COMPONENT_SET") {
               const defaultVar = masterComponent.defaultVariant;
               if (!defaultVar) {
-                  figma.notify("오류: Component Set에 Default Variant가 설정되지 않았습니다.");
+                  figma.notify("오류: Default Variant 없음");
                   return;
               }
               newInstance = defaultVar.createInstance();
@@ -468,24 +646,20 @@ figma.ui.onmessage = async (msg: any) => {
               newInstance = masterComponent.createInstance();
           }
           
-          // 3. Variant 속성 변경 (소문자 매핑 적용)
           const targetVariantValue = VARIANT_MAPPING[payload.type]; 
           if (targetVariantValue) {
               try {
-                  newInstance.setProperties({ [VARIANT_PROPERTY_NAME]: targetVariantValue });
+                  newInstance.setProperties({ [VARIANT_PROPERTY_TYPE]: targetVariantValue });
               } catch (e) {
-                  console.warn("Variant property setting failed:", e);
-                  figma.notify(`Variant 설정 실패. '${VARIANT_PROPERTY_NAME}=${targetVariantValue}' 확인 필요.`);
+                  console.warn("Type set failed:", e);
               }
           }
 
-          // 4. 화면 배치
           const { x, y } = figma.viewport.center;
           newInstance.x = x - (newInstance.width / 2);
           newInstance.y = y - (newInstance.height / 2);
           figma.currentPage.appendChild(newInstance);
 
-          // 5. 데이터 주입
           const success = handleApplyData(payload, newInstance);
           
           if(success) {
@@ -496,7 +670,7 @@ figma.ui.onmessage = async (msg: any) => {
           }
       } catch (err: any) {
           console.error("Generate Error:", err);
-          figma.notify("생성 중 오류 발생: " + err.message);
+          figma.notify("오류: " + err.message);
       }
   }
 };
@@ -518,30 +692,58 @@ setInterval(() => {
       }
 
       if (Math.abs(node.width - prevWidth) > 1 || Math.abs(node.height - prevHeight) > 1) {
-        const isModified = node.getPluginData(PLUGIN_DATA_KEYS.MODIFIED) === "true";
-        const lastDataStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
         
-        if (isModified && lastDataStr) {
+        // [수정] 리사이즈 로직 개선
+        const isModified = node.getPluginData(PLUGIN_DATA_KEYS.MODIFIED) === "true";
+        const lastValuesStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
+        const lastDrawingStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES); // [NEW]
+        const lastModeStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
+        
+        if (isModified) {
             try {
-                const lastValues = JSON.parse(lastDataStr);
-                const chartType = detectChartType(node);
-                
-                let xh = 0;
-                // @ts-ignore
-                const xEmpty = node.findOne ? node.findOne(n => n.name === "x-empty") : null;
-                if (xEmpty) xh = xEmpty.height;
-                const H = node.height - xh;
+                // 리사이즈 시에는 'Drawing Values'(화면 표시 값)를 최우선으로 사용합니다.
+                // 그래야 % 모드일 때 원본 데이터가 아닌 % 비율대로 그래프가 그려집니다.
+                let valsToUse = null;
+                if (lastDrawingStr) {
+                    valsToUse = JSON.parse(lastDrawingStr);
+                } else if (lastValuesStr) {
+                    valsToUse = JSON.parse(lastValuesStr);
+                }
 
-                const payload = { values: lastValues, mode: 'raw' }; 
-                if (chartType === "bar") applyBar(payload, H, node);
-                else if (chartType === "line") applyLine(payload, H, node);
-                else if (chartType === "stackedBar") applyStackedBar(payload, H, node);
+                if (valsToUse) {
+                    const chartType = detectChartType(node);
+                    
+                    let xh = 0;
+                    // @ts-ignore
+                    const xEmpty = node.findOne ? node.findOne(n => n.name === "x-empty") : null;
+                    if (xEmpty) xh = xEmpty.height;
+                    const H = node.height - xh;
+
+                    let colsCount = 3; 
+                    if (Array.isArray(valsToUse) && valsToUse.length > 0) {
+                        if (Array.isArray(valsToUse[0])) {
+                            colsCount = valsToUse[0].length;
+                        } else {
+                            colsCount = valsToUse.length;
+                        }
+                    }
+
+                    const payload = { 
+                        values: valsToUse, 
+                        mode: lastModeStr || 'raw', 
+                        cols: colsCount,
+                        type: chartType
+                    }; 
+                    
+                    if (chartType === "bar") applyBar(payload, H, node);
+                    else if (chartType === "line") applyLine(payload, H, node);
+                    else if (chartType === "stackedBar") applyStackedBar(payload, H, node);
+                }
 
             } catch(e) { console.warn("Auto-Apply Failed:", e); }
         }
         prevWidth = node.width;
         prevHeight = node.height;
-        updateUI(); 
       }
     }
   } else {

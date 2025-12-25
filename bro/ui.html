@@ -29,6 +29,17 @@
                     boxShadow: {
                         'left-scroll': '-4px 0 12px -4px rgba(0, 0, 0, 0.1)',
                         'top-scroll': '0 -4px 12px -4px rgba(0, 0, 0, 0.1)'
+                    },
+                    animation: {
+                        shake: 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
+                    },
+                    keyframes: {
+                        shake: {
+                            '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
+                            '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
+                            '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
+                            '40%, 60%': { transform: 'translate3d(4px, 0, 0)' }
+                        }
                     }
                 }
             }
@@ -44,23 +55,44 @@
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 툴팁 스타일 */
+        .tooltip-trigger:hover .tooltip-content { display: block; }
+
+        /* Number Input Spinner 항상 보이기 */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: inner-spin-button !important;
+            opacity: 1 !important;
+            cursor: pointer;
+            display: block;
+        }
     </style>
 </head>
 <body class="bg-white text-text p-3 flex flex-col gap-3 h-screen box-border text-xs overflow-hidden">
 
+    <!-- Header -->
     <header class="flex justify-between items-center h-8 shrink-0">
         <h1 class="text-sm font-semibold flex items-center m-0">
             <button id="back-btn" class="hidden text-text-sub hover:text-text bg-transparent border-0 cursor-pointer p-1 mr-1" title="Back">
                 <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
             </button>
             Chart Data 
-            <span id="chart-type-display" class="hidden text-xxs font-medium bg-surface border border-border px-1.5 py-0.5 rounded ml-2 text-text-sub">Bar</span>
+            <div id="chart-type-wrapper" class="hidden ml-2 flex items-center gap-1.5 bg-surface border border-border px-1.5 py-0.5 rounded text-text-sub">
+                <!-- Icon container -->
+                <span id="chart-type-icon" class="flex items-center justify-center"></span>
+                <span id="chart-type-display" class="text-xxs font-medium">Bar</span>
+            </div>
         </h1>
         <button id="main-cta" disabled class="bg-primary text-white px-3 py-1.5 rounded font-semibold text-xs cursor-pointer transition-colors hover:bg-primary-hover disabled:bg-surface disabled:text-text-sub disabled:border disabled:border-border disabled:cursor-not-allowed">
             Apply to Figma
         </button>
     </header>
 
+    <!-- Step 1: Chart Type Selection -->
     <div id="step-1" class="step active flex-col gap-3 w-full">
         <div class="border border-border rounded-md p-3 bg-white flex flex-col gap-2">
             <h2 class="text-xs font-semibold text-text-sub m-0 mb-1">Select Chart Type</h2>
@@ -74,23 +106,32 @@
                     <span class="font-semibold text-text">Line Chart</span>
                 </button>
                 <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('stackedBar')">
-                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>
+                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>
                     <span class="font-semibold text-text">Stacked Bar</span>
                 </button>
             </div>
         </div>
     </div>
 
+    <!-- Step 2: Data Editor -->
     <div id="step-2" class="step flex-col gap-3 w-full h-full overflow-hidden">
         
+        <!-- CSV Upload Section -->
         <div class="border border-border rounded-md p-3 bg-white flex flex-col gap-2 shrink-0">
-            <h2 class="text-xs font-semibold text-text-sub m-0 mb-1">Import from CSV</h2>
+            <div class="flex justify-between items-center mb-1">
+                <h2 class="text-xs font-semibold text-text-sub m-0">CSV Data</h2>
+                <button id="csv-export-btn" class="text-primary hover:text-primary-hover text-xxs font-semibold flex items-center gap-1 cursor-pointer transition-colors" title="Download current data as CSV">
+                    <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                    Export
+                </button>
+            </div>
+
             <div class="flex items-center justify-between bg-surface px-3 py-2 rounded-md border border-dashed border-border group">
                 <span id="csv-status-text" class="text-xs text-text-sub truncate mr-2">csv를 업로드해주세요.</span>
                 
                 <div class="flex items-center gap-2 shrink-0">
                     <button id="csv-delete-btn" class="hidden w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 hover:bg-danger hover:text-white text-gray-500 transition-colors cursor-pointer" title="Remove CSV">
-                        <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                        <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 13.41 12z"/></svg>
                     </button>
 
                     <label for="csv-upload" class="bg-white border border-border rounded px-2.5 py-1 text-xxs font-medium text-text cursor-pointer hover:border-text-sub hover:bg-gray-100 transition-all whitespace-nowrap">
@@ -101,52 +142,99 @@
             </div>
         </div>
 
+        <!-- Grid Editor -->
         <div id="editor-card" class="border border-border rounded-md bg-white flex flex-col flex-1 overflow-hidden">
-            <div class="px-3 border-b border-border flex justify-between items-center bg-white shrink-0 h-8">
+            <!-- Toolbar -->
+            <div class="px-3 border-b border-border flex justify-between items-center bg-white shrink-0 h-9">
+                <!-- Left Group: Settings & Mode -->
                 <div class="flex gap-3 items-center">
-                    <div class="flex items-center gap-1.5">
-                        <label class="text-xs text-text-sub font-medium">Rows</label>
-                        <input type="number" id="row-input" value="3" min="1" max="25" class="w-9 px-1 py-0.5 border border-border rounded text-center text-xs h-5.5 focus:border-primary focus:outline-none">
+                    
+                    <!-- Reset Button -->
+                    <button id="reset-btn" class="text-text-sub hover:text-primary hover:bg-surface border border-transparent hover:border-border rounded px-1.5 py-0.5 text-xxs font-medium transition-all flex items-center gap-1 cursor-pointer" title="Reset to 1x2">
+                        <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                        초기화
+                    </button>
+
+                    <!-- Row/Col Inputs -->
+                    <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-1.5">
+                            <label class="text-xs text-text-sub font-medium">Rows</label>
+                            <input type="number" id="row-input" value="3" min="1" max="25" class="w-12 px-1 py-0.5 border border-border rounded text-center text-xs h-5.5 focus:border-primary focus:outline-none">
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <label class="text-xs text-text-sub font-medium">Cols</label>
+                            <input type="number" id="col-input" value="3" min="1" max="25" class="w-12 px-1 py-0.5 border border-border rounded text-center text-xs h-5.5 focus:border-primary focus:outline-none">
+                        </div>
                     </div>
+
+                    <div class="w-[1px] h-4 bg-border"></div>
+
+                    <!-- Mode Toggle -->
                     <div class="flex items-center gap-1.5">
-                        <label class="text-xs text-text-sub font-medium">Cols</label>
-                        <input type="number" id="col-input" value="3" min="1" max="25" class="w-9 px-1 py-0.5 border border-border rounded text-center text-xs h-5.5 focus:border-primary focus:outline-none">
+                        <div id="mode-toggle-container" class="flex bg-surface rounded p-0.5 border border-border relative transition-colors duration-200">
+                            <button id="mode-raw" class="px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all" onclick="setMode('raw')">Raw</button>
+                            <button id="mode-percent" class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all" onclick="setMode('percent')">%</button>
+                        </div>
+                        
+                        <div class="relative tooltip-trigger cursor-help">
+                            <svg class="w-3.5 h-3.5 fill-text-sub hover:fill-primary transition-colors" viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                            </svg>
+                            <div id="main-tooltip" class="tooltip-content hidden absolute top-full left-1/2 -translate-x-1/2 mt-2 w-52 bg-gray-800 text-white text-xxs rounded p-2 z-50 shadow-lg text-left leading-relaxed">
+                                <div id="tooltip-normal">
+                                    <p class="mb-1"><strong class="text-primary-hover">Raw:</strong> 입력값의 제한이 없습니다. (100 초과 가능)</p>
+                                    <p><strong class="text-primary-hover">%:</strong> 0~100 사이의 비율값으로 보여집니다. 전환 시 자동 계산됩니다.</p>
+                                </div>
+                                <div id="tooltip-warning" class="hidden text-danger font-medium">
+                                    ⚠️ % 모드에서는 0~100 사이의 값만 입력할 수 있습니다.
+                                </div>
+                                <div class="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+                
+                <!-- Right Group: Save Button -->
+                <button id="save-btn" class="bg-transparent text-text border border-text px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-surface transition-colors">Save</button>
             </div>
 
-            <div id="grid-container-wrapper" class="flex flex-1 relative overflow-hidden bg-white max-h-[300px]">
-                
+            <!-- Data Grid Area -->
+            <div id="grid-container-wrapper" class="flex flex-1 relative overflow-hidden bg-white">
+                <div class="flex flex-col border-t border-border z-10 shadow-left-scroll bg-surface shrink min-w-[72px]">
+                    <div class="h-6 border-r border-b border-border-strong bg-surface shrink-0"></div>
+                    <div id="row-header-container" class="overflow-hidden flex-col no-scrollbar pb-10"></div>
+                </div>
+
                 <div id="grid-scroll-area" class="flex-1 overflow-auto relative scroll-smooth">
-                    <div id="data-grid" class="grid gap-0 border-t border-l border-border w-fit">
-                        </div>
+                    <div id="data-grid" class="grid gap-0 border-t border-l border-border w-fit"></div>
                 </div>
 
                 <div class="w-8 shrink-0 border-l border-b border-t border-border bg-white flex flex-col z-20 shadow-left-scroll">
                     <div class="h-6 border-b border-border-strong bg-surface flex items-center justify-center shrink-0">
-                        <svg class="w-3 h-3 fill-text-sub" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        <svg class="w-3 h-3 fill-text-sub" viewBox="0 0 0 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     </div>
-                    <button id="add-col-fixed-btn" class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors" title="Add Column">
-                        +
-                    </button>
+                    <button id="add-col-fixed-btn" class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors" title="Add Column">+</button>
                 </div>
             </div>
 
+            <!-- Footer Toolbar (Add Row Only) -->
             <div class="h-7 flex shrink-0 border-t border-border bg-white z-20 shadow-top-scroll">
-                <button id="add-row-fixed-btn" class="flex-1 text-primary hover:bg-surface flex items-center justify-center cursor-pointer text-xs font-medium focus:outline-none active:bg-blue-50 transition-colors">
-                    + Add Row
-                </button>
+                <button id="add-row-fixed-btn" class="flex-1 text-primary hover:bg-surface flex items-center justify-center cursor-pointer text-xs font-medium focus:outline-none active:bg-blue-50 transition-colors">+ Add Row</button>
                 <div class="w-8 shrink-0 border-l border-border bg-surface"></div>
             </div>
-
-            <div class="px-3 border-t border-border bg-white flex justify-end shrink-0 h-8 items-center">
-                <button id="save-btn" class="bg-transparent text-text border border-text px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-surface transition-colors">Save</button>
-            </div>
+            
         </div>
     </div>
 
+    <!-- Error Toast -->
+    <div id="error-toast" class="hidden fixed bottom-16 left-1/2 -translate-x-1/2 bg-danger text-white text-xs px-4 py-2.5 rounded-md shadow-lg z-50 flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-2 pointer-events-none">
+        <svg class="w-4 h-4 fill-white shrink-0" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <span>% 모드는 0~100 사이의 값이어야 합니다.</span>
+    </div>
+
+    <!-- Restore Toast -->
     <div id="restore-toast" class="hidden fixed bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-4 py-3 rounded-md shadow-lg z-50 flex items-center gap-4 transition-all duration-300 opacity-0 translate-y-2">
-        <span>데이터를 다시 적용하겠습니까?</span>
+        <span>저장된 데이터를 불러올까요?</span>
         <div class="flex items-center gap-3">
             <button id="toast-yes-btn" class="font-bold text-primary hover:text-blue-300 cursor-pointer">예</button>
             <button id="toast-close-btn" class="text-gray-400 hover:text-white cursor-pointer">✕</button>
@@ -157,18 +245,35 @@
         const MAX_SIZE = 25;
         const state = {
             rows: 3, cols: 3, data: [], 
-            mode: 'edit', chartType: 'bar', dataMode: 'percent', 
+            mode: 'edit', chartType: 'bar', 
+            dataMode: 'raw', 
             currentStep: 1,
             csvFileName: null,
-            uiMode: 'create' // [NEW] create | edit
+            uiMode: 'create',
+            cachedRawData: null, 
+            conversionMax: 100 
         };
+        
+        // Chart Icons SVGs
+        const CHART_ICONS = {
+            bar: `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z"/></svg>`,
+            line: `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>`,
+            stackedBar: `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>`
+        };
+
+        let tempLastValues = null; 
+        let isProcessingApply = false;
 
         const ui = {
             step1: document.getElementById('step-1'),
             step2: document.getElementById('step-2'),
             backBtn: document.getElementById('back-btn'),
             mainCta: document.getElementById('main-cta'),
+            
+            chartTypeWrapper: document.getElementById('chart-type-wrapper'),
+            chartTypeIcon: document.getElementById('chart-type-icon'),
             chartTypeDisplay: document.getElementById('chart-type-display'),
+            
             csvInput: document.getElementById('csv-upload'),
             csvStatusText: document.getElementById('csv-status-text'),
             csvDeleteBtn: document.getElementById('csv-delete-btn'), 
@@ -177,72 +282,160 @@
             
             gridScrollArea: document.getElementById('grid-scroll-area'),
             gridContainer: document.getElementById('data-grid'),
+            rowHeaderContainer: document.getElementById('row-header-container'), 
             
             addColFixedBtn: document.getElementById('add-col-fixed-btn'),
             addRowFixedBtn: document.getElementById('add-row-fixed-btn'),
             saveBtn: document.getElementById('save-btn'),
+            resetBtn: document.getElementById('reset-btn'),
 
-            // Toast Elements
+            modeToggleContainer: document.getElementById('mode-toggle-container'),
+            modeRawBtn: document.getElementById('mode-raw'),
+            modePercentBtn: document.getElementById('mode-percent'),
+            
+            tooltipNormal: document.getElementById('tooltip-normal'),
+            tooltipWarning: document.getElementById('tooltip-warning'),
+            mainTooltip: document.getElementById('main-tooltip'),
+
+            csvExportBtn: document.getElementById('csv-export-btn'),
+
             toast: document.getElementById('restore-toast'),
             toastYesBtn: document.getElementById('toast-yes-btn'),
             toastCloseBtn: document.getElementById('toast-close-btn'),
+            
+            errorToast: document.getElementById('error-toast') 
         };
 
-        let tempLastValues = null; 
-
-        // --- Toast Functions ---
-        function showToast() {
-            ui.toast.classList.remove('hidden');
-            setTimeout(() => {
-                ui.toast.classList.remove('opacity-0', 'translate-y-2');
-            }, 50);
-        }
-
-        function hideToast() {
-            ui.toast.classList.add('opacity-0', 'translate-y-2');
-            setTimeout(() => {
-                ui.toast.classList.add('hidden');
-            }, 300);
-        }
-
-        ui.toastCloseBtn.addEventListener('click', hideToast);
-
-        ui.toastYesBtn.addEventListener('click', () => {
-            if (tempLastValues && Array.isArray(tempLastValues)) {
-                // 1. 데이터 복원 (1차원 배열 기준)
-                const len = tempLastValues.length;
-                const newRows = state.rows; 
-                const newCols = len > 0 ? len : 3;
-
-                const newData = [];
-                const rowData = tempLastValues.map(v => String(v));
-                
-                for(let r=0; r<newRows; r++) {
-                    if (r === 0) newData.push(rowData); 
-                    else newData.push(new Array(newCols).fill(""));
-                }
-
-                state.cols = newCols;
-                state.data = newData;
-                state.dataMode = 'raw'; 
-
-                // 2. UI 업데이트
-                updateInputs();
-                renderGrid();
-                checkCtaValidation();
-                
-                // 3. 즉시 Apply 실행
-                submitData();
-
-                hideToast();
+        ui.gridScrollArea.addEventListener('scroll', () => {
+            if(ui.rowHeaderContainer) {
+                ui.rowHeaderContainer.scrollTop = ui.gridScrollArea.scrollTop;
             }
         });
-        // -----------------------
+
+        function checkDataRange() {
+            if(state.dataMode === 'raw') return true; 
+            for (let i = 0; i < state.rows; i++) {
+                for (let j = 0; j < state.cols; j++) {
+                    const val = state.data[i][j];
+                    if (val && val.trim() !== "") {
+                        const num = Number(val);
+                        if (!isNaN(num) && (num < 0 || num > 100)) {
+                            return false; 
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        function clearRangeErrors() {
+            const inputs = ui.gridContainer.querySelectorAll('input');
+            inputs.forEach(input => {
+                const wrapper = input.parentElement;
+                wrapper.classList.remove('bg-red-50');
+                const row = parseInt(input.dataset.row);
+                const isZebra = (row % 2 === 1);
+                wrapper.classList.add(isZebra ? 'bg-surface' : 'bg-white');
+                input.classList.remove('text-danger', 'font-medium');
+            });
+        }
+
+        function updateModeButtonState() {
+            if(state.dataMode === 'percent') {
+                 ui.modePercentBtn.className = 'px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all';
+                 ui.modeRawBtn.className = 'px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all';
+            } else {
+                 ui.modePercentBtn.className = 'px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all';
+                 ui.modeRawBtn.className = 'px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all';
+            }
+        }
+
+        window.setMode = function(targetMode) {
+            if (state.dataMode === targetMode) return;
+
+            if (state.dataMode === 'raw' && targetMode === 'percent') {
+                state.cachedRawData = JSON.parse(JSON.stringify(state.data));
+                let maxVal = 0;
+                state.data.forEach(row => {
+                    row.forEach(val => {
+                        const num = Number(val);
+                        if (!isNaN(num) && num > maxVal) maxVal = num;
+                    });
+                });
+                if (maxVal === 0) maxVal = 100; 
+                state.conversionMax = maxVal;
+
+                const newData = state.data.map(row => {
+                    return row.map(val => {
+                        if (val === "") return "";
+                        const num = Number(val);
+                        if (isNaN(num)) return val;
+                        return String(Math.round((num / maxVal) * 100 * 10) / 10);
+                    });
+                });
+                state.data = newData;
+                state.dataMode = 'percent';
+            } 
+            else if (state.dataMode === 'percent' && targetMode === 'raw') {
+                if (state.cachedRawData) {
+                    state.data = state.cachedRawData;
+                    state.cachedRawData = null; 
+                } else {
+                    const newData = state.data.map(row => {
+                        return row.map(val => {
+                            if (val === "") return "";
+                            const num = Number(val);
+                            if (isNaN(num)) return val;
+                            return String(Math.round((num / 100) * state.conversionMax)); 
+                        });
+                    });
+                    state.data = newData;
+                }
+                state.dataMode = 'raw';
+            }
+
+            const isValid = checkDataRange();
+            if(!isValid && state.dataMode === 'percent') {
+                ui.tooltipNormal.classList.add('hidden');
+                ui.tooltipWarning.classList.remove('hidden');
+            } else {
+                ui.tooltipNormal.classList.remove('hidden');
+                ui.tooltipWarning.classList.add('hidden');
+                clearRangeErrors(); 
+            }
+            updateModeButtonState();
+            renderGrid();
+        };
+
+        function downloadCsv() {
+            if (!state.data || state.data.length === 0) return;
+            const csvContent = state.data.map(row => row.join(",")).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            const timestamp = new Date().toISOString().slice(0,10);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `chart_data_${timestamp}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function showToast() {
+            ui.toast.classList.remove('hidden');
+            setTimeout(() => { ui.toast.classList.remove('opacity-0', 'translate-y-2'); }, 50);
+        }
+        function hideToast() {
+            ui.toast.classList.add('opacity-0', 'translate-y-2');
+            setTimeout(() => { ui.toast.classList.add('hidden'); }, 300);
+        }
+        ui.toastCloseBtn.addEventListener('click', hideToast);
+        ui.toastYesBtn.addEventListener('click', () => { hideToast(); });
 
         function updateCsvUi() {
             if (!ui.csvStatusText) return;
             const isUploaded = !!state.csvFileName;
-            
             if (isUploaded) {
                 ui.csvStatusText.textContent = state.csvFileName;
                 ui.csvStatusText.className = 'text-xs text-primary font-semibold';
@@ -253,11 +446,23 @@
                 ui.csvDeleteBtn.classList.add('hidden');
             }
         }
-
         function removeCsv() {
             state.csvFileName = null;
             ui.csvInput.value = '';
             updateCsvUi();
+        }
+
+        function updateHeaderIcon() {
+            // Update Text
+            let displayType = 'Bar';
+            if(state.chartType === 'line') displayType = 'Line';
+            else if(state.chartType === 'stackedBar') displayType = 'Stacked';
+            
+            ui.chartTypeDisplay.textContent = displayType;
+            
+            // Update Icon
+            const iconSvg = CHART_ICONS[state.chartType] || CHART_ICONS['bar'];
+            ui.chartTypeIcon.innerHTML = iconSvg;
         }
 
         function goToStep(stepNum) {
@@ -266,35 +471,30 @@
             if (stepNum === 1) {
                 ui.step1.classList.add('active');
                 ui.backBtn.classList.add('hidden');
-                ui.chartTypeDisplay.classList.add('hidden');
+                ui.chartTypeWrapper.classList.add('hidden'); // Hide wrapper
                 ui.mainCta.style.display = 'none';
-                
                 removeCsv();
-                
                 parent.postMessage({ pluginMessage: { type: 'resize', width: 300, height: 400 } }, '*');
             } else {
                 ui.step2.classList.add('active');
                 ui.backBtn.classList.remove('hidden');
-                ui.chartTypeDisplay.classList.remove('hidden');
-                ui.chartTypeDisplay.textContent = state.chartType;
+                ui.chartTypeWrapper.classList.remove('hidden'); // Show wrapper
                 
-                // [NEW] 상태에 따라 버튼 텍스트 변경
+                updateHeaderIcon();
+                
                 ui.mainCta.style.display = 'block';
                 ui.mainCta.textContent = state.uiMode === 'create' ? "Generate to Figma" : "Apply to Figma";
 
                 renderGrid();
                 checkCtaValidation();
-                
+                updateModeButtonState(); 
                 parent.postMessage({ pluginMessage: { type: 'resize', width: 600, height: 520 } }, '*');
             }
         }
-
         window.selectType = function(type) {
             state.chartType = type;
-            state.dataMode = 'raw'; 
             goToStep(2);
         };
-
         ui.backBtn.addEventListener('click', () => {
             goToStep(1);
             hideToast();
@@ -315,63 +515,69 @@
             if (!msg) return;
             
             if (msg.type === 'init') {
-                // [NEW] 초기화 시 모드 저장
                 state.uiMode = msg.uiMode || 'create';
-
                 if (msg.chartType) {
                     state.chartType = msg.chartType;
                     
-                    // 역산 데이터 적용
-                    if (msg.values && Array.isArray(msg.values)) {
-                        const vals = msg.values;
-                        if (state.chartType === 'bar' || state.chartType === 'line') {
+                    let targetValues = [];
+                    if (msg.lastValues && Array.isArray(msg.lastValues)) {
+                        targetValues = msg.lastValues; 
+                        const savedMode = msg.lastMode || 'raw';
+                        if (savedMode === 'percent') {
+                            state.cachedRawData = JSON.parse(JSON.stringify(targetValues));
+                            let maxVal = 0;
+                            targetValues.forEach(row => {
+                                row.forEach(val => {
+                                    const num = Number(val);
+                                    if (!isNaN(num) && num > maxVal) maxVal = num;
+                                });
+                            });
+                            if (maxVal === 0) maxVal = 100;
+                            state.conversionMax = maxVal;
+                            targetValues = targetValues.map(row => {
+                                return row.map(val => {
+                                    if (val === "") return "";
+                                    const num = Number(val);
+                                    if (isNaN(num)) return val;
+                                    return String(Math.round((num / maxVal) * 100 * 10) / 10);
+                                });
+                            });
+                            state.dataMode = 'percent';
+                        } else {
+                            state.dataMode = 'raw';
+                        }
+                    } 
+                    else if (msg.inferredValues) {
+                        targetValues = msg.inferredValues;
+                        state.dataMode = 'percent'; 
+                    }
+
+                    if (targetValues && targetValues.length > 0) {
+                        if(Array.isArray(targetValues[0])) {
+                            state.data = targetValues.map(row => row.map(v => String(v)));
+                            state.rows = state.data.length;
+                            state.cols = state.data[0].length;
+                        } else {
+                            const vals = targetValues;
                             state.rows = 1; 
                             state.cols = vals.length > 0 ? vals.length : 3;
                             state.data = [ vals.map(v => String(v)) ];
-                        } else if (state.chartType === 'stackedBar') {
-                            state.cols = vals.length;
-                            let maxRows = 0;
-                            vals.forEach(col => { if(col.length > maxRows) maxRows = col.length; });
-                            state.rows = maxRows > 0 ? maxRows : 3;
-                            const newData = [];
-                            for(let r=0; r<state.rows; r++){
-                                const rowData = [];
-                                for(let c=0; c<state.cols; c++){
-                                    const val = (vals[c] && vals[c][r] !== undefined) ? String(vals[c][r]) : "";
-                                    rowData.push(val);
-                                }
-                                newData.push(rowData);
-                            }
-                            state.data = newData;
                         }
                     }
-                    
                     updateInputs();
-                    goToStep(2); // 수정 모드면 Step 2로 직행
-
-                    // [Toast Logic]
-                    if (msg.isModified && msg.lastValues && msg.values) {
-                        tempLastValues = msg.lastValues;
-                        
-                        const currentJson = JSON.stringify(msg.values);
-                        const lastJson = JSON.stringify(msg.lastValues);
-                        
-                        if (currentJson !== lastJson) {
-                            setTimeout(showToast, 500);
-                        }
-                    }
-
+                    updateModeButtonState(); 
+                    goToStep(2); 
                 } else {
-                    goToStep(1); // 생성 모드면 Step 1로 시작
+                    goToStep(1); 
                 }
             }
         };
 
         function renderGrid() {
             ui.gridContainer.innerHTML = ''; 
+            ui.rowHeaderContainer.innerHTML = ''; 
             ui.gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, minmax(60px, 1fr))`;
 
-            // 1. 헤더 생성
             for (let j = 0; j < state.cols; j++) {
                 const headerCell = document.createElement('div');
                 headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-semibold text-text-sub group relative';
@@ -386,27 +592,90 @@
                 ui.gridContainer.appendChild(headerCell);
             }
 
-            // 2. 데이터 셀 생성
             state.data.forEach((row, rowIndex) => {
                 const isZebra = (rowIndex % 2 === 1);
+                const bgClass = isZebra ? 'bg-surface' : 'bg-white';
+                
+                // [MODIFIED] Row Header using flex justify-between
+                const rowHeader = document.createElement('div');
+                rowHeader.className = `group relative w-full h-6 px-2 border-b border-r border-border-strong text-xxs font-semibold text-text-sub flex items-center justify-between truncate ${bgClass}`;
+                
+                let labelPrefix = state.chartType === 'line' ? 'Line' : 'Bar';
+                
+                // Text Span
+                const textSpan = document.createElement('span');
+                textSpan.textContent = `${labelPrefix} ${rowIndex + 1}`;
+                textSpan.title = `${labelPrefix} ${rowIndex + 1}`;
+                textSpan.className = "truncate"; 
+                rowHeader.appendChild(textSpan);
+
+                // Delete Button
+                if (state.mode === 'edit') {
+                    const delRowBtn = document.createElement('button');
+                    // Flex behavior: hidden by default, visible on group hover. justify-between pushes it to right.
+                    delRowBtn.className = 'w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger shrink-0';
+                    // [FIX] Correct SVG path for Close (X) icon
+                    delRowBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 17.59 13.41 12 19 6.41z"/></svg>`;
+                    delRowBtn.onclick = (e) => {
+                        e.stopPropagation(); 
+                        deleteRow(rowIndex);
+                    };
+                    rowHeader.appendChild(delRowBtn);
+                }
+
+                ui.rowHeaderContainer.appendChild(rowHeader);
+
                 row.forEach((cellValue, colIndex) => {
+                    const cellWrapper = document.createElement('div');
+                    cellWrapper.className = `flex items-center w-full h-6 border-r border-b border-border-strong ${bgClass}`;
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.value = cellValue;
                     input.dataset.row = rowIndex;
                     input.dataset.col = colIndex;
-                    let classes = 'w-full h-6 px-2 border-0 border-r border-b border-border-strong text-xs text-right bg-white focus:outline-none focus:ring-1 focus:ring-primary focus:z-10 relative';
-                    if (isZebra) classes += ' bg-surface'; 
-                    if (state.mode === 'read') classes += ' bg-gray-50 text-gray-400 cursor-not-allowed';
+                    
+                    let isError = false;
+                    if (state.dataMode === 'percent' && cellValue !== "") {
+                        const num = Number(cellValue);
+                        if (!isNaN(num) && (num < 0 || num > 100)) isError = true;
+                    }
+
+                    let classes = `flex-1 w-full h-full px-2 text-xs text-right focus:outline-none bg-transparent min-w-0`;
+                    if (isError) {
+                        cellWrapper.classList.remove('bg-white', 'bg-surface');
+                        cellWrapper.classList.add('bg-red-50');
+                        classes += ' text-danger font-medium'; 
+                    }
+                    if (state.mode === 'read') classes += ' text-gray-400 cursor-not-allowed';
+                    
                     input.className = classes;
                     input.addEventListener('input', (e) => {
                         state.data[rowIndex][colIndex] = e.target.value;
+                        updateModeButtonState(); 
                         checkCtaValidation();
+                        const val = e.target.value;
+                        const num = Number(val);
+                        const isErr = (state.dataMode === 'percent' && val!=="" && (!isNaN(num) && (num<0 || num>100)));
+                        if(isErr) {
+                            cellWrapper.classList.remove(bgClass);
+                            cellWrapper.classList.add('bg-red-50');
+                            e.target.classList.add('text-danger', 'font-medium');
+                        } else {
+                            cellWrapper.classList.remove('bg-red-50');
+                            cellWrapper.classList.add(bgClass);
+                            e.target.classList.remove('text-danger', 'font-medium');
+                        }
                     });
-                    ui.gridContainer.appendChild(input);
+                    cellWrapper.appendChild(input);
+                    if (state.dataMode === 'percent') {
+                        const unitSpan = document.createElement('span');
+                        unitSpan.className = 'shrink-0 pr-2 pl-0.5 text-[10px] text-text-sub pointer-events-none';
+                        unitSpan.innerText = '%';
+                        cellWrapper.appendChild(unitSpan);
+                    }
+                    ui.gridContainer.appendChild(cellWrapper);
                 });
             });
-            
             checkCtaValidation();
         }
 
@@ -417,7 +686,6 @@
             if (newCols < 1) newCols = 1; if (newCols > MAX_SIZE) newCols = MAX_SIZE;
             updateGridSize(newRows, newCols);
         }
-
         function updateGridSize(newRows, newCols) {
             const newData = [];
             for (let i = 0; i < newRows; i++) {
@@ -435,8 +703,8 @@
             state.cols = newCols;
             state.data = newData;
             renderGrid();
+            updateModeButtonState();
         }
-
         function addColumn() {
             if (state.cols >= MAX_SIZE) return;
             updateGridSize(state.rows, state.cols + 1);
@@ -445,7 +713,6 @@
                 ui.gridScrollArea.scrollTo({ left: ui.gridScrollArea.scrollWidth, behavior: 'smooth' });
             }, 50);
         }
-
         function addRow() {
             if (state.rows >= MAX_SIZE) return;
             updateGridSize(state.rows + 1, state.cols);
@@ -454,14 +721,37 @@
                 ui.gridScrollArea.scrollTo({ top: ui.gridScrollArea.scrollHeight, behavior: 'smooth' });
             }, 50);
         }
-
         function deleteColumn(colIndex) {
             if (state.cols <= 1) return;
             state.data.forEach(row => row.splice(colIndex, 1));
             state.cols--;
             updateInputs();
             renderGrid();
+            updateModeButtonState();
         }
+        function deleteRow(rowIndex) {
+            if (state.rows <= 1) return;
+            state.data.splice(rowIndex, 1);
+            state.rows--;
+            updateInputs();
+            renderGrid();
+            updateModeButtonState();
+        }
+        
+        function resetData() {
+            // Reset to 1 row, 2 cols, empty data
+            state.rows = 1;
+            state.cols = 2;
+            state.data = [["", ""]];
+            state.dataMode = 'raw'; // Reset mode to raw
+            state.cachedRawData = null; // Clear cache
+            
+            updateInputs();
+            renderGrid();
+            updateModeButtonState();
+            checkCtaValidation();
+        }
+        
         function updateInputs() {
             ui.rowInput.value = state.rows;
             ui.colInput.value = state.cols;
@@ -495,6 +785,7 @@
             state.cols = newColsCount;
             state.dataMode = 'raw'; 
             updateInputs(); 
+            updateModeButtonState();
             renderGrid();
             updateCsvUi();
             ui.csvInput.value = '';
@@ -504,8 +795,12 @@
             if (state.mode === 'edit') {
                 state.mode = 'read';
                 ui.saveBtn.textContent = "Edit Mode"; 
-                ui.saveBtn.className = 'bg-primary text-white border border-primary px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-primary-hover transition-colors';
+                // Adjusted style for top toolbar
+                ui.saveBtn.className = 'bg-primary text-white border border-primary px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-primary-hover transition-colors ml-1';
                 ui.rowInput.disabled = true; ui.colInput.disabled = true;
+                // Disable Reset Btn
+                ui.resetBtn.disabled = true;
+                ui.resetBtn.classList.add('opacity-50', 'cursor-not-allowed');
                 
                 [ui.addColFixedBtn, ui.addRowFixedBtn].forEach(btn => {
                     btn.disabled = true;
@@ -515,9 +810,13 @@
             } else {
                 state.mode = 'edit';
                 ui.saveBtn.textContent = "Save";
-                ui.saveBtn.className = 'bg-transparent text-text border border-text px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-surface transition-colors';
+                // Adjusted style for top toolbar
+                ui.saveBtn.className = 'bg-transparent text-text border border-text px-2.5 py-0.5 rounded cursor-pointer font-medium text-xs min-w-[60px] h-5.5 hover:bg-surface transition-colors ml-1';
                 ui.rowInput.disabled = false; ui.colInput.disabled = false;
-                
+                // Enable Reset Btn
+                ui.resetBtn.disabled = false;
+                ui.resetBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
                 [ui.addColFixedBtn, ui.addRowFixedBtn].forEach(btn => {
                     btn.disabled = false;
                     btn.classList.remove('text-text-sub', 'cursor-not-allowed');
@@ -527,44 +826,75 @@
             renderGrid(); checkCtaValidation(); 
         }
 
+        // [UPDATED] Use Toast for validation error
         function checkCtaValidation() {
             if (state.mode !== 'read') { ui.mainCta.disabled = true; return; }
+            
             let isAllFilled = true;
+            let isRangeError = false;
+
             for (let i = 0; i < state.rows; i++) {
                 for (let j = 0; j < state.cols; j++) {
-                    if (!state.data[i][j] || state.data[i][j].trim() === "") {
-                        isAllFilled = false; break;
+                    const val = state.data[i][j];
+                    if (!val || val.trim() === "") {
+                        isAllFilled = false;
+                    }
+                    if (state.dataMode === 'percent' && val && val.trim() !== "") {
+                        const num = Number(val);
+                        if (!isNaN(num) && (num < 0 || num > 100)) {
+                            isRangeError = true;
+                        }
                     }
                 }
-                if (!isAllFilled) break;
             }
-            ui.mainCta.disabled = !isAllFilled;
+
+            // Show/Hide Error Toast
+            const toast = ui.errorToast;
+            if (isRangeError) {
+                if (toast.classList.contains('hidden')) {
+                    toast.classList.remove('hidden');
+                    setTimeout(() => toast.classList.remove('opacity-0', 'translate-y-2'), 10);
+                }
+            } else {
+                if (!toast.classList.contains('hidden') && !toast.classList.contains('opacity-0')) {
+                    toast.classList.add('opacity-0', 'translate-y-2');
+                    setTimeout(() => toast.classList.add('hidden'), 300);
+                }
+            }
+
+            if (isAllFilled && !isRangeError) {
+                ui.mainCta.disabled = false;
+            } else {
+                ui.mainCta.disabled = true;
+            }
         }
 
         function submitData() {
-            let payloadValues;
-            const numberData = state.data.map(row => 
+            isProcessingApply = true;
+            const displayValues = state.data.map(row => 
                 row.map(cell => {
                     const num = Number(cell);
                     return isNaN(num) ? 0 : num;
                 })
             );
-            if (state.chartType === 'stackedBar') {
-                payloadValues = numberData;
-            } else {
-                payloadValues = numberData.flat();
+            let storageValues = displayValues;
+            if (state.dataMode === 'percent' && state.cachedRawData) {
+                storageValues = state.cachedRawData.map(row => 
+                    row.map(cell => {
+                        const num = Number(cell);
+                        return isNaN(num) ? 0 : num;
+                    })
+                );
             }
-
-            // [NEW] 모드에 따라 전송 타입 분기 ('generate' vs 'apply')
             const msgType = state.uiMode === 'create' ? 'generate' : 'apply';
-
             parent.postMessage({ 
                 pluginMessage: { 
                     type: msgType, 
                     payload: {
                         type: state.chartType,
-                        mode: state.dataMode,
-                        values: payloadValues,
+                        mode: state.dataMode, 
+                        values: displayValues,
+                        rawValues: storageValues,
                         rows: state.rows,
                         cols: state.cols
                     }
@@ -578,12 +908,10 @@
         ui.mainCta.addEventListener('click', submitData);
         ui.rowInput.addEventListener('input', handleDimensionInput);
         ui.colInput.addEventListener('input', handleDimensionInput);
-        
         ui.addColFixedBtn.addEventListener('click', addColumn);
         ui.addRowFixedBtn.addEventListener('click', addRow);
-
-        // 초기 시작 (code.ts의 init 메시지를 기다림)
-        // goToStep(1); 
+        ui.csvExportBtn.addEventListener('click', downloadCsv);
+        ui.resetBtn.addEventListener('click', resetData);
     </script>
 </body>
 </html>
