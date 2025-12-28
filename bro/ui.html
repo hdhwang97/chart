@@ -56,6 +56,9 @@
             cursor: pointer;
             display: block;
         }
+        
+        /* Row Header Hover Effects */
+        .row-header:hover .del-row-btn { display: flex; }
     </style>
 </head>
 <body class="bg-white text-text flex flex-col h-screen box-border text-xs overflow-hidden">
@@ -113,7 +116,7 @@
             <div class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
                 <div class="flex items-center gap-3">
                     <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Graph Col</label>
+                        <label id="label-col-input" class="text-xxs font-medium text-text-sub">Graph Col</label>
                         <input type="number" id="setting-col-input" value="3" min="1" max="12" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
 
@@ -123,17 +126,19 @@
                     </div>
 
                     <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Mark Count</label>
-                        <div class="relative">
-                            <select id="setting-mark-select" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none appearance-none bg-white cursor-pointer hover:border-text-sub transition-colors">
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                                <option value="3">3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                            </select>
-                            <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-sub">
-                                <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+                        <div id="container-mark-wrapper">
+                            <label id="label-mark-position" class="text-xxs font-medium text-text-sub">Mark Count</label>
+                            <div id="container-mark-normal" class="relative">
+                                <select id="setting-mark-select" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none appearance-none bg-white cursor-pointer hover:border-text-sub transition-colors">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                </select>
+                                <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-sub">
+                                    <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -148,7 +153,7 @@
                         <label class="text-xxs font-medium text-text-sub">Y Max</label>
                         <input type="number" id="setting-y-max" value="100" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
-                    <div class="flex-1"></div>
+                    <div class="flex-1"></div> 
                 </div>
             </div>
         </div>
@@ -220,7 +225,7 @@
                             <div class="h-6 border-b border-border-strong bg-surface flex items-center justify-center shrink-0">
                                 <svg class="w-3 h-3 fill-text-sub" viewBox="0 0 0 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                             </div>
-                            <button id="add-col-fixed-btn" class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors" title="Add Column">+</button>
+                            <button id="add-col-fixed-btn" class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors" title="Add Column / Group">+</button>
                         </div>
                     </div>
 
@@ -250,8 +255,9 @@
         const MAX_SIZE = 25;
         const state = {
             rows: 3,        
-            cols: 3,        
-            cellCount: 4,   
+            cols: 3, 
+            cellCount: 4,
+            groupStructure: [2, 2, 2], 
             data: [], 
             mode: 'edit', chartType: 'bar', 
             dataMode: 'raw', 
@@ -282,6 +288,13 @@
             settingColInput: document.getElementById('setting-col-input'),
             settingCellInput: document.getElementById('setting-cell-input'),
             settingMarkSelect: document.getElementById('setting-mark-select'),
+            
+            containerMarkWrapper: document.getElementById('container-mark-wrapper'),
+            containerMarkNormal: document.getElementById('container-mark-normal'),
+            
+            labelColInput: document.getElementById('label-col-input'),
+            labelMarkPosition: document.getElementById('label-mark-position'),
+
             settingYMin: document.getElementById('setting-y-min'),
             settingYMax: document.getElementById('setting-y-max'),
             
@@ -318,13 +331,16 @@
             }
         });
 
-        // ... [Helper functions omit for brevity if not changed] ...
-        // (checkDataRange, clearRangeErrors, updateModeButtonState, setMode, downloadCsv, toast functions...)
-        
+        function getTotalStackedCols() {
+            return state.groupStructure.reduce((a, b) => a + b, 0);
+        }
+
         function checkDataRange() {
             if(state.dataMode === 'raw') return true; 
-            for (let i = 0; i < state.rows; i++) {
-                for (let j = 0; j < state.cols; j++) {
+            const totalVisualRows = state.data.length;
+            const totalCols = state.data.length > 0 ? state.data[0].length : 0;
+            for (let i = 0; i < totalVisualRows; i++) {
+                for (let j = 0; j < totalCols; j++) {
                     const val = state.data[i][j];
                     if (val && val.trim() !== "") {
                         const num = Number(val);
@@ -334,6 +350,7 @@
             }
             return true;
         }
+
         function clearRangeErrors() {
             ui.gridContainer.querySelectorAll('input').forEach(input => {
                 const wrapper = input.parentElement;
@@ -343,6 +360,7 @@
                 input.classList.remove('text-danger', 'font-medium');
             });
         }
+
         function updateModeButtonState() {
             if(state.dataMode === 'percent') {
                  ui.modePercentBtn.className = 'px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all';
@@ -352,6 +370,7 @@
                  ui.modeRawBtn.className = 'px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all';
             }
         }
+
         window.setMode = function(targetMode) {
             if (state.dataMode === targetMode) return;
             if (state.dataMode === 'raw' && targetMode === 'percent') {
@@ -371,7 +390,22 @@
             else { ui.tooltipNormal.classList.remove('hidden'); ui.tooltipWarning.classList.add('hidden'); clearRangeErrors(); }
             updateModeButtonState(); renderGrid();
         };
-        function downloadCsv() { /* ... */ } // (Skip implementation details for brevity as not changed)
+
+        function downloadCsv() { 
+            let csvContent = "data:text/csv;charset=utf-8,";
+            state.data.forEach(rowArray => {
+                let row = rowArray.join(",");
+                csvContent += row + "\r\n";
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "chart_data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         function showToast() { ui.toast.classList.remove('hidden'); setTimeout(() => { ui.toast.classList.remove('opacity-0', 'translate-y-2'); }, 50); }
         function hideToast() { ui.toast.classList.add('opacity-0', 'translate-y-2'); setTimeout(() => { ui.toast.classList.add('hidden'); }, 300); }
         ui.toastCloseBtn.addEventListener('click', hideToast);
@@ -407,140 +441,309 @@
                 ui.step2.classList.add('active');
                 ui.backBtn.classList.remove('hidden');
                 ui.chartTypeWrapper.classList.remove('hidden'); 
+                
+                const targetHeight = state.chartType === 'stackedBar' ? 680 : 620;
+                parent.postMessage({ pluginMessage: { type: 'resize', width: 600, height: targetHeight } }, '*'); 
+
                 updateHeaderIcon();
                 ui.mainCta.style.display = 'block';
                 ui.mainCta.textContent = state.uiMode === 'create' ? "Generate to Figma" : "Apply to Figma";
                 ui.editModeBtn.classList.remove('hidden');
-                renderGrid();
-                updateSettingInputs(); 
-                checkCtaValidation();
-                updateModeButtonState(); 
-                parent.postMessage({ pluginMessage: { type: 'resize', width: 600, height: 620 } }, '*'); 
+                
+                try {
+                    updateSettingInputs(); 
+                    renderGrid();
+                    checkCtaValidation();
+                    updateModeButtonState(); 
+                } catch (e) { console.error("Render Error:", e); }
             }
         }
 
-        // [개선사항 1] Step 1 -> 2 진입 시 데이터 초기화
         window.selectType = function(type) {
             state.chartType = type;
-            // 여기서 resetData()를 호출하여 이전 세션/캐시의 LAST_VALUES를 무시하고 초기화합니다.
             resetData(); 
             goToStep(2);
         };
 
         ui.backBtn.addEventListener('click', () => { goToStep(1); hideToast(); });
 
-        function initData(r, c) {
+        function initData(rows, cols) {
             const newData = [];
-            for (let i = 0; i < r; i++) {
-                const row = new Array(c).fill("");
+            for (let i = 0; i < rows; i++) {
+                const row = new Array(cols).fill("");
                 newData.push(row);
             }
             return newData;
         }
-        state.data = initData(state.rows, state.cols);
 
         window.onmessage = (event) => {
             const msg = event.data.pluginMessage;
             if (!msg) return;
-            
+
+            // [DEBUG] 메시지 수신 확인
+            console.log("📩 [UI] Message Received:", msg);
+
             if (msg.type === 'init') {
+                // [FIX] uiMode 설정 (없으면 기본값 'create')
                 state.uiMode = msg.uiMode || 'create';
+                
+                // [DEBUG] 모드 상태 변경 확인
+                console.log(`🔄 [UI] State Mode Updated: ${state.uiMode} (Source: ${msg.uiMode ? 'Plugin' : 'Default'})`);
+
                 if (msg.chartType) {
                     state.chartType = msg.chartType;
-                    if (msg.lastCellCount) state.cellCount = msg.lastCellCount;
-                    if (msg.lastYMin !== undefined) ui.settingYMin.value = msg.lastYMin;
-                    if (msg.lastYMax !== undefined) ui.settingYMax.value = msg.lastYMax;
+                    
+                    // [DATA RESTORE & INFERENCE LOGIC]
+                    let targetData = null;
+                    let targetMarkNum = null;
 
-                    let targetValues = [];
-                    if (msg.lastValues && Array.isArray(msg.lastValues)) {
-                        targetValues = msg.lastValues; 
-                        const savedMode = msg.lastMode || 'raw';
-                        if (savedMode === 'percent') {
-                            state.cachedRawData = JSON.parse(JSON.stringify(targetValues));
-                            let maxVal = 0;
-                            targetValues.forEach(row => { row.forEach(val => { const num = Number(val); if (!isNaN(num) && num > maxVal) maxVal = num; }); });
-                            if (maxVal === 0) maxVal = 100;
-                            state.conversionMax = maxVal;
-                            targetValues = targetValues.map(row => row.map(val => { if (val === "") return ""; const num = Number(val); if (isNaN(num)) return val; return String(Math.round((num / maxVal) * 100 * 10) / 10); }));
-                            state.dataMode = 'percent';
-                        } else {
-                            state.dataMode = 'raw';
-                        }
+                    // Priority: Saved Data > Inferred Data
+                    if (msg.savedValues) {
+                        targetData = msg.savedValues;
+                        targetMarkNum = msg.savedMarkNum;
                     } else if (msg.inferredValues) {
-                        targetValues = msg.inferredValues;
-                        state.dataMode = 'percent'; 
+                        targetData = msg.inferredValues;
+                        targetMarkNum = msg.inferredMarkNum;
                     }
 
-                    if (targetValues && targetValues.length > 0) {
-                        if(Array.isArray(targetValues[0])) {
-                            state.data = targetValues.map(row => row.map(v => String(v)));
-                            state.rows = state.data.length;
-                            state.cols = state.data[0].length;
+                    if (targetData) {
+                        // Apply Data
+                        state.data = targetData.map(row => row.map(v => String(v)));
+                        state.rows = state.data.length;
+                        
+                        if (msg.chartType === 'stackedBar') {
+                            if (targetMarkNum && Array.isArray(targetMarkNum)) {
+                                state.groupStructure = targetMarkNum;
+                                state.cols = state.groupStructure.length;
+                            } else {
+                                // Default reset if structure missing
+                                state.cols = 1; 
+                                state.groupStructure = [state.data[0].length];
+                            }
                         } else {
-                            const vals = targetValues;
-                            state.rows = 1; 
-                            state.cols = vals.length > 0 ? vals.length : 3;
-                            state.data = [ vals.map(v => String(v)) ];
+                            state.cols = state.data[0].length;
+                            if (msg.chartType === 'line') state.cols = Math.max(1, state.cols - 1);
+                        }
+                    } else {
+                        // Default Initialization
+                        state.rows = 3; 
+                        state.cols = 3;
+                        if (msg.chartType === 'stackedBar') {
+                            state.groupStructure = [2, 2, 2];
+                            state.data = initData(3, 6);
+                        } else {
+                            state.data = initData(3, 3);
                         }
                     }
+                    
                     updateSettingInputs();
                     updateModeButtonState(); 
                     goToStep(2); 
                 } else {
+                    // 차트 타입이 없으면 생성 모드로 간주
+                    state.uiMode = 'create';
                     goToStep(1); 
                 }
             }
         };
 
+        function goToStep(stepNum) {
+            state.currentStep = stepNum;
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+            
+            // [DEBUG] Step 이동 로그
+            console.log(`🚀 [UI] GoToStep: ${stepNum} | Current Mode: ${state.uiMode}`);
+
+            if (stepNum === 1) {
+                ui.step1.classList.add('active');
+                ui.backBtn.classList.add('hidden');
+                ui.chartTypeWrapper.classList.add('hidden'); 
+                ui.mainCta.style.display = 'none';
+                ui.editModeBtn.classList.add('hidden'); 
+                removeCsv();
+                parent.postMessage({ pluginMessage: { type: 'resize', width: 300, height: 400 } }, '*');
+                
+                // Step 1으로 돌아가면 create 모드로 리셋
+                state.uiMode = 'create';
+            } else {
+                ui.step2.classList.add('active');
+                ui.backBtn.classList.remove('hidden');
+                ui.chartTypeWrapper.classList.remove('hidden'); 
+                
+                const targetHeight = state.chartType === 'stackedBar' ? 680 : 620;
+                parent.postMessage({ pluginMessage: { type: 'resize', width: 600, height: targetHeight } }, '*'); 
+
+                updateHeaderIcon();
+                ui.mainCta.style.display = 'block';
+                
+                // [FIX & DEBUG] CTA 버튼 텍스트 분기 로직 및 로그
+                const ctaText = state.uiMode === 'create' ? "Generate to Figma" : "Apply to Figma";
+                ui.mainCta.textContent = ctaText;
+                console.log(`🔘 [UI] CTA Button Text set to: "${ctaText}"`);
+
+                ui.editModeBtn.classList.remove('hidden');
+                
+                try {
+                    updateSettingInputs(); 
+                    renderGrid();
+                    checkCtaValidation();
+                    updateModeButtonState(); 
+                } catch (e) { console.error("Render Error:", e); }
+            }
+        }
+
+        // ==========================================
+        // MAIN GRID RENDERER (FIXED)
+        // ==========================================
         function renderGrid() {
             ui.gridContainer.innerHTML = ''; 
             ui.rowHeaderContainer.innerHTML = ''; 
-            ui.gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, minmax(60px, 1fr))`;
+            
+            // [FIX] Safety check
+            if (!state.data || state.data.length === 0) return;
 
-            for (let j = 0; j < state.cols; j++) {
-                const headerCell = document.createElement('div');
-                headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-semibold text-text-sub group relative';
-                headerCell.innerHTML = `<span>${j + 1}</span>`;
-                if (state.mode === 'edit') {
-                    const delBtn = document.createElement('button');
-                    delBtn.className = 'absolute right-0.5 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
-                    delBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
-                    delBtn.onclick = () => deleteColumn(j);
-                    headerCell.appendChild(delBtn);
+            // [FIX] Use actual data length for columns to avoid layout shifts
+            let gridCols = state.data[0].length;
+            
+            ui.gridContainer.style.gridTemplateColumns = `repeat(${gridCols}, minmax(60px, 1fr))`;
+
+            // ----------------------------------------------------
+            // [HEADER AREA]
+            // ----------------------------------------------------
+            if (state.chartType === 'stackedBar') {
+                // [Level 1] Super Header (Groups)
+                for (let g = 0; g < state.groupStructure.length; g++) { 
+                    const groupHeader = document.createElement('div');
+                    const spanCount = state.groupStructure[g];
+                    groupHeader.style.gridColumn = `span ${spanCount}`;
+                    
+                    groupHeader.className = 'sticky top-0 z-30 bg-gray-100 border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-bold text-text group relative';
+                    groupHeader.innerHTML = `<span>Group ${g + 1}</span>`;
+
+                    if (state.mode === 'edit') {
+                        const addBarBtn = document.createElement('button');
+                        addBarBtn.className = 'absolute left-1 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-primary hover:text-primary-hover';
+                        addBarBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>`;
+                        addBarBtn.title = "Add Bar to Group";
+                        addBarBtn.onclick = (e) => { e.stopPropagation(); addBarToGroup(g); };
+                        groupHeader.appendChild(addBarBtn);
+
+                        const delBtn = document.createElement('button');
+                        delBtn.className = 'absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
+                        delBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+                        delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(g); };
+                        groupHeader.appendChild(delBtn);
+                    }
+                    ui.gridContainer.appendChild(groupHeader);
                 }
-                ui.gridContainer.appendChild(headerCell);
+
+                // [Level 2] Sub Header (Bars)
+                state.groupStructure.forEach((count, gIdx) => {
+                    for (let b = 0; b < count; b++) {
+                        const subHeader = document.createElement('div');
+                        subHeader.className = 'sticky top-6 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-[9px] font-medium text-text-sub group relative';
+                        subHeader.textContent = `Bar ${b + 1}`;
+                        
+                        if (state.mode === 'edit') {
+                            const delSubBtn = document.createElement('button');
+                            delSubBtn.className = 'absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
+                            delSubBtn.innerHTML = `<svg class="w-2 h-2 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+                            const currentG = gIdx; 
+                            const currentB = b;
+                            delSubBtn.onclick = (e) => { e.stopPropagation(); removeBarFromGroup(currentG, currentB); };
+                            subHeader.appendChild(delSubBtn);
+                        }
+                        ui.gridContainer.appendChild(subHeader);
+                    }
+                });
+
+            } else {
+                // CASE B: Normal Charts (1-Level Header)
+                // [FIX] Loop based on actual data length (gridCols)
+                for (let j = 0; j < gridCols; j++) {
+                    const headerCell = document.createElement('div');
+                    headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-semibold text-text-sub group relative';
+                    
+                    let colLabel = `${j + 1}`;
+                    if (state.chartType === 'line') colLabel = `P ${j + 1}`;
+                    
+                    headerCell.innerHTML = `<span>${colLabel}</span>`;
+                    if (state.mode === 'edit') {
+                        const delBtn = document.createElement('button');
+                        delBtn.className = 'absolute right-0.5 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
+                        delBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+                        delBtn.onclick = () => deleteColumn(j);
+                        headerCell.appendChild(delBtn);
+                    }
+                    ui.gridContainer.appendChild(headerCell);
+                }
             }
 
+            // ----------------------------------------------------
+            // [BODY AREA] Rows
+            // ----------------------------------------------------
             state.data.forEach((row, rowIndex) => {
                 const isZebra = (rowIndex % 2 === 1);
                 const bgClass = isZebra ? 'bg-surface' : 'bg-white';
                 
                 const rowHeader = document.createElement('div');
-                rowHeader.className = `group relative w-full h-6 px-2 border-b border-r border-border-strong text-xxs font-semibold text-text-sub flex items-center justify-between truncate ${bgClass}`;
+                rowHeader.className = `row-header group relative w-full h-6 px-2 border-b border-r border-border-strong text-xxs font-semibold text-text-sub flex items-center justify-between truncate ${bgClass}`;
                 
-                let labelPrefix = state.chartType === 'line' ? 'Line' : 'Bar';
+                let rowLabelText = "";
+                if (state.chartType === 'line') rowLabelText = `Line ${rowIndex + 1}`;
+                else if (state.chartType === 'stackedBar') {
+                    if (state.data.length === 1) rowLabelText = `Row 1`;
+                    else rowLabelText = `Stack ${rowIndex + 1}`;
+                } else {
+                    rowLabelText = `Bar ${rowIndex + 1}`;
+                }
                 
                 const textSpan = document.createElement('span');
-                textSpan.textContent = `${labelPrefix} ${rowIndex + 1}`;
-                textSpan.title = `${labelPrefix} ${rowIndex + 1}`;
+                textSpan.textContent = rowLabelText;
                 textSpan.className = "truncate"; 
                 rowHeader.appendChild(textSpan);
-
+                
                 if (state.mode === 'edit') {
-                    const delRowBtn = document.createElement('button');
-                    delRowBtn.className = 'w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger shrink-0';
-                    delRowBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 17.59 13.41 12 19 6.41z"/></svg>`;
-                    delRowBtn.onclick = (e) => { e.stopPropagation(); deleteRow(rowIndex); };
-                    rowHeader.appendChild(delRowBtn);
+                     const delRowBtn = document.createElement('button');
+                     delRowBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 17.59 13.41 12 19 6.41z"/></svg>`;
+                     delRowBtn.className = 'del-row-btn w-4 h-4 hidden items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger shrink-0';
+                     delRowBtn.onclick = (e) => { e.stopPropagation(); deleteRow(rowIndex); };
+                     rowHeader.appendChild(delRowBtn);
                 }
                 ui.rowHeaderContainer.appendChild(rowHeader);
 
+                // Cells
                 row.forEach((cellValue, colIndex) => {
                     const cellWrapper = document.createElement('div');
                     cellWrapper.className = `flex items-center w-full h-6 border-r border-b border-border-strong ${bgClass}`;
                     const input = document.createElement('input');
                     input.type = 'text'; input.value = cellValue; input.dataset.row = rowIndex; input.dataset.col = colIndex;
-                    let isError = false; if (state.dataMode === 'percent' && cellValue !== "") { const num = Number(cellValue); if (!isNaN(num) && (num < 0 || num > 100)) isError = true; }
+                    
+                    // Console Log Logic
+                    input.addEventListener('focus', () => {
+                        const displayRow = rowIndex + 1;
+                        const displayCol = colIndex + 1;
+                        let contextInfo = "";
+                        
+                        if (state.chartType === 'stackedBar') {
+                            let groupIdx = 0; let barIdx = 0; let accumulated = 0;
+                            for (let i = 0; i < state.groupStructure.length; i++) {
+                                const count = state.groupStructure[i];
+                                if (colIndex < accumulated + count) {
+                                    groupIdx = i + 1; barIdx = (colIndex - accumulated) + 1; break;
+                                }
+                                accumulated += count;
+                            }
+                            contextInfo = ` (Group ${groupIdx}, Bar ${barIdx})`;
+                        }
+                        console.log(`🔵 Cell Selected: Row ${displayRow} / Col ${displayCol}${contextInfo}`);
+                    });
+
+                    let isError = false; 
+                    if (state.dataMode === 'percent' && cellValue !== "") { 
+                        const num = Number(cellValue); 
+                        if (!isNaN(num) && (num < 0 || num > 100)) isError = true; 
+                    }
                     let classes = `flex-1 w-full h-full px-2 text-xs text-right focus:outline-none bg-transparent min-w-0`;
                     if (isError) { cellWrapper.classList.remove('bg-white', 'bg-surface'); cellWrapper.classList.add('bg-red-50'); classes += ' text-danger font-medium'; }
                     if (state.mode === 'read') classes += ' text-gray-400 cursor-not-allowed';
@@ -561,103 +764,212 @@
                     ui.gridContainer.appendChild(cellWrapper);
                 });
             });
+
+            // Adjust Top Margin for Stacked (Double Header)
+            if (state.chartType === 'stackedBar') {
+                ui.rowHeaderContainer.style.marginTop = '24px'; 
+            } else {
+                ui.rowHeaderContainer.style.marginTop = '0px'; 
+            }
             checkCtaValidation();
         }
 
-        // [개선사항 2] Line 차트일 때 Column Sync Logic 수정 (+1 적용)
-        function handleDimensionInput() {
-            let newCols = parseInt(ui.settingColInput.value); // Graph Setting 값 (Visual)
-            let newRows = parseInt(ui.settingMarkSelect.value); 
-            
-            let newCells = parseInt(ui.settingCellInput.value);
-            if (newCells < 1) newCells = 1; if (newCells > 10) newCells = 10;
-            state.cellCount = newCells; 
+        // ==========================================
+        // Variable Group Logic
+        // ==========================================
 
-            if (newRows < 1) newRows = 1; if (newRows > MAX_SIZE) newRows = MAX_SIZE;
-            if (newCols < 1) newCols = 1; if (newCols > MAX_SIZE) newCols = MAX_SIZE;
-            
-            // 라인 차트면 데이터 컬럼은 비주얼 컬럼 + 1
-            let dataCols = newCols;
-            if (state.chartType === 'line') {
-                dataCols = newCols + 1;
+        function addBarToGroup(groupIndex) {
+            if (state.groupStructure[groupIndex] >= 10) return;
+            let insertAt = 0;
+            for (let i = 0; i < groupIndex; i++) {
+                insertAt += state.groupStructure[i];
             }
+            insertAt += state.groupStructure[groupIndex]; 
 
-            updateGridSize(newRows, dataCols);
+            state.data.forEach(row => { row.splice(insertAt, 0, ""); });
+            state.groupStructure[groupIndex]++;
+            renderGrid();
+        }
+
+        function removeBarFromGroup(groupIndex, barIndex) {
+            if (state.groupStructure[groupIndex] <= 1) {
+                alert("Minimum 1 bar per group."); return; 
+            }
+            let deleteAt = 0;
+            for (let i = 0; i < groupIndex; i++) {
+                deleteAt += state.groupStructure[i];
+            }
+            deleteAt += barIndex;
+            state.data.forEach(row => { row.splice(deleteAt, 1); });
+            state.groupStructure[groupIndex]--;
+            renderGrid();
+        }
+
+        // ==========================================
+        // Dimensions & Structure
+        // ==========================================
+        function handleDimensionInput() {
+            // 1. Cell Count 업데이트
+            let inputCell = parseInt(ui.settingCellInput.value);
+            if (isNaN(inputCell) || inputCell < 1) inputCell = 1;
+            if (inputCell > 10) inputCell = 10; 
+            state.cellCount = inputCell;
+
+            // 2. Col/Row 업데이트
+            let inputCols = parseInt(ui.settingColInput.value);
+            if (inputCols < 1) inputCols = 1; if (inputCols > MAX_SIZE) inputCols = MAX_SIZE;
+            
+            if (state.chartType === 'stackedBar') {
+                // Stacked Bar 로직 (기존 유지)
+                const currentGroupCount = state.cols;
+                if (inputCols > currentGroupCount) {
+                    const addedCount = inputCols - currentGroupCount;
+                    for(let k=0; k<addedCount; k++) {
+                        state.groupStructure.push(2); 
+                        state.data.forEach(row => { row.push("", ""); });
+                    }
+                } else if (inputCols < currentGroupCount) {
+                    const removedCount = currentGroupCount - inputCols;
+                    for(let k=0; k<removedCount; k++) {
+                        const barsToRemove = state.groupStructure.pop();
+                        state.data.forEach(row => { row.splice(-barsToRemove, barsToRemove); });
+                    }
+                }
+                state.cols = inputCols;
+                renderGrid(); 
+            } else {
+                // [수정됨] Normal / Line Chart 로직
+                let inputRows = parseInt(ui.settingMarkSelect.value);
+                state.cols = inputCols;
+
+                // Line Chart인 경우 데이터 컬럼 = 입력값 + 1
+                let targetDataCols = inputCols;
+                if (state.chartType === 'line') {
+                    targetDataCols = inputCols + 1;
+                }
+
+                updateGridSize(inputRows, targetDataCols);
+            }
+            updateSettingInputs();
         }
 
         function updateGridSize(newRows, newCols) {
+            const currentRows = state.data.length;
+            const currentCols = currentRows > 0 ? state.data[0].length : 0;
             const newData = [];
             for (let i = 0; i < newRows; i++) {
                 const newRow = [];
                 for (let j = 0; j < newCols; j++) {
-                    if (i < state.rows && j < state.cols) {
-                        newRow.push((state.data[i] && state.data[i][j] !== undefined) ? state.data[i][j] : "");
+                    if (i < currentRows && j < currentCols) {
+                        newRow.push(state.data[i][j]);
                     } else {
                         newRow.push("");
                     }
                 }
                 newData.push(newRow);
             }
-            state.rows = newRows;
-            state.cols = newCols;
             state.data = newData;
+            state.rows = newRows;
             renderGrid();
-            updateSettingInputs(); 
-            updateModeButtonState();
         }
+
         function addColumn() {
             if (state.cols >= MAX_SIZE) return;
-            updateGridSize(state.rows, state.cols + 1);
+
+            if(state.chartType === 'stackedBar') {
+                state.cols++;
+                state.groupStructure.push(2); 
+                state.data.forEach(row => { row.push("", ""); });
+                updateSettingInputs(); 
+                renderGrid();
+            } else {
+                state.cols++;
+                // [FIX] Simplified add logic for normal charts
+                updateGridSize(state.rows, state.cols);
+                updateSettingInputs();
+            }
             setTimeout(() => { ui.gridScrollArea.scrollTo({ left: ui.gridScrollArea.scrollWidth, behavior: 'smooth' }); }, 50);
         }
+        
         function addRow() {
             if (state.rows >= MAX_SIZE) return;
-            updateGridSize(state.rows + 1, state.cols);
+            state.rows++;
+            
+            const currentCols = state.data.length > 0 ? state.data[0].length : 
+                                (state.chartType === 'stackedBar' ? getTotalStackedCols() : state.cols);
+            state.data.push(new Array(currentCols).fill(""));
+
+            if(state.chartType !== 'stackedBar') ui.settingMarkSelect.value = state.rows;
+
+            updateSettingInputs(); 
+            renderGrid();
+            
             setTimeout(() => { ui.gridScrollArea.scrollTo({ top: ui.gridScrollArea.scrollHeight, behavior: 'smooth' }); }, 50);
         }
+
         function deleteColumn(colIndex) {
             if (state.cols <= 1) return;
-            state.data.forEach(row => row.splice(colIndex, 1));
-            state.cols--;
-            updateSettingInputs(); renderGrid(); updateModeButtonState();
+            
+            if (state.chartType === 'stackedBar') {
+                const barsToRemove = state.groupStructure[colIndex];
+                let startAt = 0;
+                for(let i=0; i<colIndex; i++) startAt += state.groupStructure[i];
+                state.data.forEach(row => row.splice(startAt, barsToRemove));
+                state.groupStructure.splice(colIndex, 1);
+                state.cols--;
+            } else {
+                state.data.forEach(row => row.splice(colIndex, 1));
+                state.cols--;
+            }
+            updateSettingInputs(); renderGrid();
         }
+
         function deleteRow(rowIndex) {
             if (state.rows <= 1) return;
             state.data.splice(rowIndex, 1);
             state.rows--;
-            updateSettingInputs(); renderGrid(); updateModeButtonState();
+            updateSettingInputs(); renderGrid();
         }
         
         function resetData() {
-            state.rows = 1;
-            state.cols = 2; // Default
-            state.data = [["", ""]];
-            state.dataMode = 'raw'; 
-            state.cachedRawData = null; 
-            state.cellCount = 4; 
+            state.rows = 3;
+            state.cols = 3; 
             
+            if (state.chartType === 'stackedBar') {
+                state.groupStructure = [2, 2, 2];
+                state.data = initData(3, 6);
+                state.cols = 3; 
+            } else if (state.chartType === 'line') {
+                // [수정됨] Line Chart는 입력값(3) + 1 = 4개의 데이터 생성
+                state.data = initData(3, 4);
+            } else {
+                state.data = initData(3, 3);
+            }
+            state.dataMode = 'raw'; 
             updateSettingInputs();
             renderGrid();
-            updateModeButtonState();
-            checkCtaValidation();
         }
         
-        // [개선사항 2] Line 차트일 때 Graph Setting 인풋 값 조정 (-1 표시)
         function updateSettingInputs() {
-            let visualCols = state.cols;
-            if (state.chartType === 'line') {
-                visualCols = Math.max(1, state.cols - 1);
-            }
-            ui.settingColInput.value = visualCols;
-
             ui.settingCellInput.value = state.cellCount;
-            if (state.rows > 5) {
-                if (!ui.settingMarkSelect.querySelector(`option[value="${state.rows}"]`)) {
-                     const opt = document.createElement('option');
-                     opt.value = state.rows; opt.text = state.rows; ui.settingMarkSelect.appendChild(opt);
-                }
+            
+            if (state.chartType === 'stackedBar') {
+                 ui.labelColInput.textContent = "Group Count"; 
+                 ui.settingColInput.value = state.cols; 
+                 ui.containerMarkWrapper.classList.add('hidden');
+            } else {
+                 ui.labelColInput.textContent = "Graph Col";
+                 ui.settingColInput.value = state.cols;
+                 ui.containerMarkWrapper.classList.remove('hidden');
+                 
+                 if (state.rows > 5) {
+                    if (!ui.settingMarkSelect.querySelector(`option[value="${state.rows}"]`)) {
+                        const opt = document.createElement('option');
+                        opt.value = state.rows; opt.text = state.rows; ui.settingMarkSelect.appendChild(opt);
+                    }
+                 }
+                 ui.settingMarkSelect.value = state.rows;
             }
-            ui.settingMarkSelect.value = state.rows;
         }
 
         function handleCsvUpload(event) {
@@ -671,80 +983,72 @@
         }
 
         function parseAndApplyCsv(csvText) {
-            const rows = csvText.split(/\r?\n/).filter(r => r.trim() !== '');
-            if (rows.length === 0) return;
-            let newRowsCount = rows.length;
-            let newColsCount = rows[0].split(',').length;
-            if (newRowsCount > MAX_SIZE) newRowsCount = MAX_SIZE;
-            if (newColsCount > MAX_SIZE) newColsCount = MAX_SIZE;
-            const newData = [];
-            for (let i = 0; i < newRowsCount; i++) {
-                const cells = rows[i].split(',');
-                const newRow = cells.slice(0, newColsCount); 
-                newData.push(newRow);
+            const lines = csvText.split(/\r?\n/).filter(r => r.trim() !== '');
+            if (lines.length === 0) return;
+
+            let maxCols = 0;
+            const tempRows = lines.map(line => {
+                const cells = line.split(',');
+                if (cells.length > maxCols) maxCols = cells.length;
+                return cells;
+            });
+
+            const normalizedData = tempRows.map(row => {
+                while (row.length < maxCols) { row.push(""); }
+                return row.map(cell => cell.trim());
+            });
+
+            state.data = normalizedData;
+            state.rows = normalizedData.length;
+
+            if (state.chartType === 'stackedBar') {
+                const currentTotal = getTotalStackedCols();
+                if (maxCols !== currentTotal) {
+                    state.cols = 1; 
+                    state.groupStructure = [maxCols];
+                }
+            } else {
+                state.cols = maxCols;
             }
-            state.data = newData;
-            state.rows = newRowsCount;
-            state.cols = newColsCount;
+
             state.dataMode = 'raw'; 
-            updateSettingInputs(); 
-            updateModeButtonState();
-            renderGrid();
-            updateCsvUi();
-            ui.csvInput.value = '';
+            updateSettingInputs(); renderGrid(); updateCsvUi(); ui.csvInput.value = '';
         }
 
         function toggleMode() {
-            const textBtnClass = 'bg-transparent border-0 text-primary hover:text-primary-hover font-semibold text-xs cursor-pointer transition-colors min-w-[40px]';
-
-            if (state.mode === 'edit') {
+             const textBtnClass = 'bg-transparent border-0 text-primary hover:text-primary-hover font-semibold text-xs cursor-pointer transition-colors min-w-[40px]';
+             if (state.mode === 'edit') {
                 state.mode = 'read';
-                ui.editModeBtn.textContent = "Edit"; 
+                ui.editModeBtn.textContent = "Edit";
                 ui.editModeBtn.className = textBtnClass;
-                
                 ui.settingColInput.disabled = true; 
                 ui.settingCellInput.disabled = true;
                 ui.settingMarkSelect.disabled = true;
                 ui.settingYMin.disabled = true;
                 ui.settingYMax.disabled = true;
-                
-                ui.resetBtn.disabled = true;
-                ui.resetBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                
-                [ui.addColFixedBtn, ui.addRowFixedBtn].forEach(btn => {
-                    btn.disabled = true;
-                    btn.classList.add('text-text-sub', 'cursor-not-allowed');
-                    btn.classList.remove('text-primary', 'hover:bg-surface', 'cursor-pointer');
-                });
-            } else {
+             } else {
                 state.mode = 'edit';
                 ui.editModeBtn.textContent = "Save";
                 ui.editModeBtn.className = textBtnClass;
-                
                 ui.settingColInput.disabled = false; 
                 ui.settingCellInput.disabled = false;
                 ui.settingMarkSelect.disabled = false;
                 ui.settingYMin.disabled = false;
                 ui.settingYMax.disabled = false;
-
-                ui.resetBtn.disabled = false;
-                ui.resetBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-
-                [ui.addColFixedBtn, ui.addRowFixedBtn].forEach(btn => {
-                    btn.disabled = false;
-                    btn.classList.remove('text-text-sub', 'cursor-not-allowed');
-                    btn.classList.add('text-primary', 'hover:bg-surface', 'cursor-pointer');
-                });
-            }
-            renderGrid(); checkCtaValidation(); 
+             }
+             renderGrid(); checkCtaValidation(); 
         }
 
         function checkCtaValidation() {
             if (state.mode !== 'read') { ui.mainCta.disabled = true; return; }
             let isAllFilled = true;
             let isRangeError = false;
-            for (let i = 0; i < state.rows; i++) {
-                for (let j = 0; j < state.cols; j++) {
+            
+            const totalVisualRows = state.data.length;
+            const totalCols = state.data.length > 0 ? state.data[0].length : 0;
+
+            for (let i = 0; i < totalVisualRows; i++) {
+                for (let j = 0; j < totalCols; j++) {
                     const val = state.data[i][j];
                     if (!val || val.trim() === "") isAllFilled = false;
                     if (state.dataMode === 'percent' && val && val.trim() !== "") {
@@ -763,21 +1067,18 @@
         }
 
         function submitData() {
-            const displayValues = state.data.map(row => 
+            let finalValues = state.data.map(row => 
                 row.map(cell => {
                     const num = Number(cell);
                     return isNaN(num) ? 0 : num;
                 })
             );
-            let storageValues = displayValues;
-            if (state.dataMode === 'percent' && state.cachedRawData) {
-                storageValues = state.cachedRawData.map(row => 
-                    row.map(cell => {
-                        const num = Number(cell);
-                        return isNaN(num) ? 0 : num;
-                    })
-                );
+            
+            let markNumPayload = state.groupStructure; 
+            if (state.chartType !== 'stackedBar') {
+                markNumPayload = state.rows; 
             }
+
             const msgType = state.uiMode === 'create' ? 'generate' : 'apply';
             parent.postMessage({ 
                 pluginMessage: { 
@@ -785,13 +1086,14 @@
                     payload: {
                         type: state.chartType,
                         mode: state.dataMode, 
-                        values: displayValues,
-                        rawValues: storageValues,
+                        values: finalValues,
+                        rawValues: finalValues,
                         rows: state.rows,
                         cols: state.cols,
                         cellCount: state.cellCount,
                         yMin: Number(ui.settingYMin.value),
-                        yMax: Number(ui.settingYMax.value)
+                        yMax: Number(ui.settingYMax.value),
+                        markNum: markNumPayload
                     }
                 } 
             }, '*');
@@ -805,7 +1107,7 @@
         ui.settingColInput.addEventListener('input', handleDimensionInput);
         ui.settingCellInput.addEventListener('input', handleDimensionInput); 
         ui.settingMarkSelect.addEventListener('change', handleDimensionInput);
-
+        
         ui.addColFixedBtn.addEventListener('click', addColumn);
         ui.addRowFixedBtn.addEventListener('click', addRow);
         ui.csvExportBtn.addEventListener('click', downloadCsv);
