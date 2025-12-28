@@ -284,8 +284,15 @@ figma.ui.onmessage = async (msg) => {
     }
 
     // [Save Plugin Data]
+    // 1. 차트 타입 저장
     targetNode.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, type);
+
+    // 2. UI 복원을 위한 원본 데이터 (Stacked Bar의 경우 'All' 행 포함)
     targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(rawValues));
+    
+    // 3. [NEW] 리사이즈/그리기를 위한 정제된 데이터 (Stacked Bar의 경우 'All' 행 제외됨)
+    targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(values));
+
     targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_MODE, mode);
     targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(cellCount));
     targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN, String(yMin));
@@ -311,11 +318,12 @@ figma.ui.onmessage = async (msg) => {
 
     // 3. Draw Chart
     const H = getGraphHeight(targetNode);
+    // 그리기 함수에는 UI에서 정제해서 보낸 values(All 제외됨)를 사용
     const drawConfig = { values, mode, markNum, rows, yMin, yMax };
 
     if (type === "bar") applyBar(drawConfig, H, targetNode);
     else if (type === "line") applyLine(drawConfig, H, targetNode);
-    else if (type === "stackedBar") applyStackedBar(drawConfig, H, targetNode);
+    else if (type === "stackedBar" || type === "stacked") applyStackedBar(drawConfig, H, targetNode);
 
     if (msg.type === 'generate') {
         figma.notify("Chart Generated!");
@@ -633,29 +641,38 @@ function initPluginUI(node: SceneNode, autoApply = false) {
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
     
     // Retrieve Saved Data
-    const lastVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
+    const lastVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);           // UI용 (All 포함)
+    const lastDrawingVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES); // [NEW] 그리기용 (All 제외)
+    
     const lastMarkNum = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM);
     const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
     const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
     const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
     const lastCell = node.getPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT);
 
-    // [New] Extract Colors
     const extractedColors = extractChartColors(node, chartType);
 
-    // Auto Apply Logic (Resize)
+    // [수정된 Auto Apply Logic]
     if (autoApply && lastVals) {
         let markNumToUse: any = 1;
         if (lastMarkNum) {
             try { markNumToUse = JSON.parse(lastMarkNum); } catch(e) {}
         }
 
+        // [핵심] 리사이즈할 때는 DrawingValue가 있으면 그걸 쓰고, 없으면(구버전) lastVals를 씀
+        let valuesToUse = JSON.parse(lastVals);
+        if (lastDrawingVals) {
+            try {
+                valuesToUse = JSON.parse(lastDrawingVals);
+            } catch(e) {}
+        }
+
         const payload = {
             type: chartType,
             mode: lastMode || 'raw',
-            values: JSON.parse(lastVals),
+            values: valuesToUse,      // 여기가 수정됨 (Drawing Vals 사용)
             rawValues: JSON.parse(lastVals),
-            cols: 0, // Recalculated inside
+            cols: 0, 
             cellCount: Number(lastCell)||4,
             yMin: Number(lastYMin)||0,
             yMax: Number(lastYMax)||100,
@@ -663,7 +680,7 @@ function initPluginUI(node: SceneNode, autoApply = false) {
         };
         
         const H = getGraphHeight(node as FrameNode);
-        if(chartType === 'stackedBar') applyStackedBar(payload, H, node);
+        if(chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
         else if(chartType === 'bar') applyBar(payload, H, node);
         else if(chartType === 'line') applyLine(payload, H, node);
         return; 

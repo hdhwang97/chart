@@ -525,13 +525,32 @@
                                 state.groupStructure = [state.data[0].length];
                             }
                             
-                            // [Add] Init from plugin: Add empty 'All' row at index 0 for UI consistency
-                            // Figma doesn't store 'All' row, so we need to add it when loading back to UI.
-                            if (state.data.length > 0) {
-                                const colsCount = state.data[0].length;
+                            // [SMART LOAD LOGIC]
+                            // 저장된 데이터가 All 행을 포함하고 있는지 확인 (Visual Rows vs Data Rows)
+                            // 1. Inferred(Visual) Data가 있다면 Row 수는 실제 막대 개수
+                            // 2. 만약 Saved Data의 Row 수가 Visual Row 수와 같다면 -> All 행이 없는 구버전 데이터 -> unshift 필요
+                            // 3. 만약 Saved Data가 더 많다면 -> All 행이 있는 신버전 데이터 -> unshift 불필요
+                            
+                            let shouldAddAllRow = false;
+                            
+                            if (targetData === msg.inferredValues) {
+                                // 그래프에서 읽어온 데이터는 무조건 All 행 없음 (Visual only)
+                                shouldAddAllRow = true;
+                            } else if (targetData === msg.savedValues) {
+                                // 저장된 데이터 로드 시
+                                const visualRowCount = msg.inferredValues ? msg.inferredValues.length : 0;
+                                // 저장된 데이터 행이 시각적 행보다 같거나 적으면 'All' 행이 없는 것으로 간주
+                                if (state.data.length <= visualRowCount) {
+                                    shouldAddAllRow = true;
+                                }
+                            }
+
+                            if (shouldAddAllRow) {
+                                const colsCount = state.data.length > 0 ? state.data[0].length : state.cols;
                                 state.data.unshift(new Array(colsCount).fill(""));
                             }
-                            state.rows = state.data.length; // Now it includes 'All' row
+                            
+                            state.rows = state.data.length; 
 
                         } else {
                             state.rows = state.data.length;
@@ -542,7 +561,7 @@
                         // Default Initialization
                         if (msg.chartType === 'stackedBar') {
                             state.groupStructure = [2, 2, 2];
-                            state.data = initData(4, 6); // 1 All + 3 Stacks
+                            state.data = initData(4, 6); // Row 0(All) + 3 Stacks = 4 rows
                             state.rows = 4;
                             state.cols = 3;
                         } else {
@@ -567,7 +586,7 @@
         // ==========================================
         function validateStackedData() {
             if (state.chartType !== 'stackedBar') return;
-            if (state.data.length < 2) return; // Need at least All + 1 Stack
+            if (state.data.length < 2) return; 
 
             const totalCols = state.data[0].length;
 
@@ -578,7 +597,6 @@
                 
                 // If All is empty, skip strict validation but clear errors
                 if (allValStr === "" || isNaN(allVal)) {
-                    // Clear errors for this column
                      for (let r = 0; r < state.rows; r++) {
                          const cellInput = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
                          if(cellInput) {
@@ -586,7 +604,6 @@
                              if (wrapper.classList.contains('bg-red-200')) {
                                  wrapper.classList.remove('bg-red-200');
                                  cellInput.classList.remove('text-danger', 'font-bold');
-                                 // Restore default bg
                                  if (r === 0) wrapper.classList.add('bg-blue-50');
                                  else wrapper.classList.add((r % 2 === 1) ? 'bg-surface' : 'bg-white');
                              }
@@ -733,12 +750,11 @@
             // [BODY AREA] Rows
             // ----------------------------------------------------
             state.data.forEach((row, rowIndex) => {
-                // Stacked Bar special styling for Row 0 (All)
                 const isStackedAll = (state.chartType === 'stackedBar' && rowIndex === 0);
                 
                 const isZebra = (rowIndex % 2 === 1);
                 let bgClass = isZebra ? 'bg-surface' : 'bg-white';
-                if (isStackedAll) bgClass = 'bg-blue-50'; // Distinct background for All
+                if (isStackedAll) bgClass = 'bg-blue-50'; 
 
                 const rowHeader = document.createElement('div');
                 rowHeader.className = `row-header group relative w-full h-6 px-2 border-b border-r border-border-strong text-xxs font-semibold text-text-sub flex items-center justify-between truncate ${bgClass}`;
@@ -758,7 +774,6 @@
                 if (isStackedAll) textSpan.classList.add('text-primary-hover', 'font-bold');
                 rowHeader.appendChild(textSpan);
                 
-                // Row 0 in Stacked Bar cannot be deleted
                 if (state.mode === 'edit' && !isStackedAll) {
                      const delRowBtn = document.createElement('button');
                      delRowBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 17.59 13.41 12 19 6.41z"/></svg>`;
@@ -784,7 +799,6 @@
                     if (isError) { cellWrapper.classList.remove('bg-white', 'bg-surface', 'bg-blue-50'); cellWrapper.classList.add('bg-red-50'); classes += ' text-danger font-medium'; }
                     if (state.mode === 'read') classes += ' text-gray-400 cursor-not-allowed';
                     
-                    // Style 'All' input bold
                     if (isStackedAll) classes += ' font-bold text-primary';
 
                     input.className = classes;
@@ -792,17 +806,15 @@
                         state.data[rowIndex][colIndex] = e.target.value;
                         updateModeButtonState(); 
                         
-                        // [New] Real-time Validation for Stacked
                         if (state.chartType === 'stackedBar') {
                             validateStackedData();
                         }
 
-                        // Basic range validation visual
                         const val = e.target.value; const num = Number(val);
                         const isErr = (state.dataMode === 'percent' && val!=="" && (!isNaN(num) && (num<0 || num>100)));
-                        if(isErr && !cellWrapper.classList.contains('bg-red-200')) { // Don't override logical red bg
+                        if(isErr && !cellWrapper.classList.contains('bg-red-200')) { 
                             cellWrapper.classList.remove(bgClass); cellWrapper.classList.add('bg-red-50'); e.target.classList.add('text-danger', 'font-medium'); 
-                        } else if (!cellWrapper.classList.contains('bg-red-200')) { // Only restore if not logical error
+                        } else if (!cellWrapper.classList.contains('bg-red-200')) { 
                             cellWrapper.classList.remove('bg-red-50'); cellWrapper.classList.add(bgClass); e.target.classList.remove('text-danger', 'font-medium'); 
                         }
                         
@@ -818,7 +830,6 @@
 
             if (state.chartType === 'stackedBar') {
                 ui.rowHeaderContainer.style.marginTop = '24px'; 
-                // Initial Validate on Render
                 validateStackedData();
             } else {
                 ui.rowHeaderContainer.style.marginTop = '0px'; 
@@ -962,7 +973,6 @@
         }
 
         function deleteRow(rowIndex) {
-            // Stacked Bar Row 0 cannot be deleted
             if (state.chartType === 'stackedBar' && rowIndex === 0) return;
             
             if (state.rows <= 1) return;
@@ -1107,6 +1117,7 @@
         }
 
         function submitData() {
+            // 1. 현재 데이터 복사 (숫자로 변환)
             let finalValues = state.data.map(row => 
                 row.map(cell => {
                     const num = Number(cell);
@@ -1114,32 +1125,50 @@
                 })
             );
             
+            // 2. 변수 초기화
+            let rawValues = finalValues;    // 저장용 (All 포함 전체)
+            let drawingValues = finalValues; // 그리기용 (All 제외 예정)
+            
+            // 기본적으로 markNumPayload는 그룹 구조(배열)를 따름
             let markNumPayload = state.groupStructure; 
             
-            // [MODIFIED] If Stacked Bar, remove Row 0 (All) before sending to Figma
-            if (state.chartType === 'stackedBar') {
+            // 3. 차트 타입 체크 및 데이터 가공
+            // 'stackedBar' 뿐만 아니라 혹시 모를 'stacked' 등 변형된 이름도 방어
+            if (state.chartType === 'stackedBar' || state.chartType === 'stacked') {
+                
+                // [핵심 Fix] Stacked Bar는 무조건 첫 번째 줄(All)을 잘라내고 보냄
                 if (finalValues.length > 1) {
-                    finalValues = finalValues.slice(1);
+                    drawingValues = finalValues.slice(1);
                 }
+                
+                // [핵심 Fix] Stacked Bar는 markNumPayload가 무조건 그룹 구조(Array)여야 함
+                // 여기서 state.rows를 할당하지 않도록 보장
+                markNumPayload = state.groupStructure;
+
             } else {
+                // 일반 Bar, Line 차트일 경우에만 Rows 개수를 markNum으로 사용
                 markNumPayload = state.rows; 
             }
 
             const msgType = state.uiMode === 'create' ? 'generate' : 'apply';
+            
+            // 4. Figma로 전송
             parent.postMessage({ 
                 pluginMessage: { 
                     type: msgType, 
                     payload: {
                         type: state.chartType,
                         mode: state.dataMode, 
-                        values: finalValues,
-                        rawValues: finalValues,
-                        rows: (state.chartType === 'stackedBar') ? (state.rows - 1) : state.rows,
+                        values: drawingValues, // 그리기용 (All 제외됨)
+                        rawValues: rawValues,  // 저장용 (All 포함됨)
+                        
+                        // Stacked Bar는 All 행을 빼고(rows-1) 알려줌
+                        rows: (state.chartType === 'stackedBar' || state.chartType === 'stacked') ? (state.rows - 1) : state.rows,
                         cols: state.cols,
                         cellCount: state.cellCount,
                         yMin: Number(ui.settingYMin.value),
                         yMax: Number(ui.settingYMax.value),
-                        markNum: markNumPayload
+                        markNum: markNumPayload // 이제 Array([2, 2...])가 전송됨
                     }
                 } 
             }, '*');
