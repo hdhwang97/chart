@@ -22,7 +22,7 @@ const VARIANT_PROPERTY_Y_END = "yEnd";
 const VARIANT_MAPPING: { [key: string]: string } = {
   'bar': 'bar',           
   'line': 'line',         
-  'stackedBar': 'stacked' 
+  'stackedBar': 'stackedBar' 
 };
 
 const LINE_VARIANT_KEY_DEFAULT = "direction"; 
@@ -53,7 +53,7 @@ const MARK_NAME_PATTERNS = {
   
   // Stacked Bar Patterns
   STACKED_GROUP: /^st\.bar\.group$|^bar[-_]?group$/, 
-  STACKED_SUB_INSTANCE: /^st\.bar$|^bar$/, 
+  STACKED_SUB_INSTANCE: /^st\.bar.*$|^bar.*$/,
   STACKED_SEGMENT: /^bar[-_]?0*(\d+)$/,
 
   LINE: /^line[-_]?0*(\d*)$/, 
@@ -458,10 +458,12 @@ function applySegmentsToBar(
 ) {
     if (!("children" in barInstance)) return;
 
+    // 1. 데이터가 있는 세그먼트 (bar-01 ~ bar-n) 처리
     for (let r = 0; r < rowCount; r++) {
         const val = Number(values[r][colIndex]) || 0;
         const targetNum = r + 1;
         
+        // 정규식: bar-01, bar-1, bar01 등 허용
         const segmentPattern = new RegExp(`^bar[-_]?0*(${targetNum})$`);
         // @ts-ignore
         const targetLayer = barInstance.children.find(n => segmentPattern.test(n.name)) as (SceneNode & LayoutMixin);
@@ -472,16 +474,40 @@ function applySegmentsToBar(
             } else {
                 targetLayer.visible = true;
                 let ratio = 0;
-                if (mode === "raw") ratio = val / maxSum;
-                else ratio = Math.min(Math.max(val, 0), 100) / 100;
+                
+                // 모드에 따른 비율 계산
+                if (mode === "raw") {
+                    ratio = maxSum === 0 ? 0 : val / maxSum;
+                } else {
+                    // percent 모드는 0~100 사이 값
+                    ratio = Math.min(Math.max(val, 0), 100) / 100;
+                }
 
+                // 높이 적용 (소수점 첫째자리 반올림)
                 const finalHeight = Math.round((H * ratio) * 10) / 10;
+                
+                // Frame이어야 paddingBottom 속성이 있음
                 if ('paddingBottom' in targetLayer) {
                     targetLayer.paddingBottom = finalHeight;
                 }
             }
         }
     }
+
+    // 2. 데이터 범위를 벗어난 잉여 세그먼트 숨김 처리 (Safety Logic)
+    // 예: 데이터는 3개(bar-01~03)인데 컴포넌트에 bar-04, bar-05가 있다면 숨김
+    // @ts-ignore
+    barInstance.children.forEach(child => {
+        // bar로 시작하고 뒤에 숫자가 붙는 레이어인지 확인
+        const match = /^bar[-_]?0*(\d+)$/.exec(child.name);
+        if (match) {
+            const layerNum = parseInt(match[1]);
+            // 현재 입력된 데이터 행 개수(rowCount)보다 번호가 크면 숨김
+            if (layerNum > rowCount) {
+                child.visible = false;
+            }
+        }
+    });
 }
 
 function applyBar(config: any, H: number, graph: SceneNode) {

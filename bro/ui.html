@@ -204,6 +204,7 @@
                                     <div id="tooltip-normal">
                                         <p class="mb-1"><strong class="text-primary-hover">Raw:</strong> 입력값의 제한이 없습니다.</p>
                                         <p><strong class="text-primary-hover">%:</strong> 0~100 사이의 비율값으로 보여집니다.</p>
+                                        <p id="tooltip-stacked-hint" class="hidden text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-600">* Stacked Bar: Row 1은 All(Total) 목표값입니다.</p>
                                     </div>
                                     <div id="tooltip-warning" class="hidden text-danger font-medium">
                                         ⚠️ % 모드에서는 0~100 사이의 값만 입력할 수 있습니다.
@@ -317,6 +318,7 @@
             tooltipNormal: document.getElementById('tooltip-normal'),
             tooltipWarning: document.getElementById('tooltip-warning'),
             mainTooltip: document.getElementById('main-tooltip'),
+            tooltipStackedHint: document.getElementById('tooltip-stacked-hint'),
 
             csvExportBtn: document.getElementById('csv-export-btn'),
             toast: document.getElementById('restore-toast'),
@@ -354,10 +356,17 @@
         function clearRangeErrors() {
             ui.gridContainer.querySelectorAll('input').forEach(input => {
                 const wrapper = input.parentElement;
-                wrapper.classList.remove('bg-red-50');
+                wrapper.classList.remove('bg-red-50', 'bg-red-200'); // Remove all error backgrounds
                 const row = parseInt(input.dataset.row);
-                wrapper.classList.add((row % 2 === 1) ? 'bg-surface' : 'bg-white');
-                input.classList.remove('text-danger', 'font-medium');
+                
+                // Stacked Bar Row 0(All) 배경 처리
+                if (state.chartType === 'stackedBar' && row === 0) {
+                    wrapper.classList.add('bg-blue-50');
+                } else {
+                    wrapper.classList.add((row % 2 === 1) ? 'bg-surface' : 'bg-white');
+                }
+                
+                input.classList.remove('text-danger', 'font-medium', 'font-bold');
             });
         }
 
@@ -424,6 +433,10 @@
             else if(state.chartType === 'stackedBar') displayType = 'Stacked';
             ui.chartTypeDisplay.textContent = displayType;
             ui.chartTypeIcon.innerHTML = CHART_ICONS[state.chartType] || CHART_ICONS['bar'];
+            
+            // Tooltip toggle
+            if(state.chartType === 'stackedBar') ui.tooltipStackedHint.classList.remove('hidden');
+            else ui.tooltipStackedHint.classList.add('hidden');
         }
 
         function goToStep(stepNum) {
@@ -437,6 +450,7 @@
                 ui.editModeBtn.classList.add('hidden'); 
                 removeCsv();
                 parent.postMessage({ pluginMessage: { type: 'resize', width: 300, height: 400 } }, '*');
+                state.uiMode = 'create';
             } else {
                 ui.step2.classList.add('active');
                 ui.backBtn.classList.remove('hidden');
@@ -480,20 +494,12 @@
             const msg = event.data.pluginMessage;
             if (!msg) return;
 
-            // [DEBUG] 메시지 수신 확인
-            console.log("📩 [UI] Message Received:", msg);
-
             if (msg.type === 'init') {
-                // [FIX] uiMode 설정 (없으면 기본값 'create')
                 state.uiMode = msg.uiMode || 'create';
                 
-                // [DEBUG] 모드 상태 변경 확인
-                console.log(`🔄 [UI] State Mode Updated: ${state.uiMode} (Source: ${msg.uiMode ? 'Plugin' : 'Default'})`);
-
                 if (msg.chartType) {
                     state.chartType = msg.chartType;
                     
-                    // [DATA RESTORE & INFERENCE LOGIC]
                     let targetData = null;
                     let targetMarkNum = null;
 
@@ -509,29 +515,39 @@
                     if (targetData) {
                         // Apply Data
                         state.data = targetData.map(row => row.map(v => String(v)));
-                        state.rows = state.data.length;
                         
                         if (msg.chartType === 'stackedBar') {
                             if (targetMarkNum && Array.isArray(targetMarkNum)) {
                                 state.groupStructure = targetMarkNum;
                                 state.cols = state.groupStructure.length;
                             } else {
-                                // Default reset if structure missing
                                 state.cols = 1; 
                                 state.groupStructure = [state.data[0].length];
                             }
+                            
+                            // [Add] Init from plugin: Add empty 'All' row at index 0 for UI consistency
+                            // Figma doesn't store 'All' row, so we need to add it when loading back to UI.
+                            if (state.data.length > 0) {
+                                const colsCount = state.data[0].length;
+                                state.data.unshift(new Array(colsCount).fill(""));
+                            }
+                            state.rows = state.data.length; // Now it includes 'All' row
+
                         } else {
+                            state.rows = state.data.length;
                             state.cols = state.data[0].length;
                             if (msg.chartType === 'line') state.cols = Math.max(1, state.cols - 1);
                         }
                     } else {
                         // Default Initialization
-                        state.rows = 3; 
-                        state.cols = 3;
                         if (msg.chartType === 'stackedBar') {
                             state.groupStructure = [2, 2, 2];
-                            state.data = initData(3, 6);
+                            state.data = initData(4, 6); // 1 All + 3 Stacks
+                            state.rows = 4;
+                            state.cols = 3;
                         } else {
+                            state.rows = 3; 
+                            state.cols = 3;
                             state.data = initData(3, 3);
                         }
                     }
@@ -540,69 +556,104 @@
                     updateModeButtonState(); 
                     goToStep(2); 
                 } else {
-                    // 차트 타입이 없으면 생성 모드로 간주
                     state.uiMode = 'create';
                     goToStep(1); 
                 }
             }
         };
 
-        function goToStep(stepNum) {
-            state.currentStep = stepNum;
-            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
-            
-            // [DEBUG] Step 이동 로그
-            console.log(`🚀 [UI] GoToStep: ${stepNum} | Current Mode: ${state.uiMode}`);
+        // ==========================================
+        // VALIDATION LOGIC FOR STACKED BAR
+        // ==========================================
+        function validateStackedData() {
+            if (state.chartType !== 'stackedBar') return;
+            if (state.data.length < 2) return; // Need at least All + 1 Stack
 
-            if (stepNum === 1) {
-                ui.step1.classList.add('active');
-                ui.backBtn.classList.add('hidden');
-                ui.chartTypeWrapper.classList.add('hidden'); 
-                ui.mainCta.style.display = 'none';
-                ui.editModeBtn.classList.add('hidden'); 
-                removeCsv();
-                parent.postMessage({ pluginMessage: { type: 'resize', width: 300, height: 400 } }, '*');
-                
-                // Step 1으로 돌아가면 create 모드로 리셋
-                state.uiMode = 'create';
-            } else {
-                ui.step2.classList.add('active');
-                ui.backBtn.classList.remove('hidden');
-                ui.chartTypeWrapper.classList.remove('hidden'); 
-                
-                const targetHeight = state.chartType === 'stackedBar' ? 680 : 620;
-                parent.postMessage({ pluginMessage: { type: 'resize', width: 600, height: targetHeight } }, '*'); 
+            const totalCols = state.data[0].length;
 
-                updateHeaderIcon();
-                ui.mainCta.style.display = 'block';
+            for (let c = 0; c < totalCols; c++) {
+                // 1. Get All Value (Row 0)
+                const allValStr = state.data[0][c];
+                const allVal = Number(allValStr);
                 
-                // [FIX & DEBUG] CTA 버튼 텍스트 분기 로직 및 로그
-                const ctaText = state.uiMode === 'create' ? "Generate to Figma" : "Apply to Figma";
-                ui.mainCta.textContent = ctaText;
-                console.log(`🔘 [UI] CTA Button Text set to: "${ctaText}"`);
+                // If All is empty, skip strict validation but clear errors
+                if (allValStr === "" || isNaN(allVal)) {
+                    // Clear errors for this column
+                     for (let r = 0; r < state.rows; r++) {
+                         const cellInput = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+                         if(cellInput) {
+                             const wrapper = cellInput.parentElement;
+                             if (wrapper.classList.contains('bg-red-200')) {
+                                 wrapper.classList.remove('bg-red-200');
+                                 cellInput.classList.remove('text-danger', 'font-bold');
+                                 // Restore default bg
+                                 if (r === 0) wrapper.classList.add('bg-blue-50');
+                                 else wrapper.classList.add((r % 2 === 1) ? 'bg-surface' : 'bg-white');
+                             }
+                         }
+                     }
+                    continue;
+                }
 
-                ui.editModeBtn.classList.remove('hidden');
+                let stackSum = 0;
                 
-                try {
-                    updateSettingInputs(); 
-                    renderGrid();
-                    checkCtaValidation();
-                    updateModeButtonState(); 
-                } catch (e) { console.error("Render Error:", e); }
+                // 2. Iterate Stacks (Row 1 ~ End)
+                for (let r = 1; r < state.rows; r++) {
+                    const stackValStr = state.data[r][c];
+                    const stackVal = Number(stackValStr);
+                    const cellInput = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+                    
+                    if (cellInput) {
+                        const wrapper = cellInput.parentElement;
+                        let isError = false;
+
+                        if (stackValStr !== "" && !isNaN(stackVal)) {
+                            stackSum += stackVal;
+                            
+                            // Condition B: Single Stack > All
+                            if (stackVal > allVal) {
+                                isError = true;
+                                wrapper.classList.remove('bg-white', 'bg-surface');
+                                wrapper.classList.add('bg-red-200');
+                                cellInput.classList.add('text-danger', 'font-bold');
+                            }
+                        }
+
+                        if (!isError && wrapper.classList.contains('bg-red-200')) {
+                             wrapper.classList.remove('bg-red-200');
+                             cellInput.classList.remove('text-danger', 'font-bold');
+                             wrapper.classList.add((r % 2 === 1) ? 'bg-surface' : 'bg-white');
+                        }
+                    }
+                }
+
+                // 3. Condition A: Sum of Stacks > All
+                const allInput = document.querySelector(`input[data-row="0"][data-col="${c}"]`);
+                if (allInput) {
+                    const wrapper = allInput.parentElement;
+                    if (stackSum > allVal) {
+                        wrapper.classList.remove('bg-blue-50');
+                        wrapper.classList.add('bg-red-200');
+                        allInput.classList.add('text-danger', 'font-bold');
+                    } else {
+                        if (wrapper.classList.contains('bg-red-200')) {
+                            wrapper.classList.remove('bg-red-200');
+                            wrapper.classList.add('bg-blue-50');
+                            allInput.classList.remove('text-danger', 'font-bold');
+                        }
+                    }
+                }
             }
         }
 
         // ==========================================
-        // MAIN GRID RENDERER (FIXED)
+        // MAIN GRID RENDERER
         // ==========================================
         function renderGrid() {
             ui.gridContainer.innerHTML = ''; 
             ui.rowHeaderContainer.innerHTML = ''; 
             
-            // [FIX] Safety check
             if (!state.data || state.data.length === 0) return;
-
-            // [FIX] Use actual data length for columns to avoid layout shifts
             let gridCols = state.data[0].length;
             
             ui.gridContainer.style.gridTemplateColumns = `repeat(${gridCols}, minmax(60px, 1fr))`;
@@ -658,8 +709,7 @@
                 });
 
             } else {
-                // CASE B: Normal Charts (1-Level Header)
-                // [FIX] Loop based on actual data length (gridCols)
+                // CASE B: Normal Charts
                 for (let j = 0; j < gridCols; j++) {
                     const headerCell = document.createElement('div');
                     headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-semibold text-text-sub group relative';
@@ -683,17 +733,21 @@
             // [BODY AREA] Rows
             // ----------------------------------------------------
             state.data.forEach((row, rowIndex) => {
-                const isZebra = (rowIndex % 2 === 1);
-                const bgClass = isZebra ? 'bg-surface' : 'bg-white';
+                // Stacked Bar special styling for Row 0 (All)
+                const isStackedAll = (state.chartType === 'stackedBar' && rowIndex === 0);
                 
+                const isZebra = (rowIndex % 2 === 1);
+                let bgClass = isZebra ? 'bg-surface' : 'bg-white';
+                if (isStackedAll) bgClass = 'bg-blue-50'; // Distinct background for All
+
                 const rowHeader = document.createElement('div');
                 rowHeader.className = `row-header group relative w-full h-6 px-2 border-b border-r border-border-strong text-xxs font-semibold text-text-sub flex items-center justify-between truncate ${bgClass}`;
                 
                 let rowLabelText = "";
                 if (state.chartType === 'line') rowLabelText = `Line ${rowIndex + 1}`;
                 else if (state.chartType === 'stackedBar') {
-                    if (state.data.length === 1) rowLabelText = `Row 1`;
-                    else rowLabelText = `Stack ${rowIndex + 1}`;
+                    if (rowIndex === 0) rowLabelText = `All (Total)`;
+                    else rowLabelText = `Stack ${rowIndex}`;
                 } else {
                     rowLabelText = `Bar ${rowIndex + 1}`;
                 }
@@ -701,9 +755,11 @@
                 const textSpan = document.createElement('span');
                 textSpan.textContent = rowLabelText;
                 textSpan.className = "truncate"; 
+                if (isStackedAll) textSpan.classList.add('text-primary-hover', 'font-bold');
                 rowHeader.appendChild(textSpan);
                 
-                if (state.mode === 'edit') {
+                // Row 0 in Stacked Bar cannot be deleted
+                if (state.mode === 'edit' && !isStackedAll) {
                      const delRowBtn = document.createElement('button');
                      delRowBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 17.59 13.41 12 19 6.41z"/></svg>`;
                      delRowBtn.className = 'del-row-btn w-4 h-4 hidden items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger shrink-0';
@@ -719,43 +775,38 @@
                     const input = document.createElement('input');
                     input.type = 'text'; input.value = cellValue; input.dataset.row = rowIndex; input.dataset.col = colIndex;
                     
-                    // Console Log Logic
-                    input.addEventListener('focus', () => {
-                        const displayRow = rowIndex + 1;
-                        const displayCol = colIndex + 1;
-                        let contextInfo = "";
-                        
-                        if (state.chartType === 'stackedBar') {
-                            let groupIdx = 0; let barIdx = 0; let accumulated = 0;
-                            for (let i = 0; i < state.groupStructure.length; i++) {
-                                const count = state.groupStructure[i];
-                                if (colIndex < accumulated + count) {
-                                    groupIdx = i + 1; barIdx = (colIndex - accumulated) + 1; break;
-                                }
-                                accumulated += count;
-                            }
-                            contextInfo = ` (Group ${groupIdx}, Bar ${barIdx})`;
-                        }
-                        console.log(`🔵 Cell Selected: Row ${displayRow} / Col ${displayCol}${contextInfo}`);
-                    });
-
                     let isError = false; 
                     if (state.dataMode === 'percent' && cellValue !== "") { 
                         const num = Number(cellValue); 
                         if (!isNaN(num) && (num < 0 || num > 100)) isError = true; 
                     }
                     let classes = `flex-1 w-full h-full px-2 text-xs text-right focus:outline-none bg-transparent min-w-0`;
-                    if (isError) { cellWrapper.classList.remove('bg-white', 'bg-surface'); cellWrapper.classList.add('bg-red-50'); classes += ' text-danger font-medium'; }
+                    if (isError) { cellWrapper.classList.remove('bg-white', 'bg-surface', 'bg-blue-50'); cellWrapper.classList.add('bg-red-50'); classes += ' text-danger font-medium'; }
                     if (state.mode === 'read') classes += ' text-gray-400 cursor-not-allowed';
                     
+                    // Style 'All' input bold
+                    if (isStackedAll) classes += ' font-bold text-primary';
+
                     input.className = classes;
                     input.addEventListener('input', (e) => {
                         state.data[rowIndex][colIndex] = e.target.value;
-                        updateModeButtonState(); checkCtaValidation();
+                        updateModeButtonState(); 
+                        
+                        // [New] Real-time Validation for Stacked
+                        if (state.chartType === 'stackedBar') {
+                            validateStackedData();
+                        }
+
+                        // Basic range validation visual
                         const val = e.target.value; const num = Number(val);
                         const isErr = (state.dataMode === 'percent' && val!=="" && (!isNaN(num) && (num<0 || num>100)));
-                        if(isErr) { cellWrapper.classList.remove(bgClass); cellWrapper.classList.add('bg-red-50'); e.target.classList.add('text-danger', 'font-medium'); } 
-                        else { cellWrapper.classList.remove('bg-red-50'); cellWrapper.classList.add(bgClass); e.target.classList.remove('text-danger', 'font-medium'); }
+                        if(isErr && !cellWrapper.classList.contains('bg-red-200')) { // Don't override logical red bg
+                            cellWrapper.classList.remove(bgClass); cellWrapper.classList.add('bg-red-50'); e.target.classList.add('text-danger', 'font-medium'); 
+                        } else if (!cellWrapper.classList.contains('bg-red-200')) { // Only restore if not logical error
+                            cellWrapper.classList.remove('bg-red-50'); cellWrapper.classList.add(bgClass); e.target.classList.remove('text-danger', 'font-medium'); 
+                        }
+                        
+                        checkCtaValidation();
                     });
                     cellWrapper.appendChild(input);
                     if (state.dataMode === 'percent') {
@@ -765,18 +816,15 @@
                 });
             });
 
-            // Adjust Top Margin for Stacked (Double Header)
             if (state.chartType === 'stackedBar') {
                 ui.rowHeaderContainer.style.marginTop = '24px'; 
+                // Initial Validate on Render
+                validateStackedData();
             } else {
                 ui.rowHeaderContainer.style.marginTop = '0px'; 
             }
             checkCtaValidation();
         }
-
-        // ==========================================
-        // Variable Group Logic
-        // ==========================================
 
         function addBarToGroup(groupIndex) {
             if (state.groupStructure[groupIndex] >= 10) return;
@@ -805,22 +853,16 @@
             renderGrid();
         }
 
-        // ==========================================
-        // Dimensions & Structure
-        // ==========================================
         function handleDimensionInput() {
-            // 1. Cell Count 업데이트
             let inputCell = parseInt(ui.settingCellInput.value);
             if (isNaN(inputCell) || inputCell < 1) inputCell = 1;
             if (inputCell > 10) inputCell = 10; 
             state.cellCount = inputCell;
 
-            // 2. Col/Row 업데이트
             let inputCols = parseInt(ui.settingColInput.value);
             if (inputCols < 1) inputCols = 1; if (inputCols > MAX_SIZE) inputCols = MAX_SIZE;
             
             if (state.chartType === 'stackedBar') {
-                // Stacked Bar 로직 (기존 유지)
                 const currentGroupCount = state.cols;
                 if (inputCols > currentGroupCount) {
                     const addedCount = inputCols - currentGroupCount;
@@ -838,16 +880,12 @@
                 state.cols = inputCols;
                 renderGrid(); 
             } else {
-                // [수정됨] Normal / Line Chart 로직
                 let inputRows = parseInt(ui.settingMarkSelect.value);
                 state.cols = inputCols;
-
-                // Line Chart인 경우 데이터 컬럼 = 입력값 + 1
                 let targetDataCols = inputCols;
                 if (state.chartType === 'line') {
                     targetDataCols = inputCols + 1;
                 }
-
                 updateGridSize(inputRows, targetDataCols);
             }
             updateSettingInputs();
@@ -884,7 +922,6 @@
                 renderGrid();
             } else {
                 state.cols++;
-                // [FIX] Simplified add logic for normal charts
                 updateGridSize(state.rows, state.cols);
                 updateSettingInputs();
             }
@@ -925,6 +962,9 @@
         }
 
         function deleteRow(rowIndex) {
+            // Stacked Bar Row 0 cannot be deleted
+            if (state.chartType === 'stackedBar' && rowIndex === 0) return;
+            
             if (state.rows <= 1) return;
             state.data.splice(rowIndex, 1);
             state.rows--;
@@ -937,10 +977,10 @@
             
             if (state.chartType === 'stackedBar') {
                 state.groupStructure = [2, 2, 2];
-                state.data = initData(3, 6);
+                state.data = initData(4, 6); // Row 0(All) + 3 Stacks = 4 rows
+                state.rows = 4;
                 state.cols = 3; 
             } else if (state.chartType === 'line') {
-                // [수정됨] Line Chart는 입력값(3) + 1 = 4개의 데이터 생성
                 state.data = initData(3, 4);
             } else {
                 state.data = initData(3, 3);
@@ -1075,7 +1115,13 @@
             );
             
             let markNumPayload = state.groupStructure; 
-            if (state.chartType !== 'stackedBar') {
+            
+            // [MODIFIED] If Stacked Bar, remove Row 0 (All) before sending to Figma
+            if (state.chartType === 'stackedBar') {
+                if (finalValues.length > 1) {
+                    finalValues = finalValues.slice(1);
+                }
+            } else {
                 markNumPayload = state.rows; 
             }
 
@@ -1088,7 +1134,7 @@
                         mode: state.dataMode, 
                         values: finalValues,
                         rawValues: finalValues,
-                        rows: state.rows,
+                        rows: (state.chartType === 'stackedBar') ? (state.rows - 1) : state.rows,
                         cols: state.cols,
                         cellCount: state.cellCount,
                         yMin: Number(ui.settingYMin.value),
