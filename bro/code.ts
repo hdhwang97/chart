@@ -1,20 +1,20 @@
+// code.ts
+
 // ==========================================
 // 1. CONFIG & CONSTANTS
 // ==========================================
 
 const MASTER_COMPONENT_CONFIG = {
   NAME: "Chart_test", 
-  KEY: "" // 필요한 경우 컴포넌트 Key 입력
+  KEY: "" 
 };
 
 const STORAGE_KEY_COMPONENT_ID = "cached_chart_component_id";
 
 // Variant & Property Names
 const VARIANT_PROPERTY_TYPE = "Type"; 
-const VARIANT_PROPERTY_MARK_NUM = "markNum"; // Bar, Line의 개수 또는 Stacked Bar Group의 Item 개수
+const VARIANT_PROPERTY_MARK_NUM = "markNum"; 
 const VARIANT_PROPERTY_LINE_NUM = "lineNum"; 
-
-// [Y-Axis] Properties
 const VARIANT_PROPERTY_CEL_TYPE = "celType"; 
 const VARIANT_PROPERTY_Y_LABEL = "yLabel"; 
 const VARIANT_PROPERTY_Y_END = "yEnd";     
@@ -32,17 +32,21 @@ const LINE_VARIANT_VALUES = {
   FLAT: "flat"
 } as const;
 
-// [Update] Added LAST_MARK_NUM to store Variable Group Structure
+// [Data Keys] 저장할 키 목록
 const PLUGIN_DATA_KEYS = {
   MODIFIED: "isChartModified",
-  LAST_VALUES: "lastAppliedValues",       
-  LAST_DRAWING_VALUES: "lastDrawingValues", 
+  CHART_TYPE: "chartType",
+  
+  // 데이터 값
+  LAST_VALUES: "lastAppliedValues",       // UI용 원본 (All 포함)
+  LAST_DRAWING_VALUES: "lastDrawingValues", // 그리기용 (All 제외)
+  
+  // 차트 설정 (이 부분들이 확실히 저장됨)
   LAST_MODE: "lastAppliedMode",           
   LAST_CELL_COUNT: "lastCellCount",       
+  LAST_MARK_NUM: "lastMarkNum", 
   LAST_Y_MIN: "lastYMin",                 
   LAST_Y_MAX: "lastYMax",
-  LAST_MARK_NUM: "lastMarkNum", // Stores structure like [2, 3, 2]
-  CHART_TYPE: "chartType"
 } as const;
 
 // Naming Patterns (Regex)
@@ -51,7 +55,6 @@ const MARK_NAME_PATTERNS = {
   BAR_ITEM_SINGLE: /^bar$/, 
   BAR_ITEM_MULTI: /^bar[-_]?0*(\d+)$/,
   
-  // Stacked Bar Patterns
   STACKED_GROUP: /^st\.bar\.group$|^bar[-_]?group$/, 
   STACKED_SUB_INSTANCE: /^st\.bar.*$|^bar.*$/,
   STACKED_SEGMENT: /^bar[-_]?0*(\d+)$/,
@@ -65,7 +68,59 @@ const MARK_NAME_PATTERNS = {
 };
 
 // ==========================================
-// 2. UTILITIES & HELPERS
+// 2. DATA LAYER (저장/로드 핵심 로직)
+// ==========================================
+
+// Helper: JSON Parse with safety
+const safeParse = (data: string | undefined) => (data ? JSON.parse(data) : null);
+
+// [핵심 1] 차트 데이터 저장 (모든 설정을 빠짐없이 저장)
+function saveChartData(node: SceneNode, msg: any) {
+    // 1. 기본 설정 및 값 저장
+    node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
+    node.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(msg.rawValues));
+    node.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(msg.values));
+    node.setPluginData(PLUGIN_DATA_KEYS.LAST_MODE, msg.mode);
+    node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN, String(msg.yMin));
+    node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, String(msg.yMax));
+    
+    // 2. [요청사항 반영] Cell Count와 Mark Num 명시적 저장
+    node.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(msg.cellCount));
+    if (msg.markNum) {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(msg.markNum));
+    }
+}
+
+// [핵심 2] 차트 데이터 불러오기 (저장된 값 우선, 없으면 구조만 파악)
+async function loadChartData(node: SceneNode, chartType: string) {
+    // A. 저장된 데이터 확인
+    const savedValuesStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
+    const savedCell = node.getPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT);
+    const savedMarkNumStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM);
+    
+    // B. 저장된 데이터가 있으면 -> 그걸 그대로 반환 (시각적 역산 무시)
+    if (savedValuesStr) {
+        return {
+            values: JSON.parse(savedValuesStr),
+            markNum: savedMarkNumStr ? JSON.parse(savedMarkNumStr) : 1,
+            cellCount: Number(savedCell) || 4,
+            isSaved: true
+        };
+    }
+
+    // C. 저장된 게 없으면 -> 구조(Structure)만 파악하여 빈 데이터 생성
+    const structure = inferStructureFromGraph(chartType, node);
+    return {
+        values: structure.values,     // 0으로 채워진 빈 배열
+        markNum: structure.markNum,   // 감지된 막대/그룹 개수
+        cellCount: structure.cellCount, // 감지된 눈금 개수
+        isSaved: false
+    };
+}
+
+
+// ==========================================
+// 3. UTILITIES & HELPERS
 // ==========================================
 
 function traverse(node: SceneNode, callback: (n: SceneNode) => void) {
@@ -110,7 +165,6 @@ function findAllLineLayers(parentNode: SceneNode): (SceneNode & LayoutMixin)[] {
     return results;
 }
 
-// [Added from code2] Color Extraction
 function extractChartColors(graph: SceneNode, chartType: string): string[] {
     const colors: string[] = [];
     const columns = collectColumns(graph);
@@ -125,13 +179,12 @@ function extractChartColors(graph: SceneNode, chartType: string): string[] {
         if (tab) targetParent = tab;
     }
 
-    // 1. Bar / Stacked Bar
+    // 1. Bar / Stacked Bar Color
     if (chartType === "bar" || chartType === "stackedBar") {
         // @ts-ignore
         const barInstance = targetParent.children.find(n => MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name));
         
         if (barInstance && "children" in barInstance) {
-            // Check enough items to capture stacked colors too
             for (let i = 1; i <= 25; i++) {
                 const pat = new RegExp(`^bar[-_]?0*(${i})$`);
                 // @ts-ignore
@@ -153,7 +206,7 @@ function extractChartColors(graph: SceneNode, chartType: string): string[] {
             }
         }
     } 
-    // 2. Line Chart
+    // 2. Line Chart Color
     else if (chartType === "line") {
         const layers = findAllLineLayers(targetParent);
         layers.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
@@ -190,7 +243,6 @@ function extractChartColors(graph: SceneNode, chartType: string): string[] {
     return colors;
 }
 
-// [Added from code2] Component Loader
 async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode | null> {
     const { KEY, NAME } = MASTER_COMPONENT_CONFIG;
 
@@ -206,12 +258,10 @@ async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode 
 
     if (KEY) {
         try {
-            const importComponent = await figma.importComponentByKeyAsync(KEY);
-            return importComponent;
+            return await figma.importComponentByKeyAsync(KEY);
         } catch (e) {}
     }
     
-    // Search in current page then root
     let found = figma.currentPage.findOne(n => 
         (n.type === "COMPONENT" || n.type === "COMPONENT_SET") && n.name === NAME
     );
@@ -229,10 +279,10 @@ async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode 
 
 
 // ==========================================
-// 3. MAIN LOGIC
+// 4. MAIN LOGIC (Controller)
 // ==========================================
 
-figma.showUI(__html__, { width: 300, height: 400 });
+figma.showUI(__html__, { width: 600, height: 800 });
 
 let currentSelectionId: string | null = null;
 let prevWidth = 0;
@@ -250,7 +300,7 @@ figma.ui.onmessage = async (msg) => {
     let targetNode: FrameNode | ComponentNode | InstanceNode;
 
     if (msg.type === 'apply' && nodes.length > 0) {
-       targetNode = nodes[0] as FrameNode; // Apply to selection
+       targetNode = nodes[0] as FrameNode; 
     } else {
        // Generate new
        const component = await getOrImportComponent();
@@ -273,7 +323,6 @@ figma.ui.onmessage = async (msg) => {
 
        targetNode = instance;
        
-       // Center in viewport
        const { x, y } = figma.viewport.center;
        instance.x = x - (instance.width / 2);
        instance.y = y - (instance.height / 2);
@@ -283,42 +332,24 @@ figma.ui.onmessage = async (msg) => {
        figma.currentPage.selection = [instance];
     }
 
-    // [Save Plugin Data]
-    // 1. 차트 타입 저장
-    targetNode.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, type);
+    // 1. [NEW] 중앙화된 데이터 저장 함수 호출
+    saveChartData(targetNode, msg.payload);
 
-    // 2. UI 복원을 위한 원본 데이터 (Stacked Bar의 경우 'All' 행 포함)
-    targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(rawValues));
-    
-    // 3. [NEW] 리사이즈/그리기를 위한 정제된 데이터 (Stacked Bar의 경우 'All' 행 제외됨)
-    targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(values));
-
-    targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_MODE, mode);
-    targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(cellCount));
-    targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN, String(yMin));
-    targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, String(yMax));
-    
-    // Save markNum (Group Structure)
-    if (markNum) {
-        targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(markNum));
-    }
-
-    // 1. Chart Type Variant Setup
+    // 2. Chart Type Variant Setup
     if (targetNode.type === "INSTANCE") {
         const variantValue = VARIANT_MAPPING[type] || 'bar';
         setVariantProperty(targetNode, VARIANT_PROPERTY_TYPE, variantValue);
     }
 
-    // 2. Basic Setup
-    const graphColCount = (type === 'line') ? Math.max(0, cols - 1) : cols;
+    // 3. Basic Setup
+    const graphColCount = cols; 
     setLayerVisibility(targetNode, "col-", graphColCount);
     
     applyCells(targetNode, cellCount);
     applyYAxis(targetNode, cellCount, { yMin, yMax });
 
-    // 3. Draw Chart
+    // 4. Draw Chart
     const H = getGraphHeight(targetNode);
-    // 그리기 함수에는 UI에서 정제해서 보낸 values(All 제외됨)를 사용
     const drawConfig = { values, mode, markNum, rows, yMin, yMax };
 
     if (type === "bar") applyBar(drawConfig, H, targetNode);
@@ -333,7 +364,7 @@ figma.ui.onmessage = async (msg) => {
   }
 };
 
-// Selection Change & Init
+// Selection Change
 figma.on("selectionchange", () => {
     const selection = figma.currentPage.selection;
     if (selection.length === 1) {
@@ -365,16 +396,235 @@ setInterval(() => {
     });
 }, 500);
 
+
 // ==========================================
-// 4. DRAWING FUNCTIONS
+// 5. HELPER FUNCTIONS (Init & Inference)
+// ==========================================
+
+async function initPluginUI(node: SceneNode, autoApply = false) {
+    const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
+    
+    // [NEW] 통합 데이터 로드 함수 사용
+    const chartData = await loadChartData(node, chartType);
+    
+    // Auto-Resize 처리
+    if (autoApply && chartData.isSaved) {
+        const lastDrawingVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES);
+        const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
+        const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
+        const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
+
+        let valuesToUse = chartData.values;
+        if (lastDrawingVals) {
+             try { valuesToUse = JSON.parse(lastDrawingVals); } catch(e){}
+        }
+
+        const payload = {
+            type: chartType,
+            mode: lastMode || 'raw',
+            values: valuesToUse,
+            rawValues: chartData.values,
+            cols: 0, 
+            cellCount: chartData.cellCount,
+            yMin: Number(lastYMin)||0,
+            yMax: Number(lastYMax)||100,
+            markNum: chartData.markNum
+        };
+        
+        const H = getGraphHeight(node as FrameNode);
+        if(chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
+        else if(chartType === 'bar') applyBar(payload, H, node);
+        else if(chartType === 'line') applyLine(payload, H, node);
+        return; 
+    }
+    
+    const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
+    const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
+    const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
+    const extractedColors = extractChartColors(node, chartType);
+
+    figma.ui.postMessage({
+        type: 'init',
+        uiMode: 'edit',
+        chartType: chartType,
+        
+        // 데이터 전송 (저장된 값 우선, 없으면 구조 기반 빈 값)
+        savedValues: chartData.values, 
+        savedMarkNum: chartData.markNum,
+        lastCellCount: chartData.cellCount,
+        
+        lastMode: lastMode,
+        lastYMin: lastYMin ? Number(lastYMin) : undefined,
+        lastYMax: lastYMax ? Number(lastYMax) : undefined,
+        
+        markColors: extractedColors
+    });
+}
+
+// [리팩토링] 구조(Structure)만 파악하는 역산 함수
+// 더 이상 높이(값)를 계산하지 않고, 레이어 개수만 세어서 반환함
+function inferStructureFromGraph(chartType: string, graph: SceneNode) {
+    const cols = collectColumns(graph);
+    
+    // 1. Detect Cell Count (Y축 눈금)
+    let detectedCellCount = 4;
+    const yAxis = (graph as FrameNode).findOne(n => MARK_NAME_PATTERNS.Y_AXIS_CONTAINER.test(n.name));
+    if(yAxis && "children" in yAxis) {
+            let maxIdx = 0;
+            yAxis.children.forEach(c => {
+                const match = MARK_NAME_PATTERNS.Y_CEL_ITEM.exec(c.name);
+                if(match && c.visible) maxIdx = Math.max(maxIdx, parseInt(match[1]));
+            });
+            if(maxIdx > 0) detectedCellCount = maxIdx;
+    }
+    
+    // 2. Count Columns
+    const colCount = cols.length || 1;
+
+    // 3. Detect Mark Count (Rows) & Generate Empty Values
+    let markNum: any = 1;
+    let rowCount = 1;
+
+    if (chartType === "stackedBar") {
+        // 그룹별 구조 파악 (예: [2, 3, 2] 형태)
+        const groupStructure: number[] = [];
+        cols.forEach(colObj => {
+            let parent = colObj.node;
+            if("children" in parent) {
+                // @ts-ignore
+                const tab = parent.children.find(n => n.name === "tab");
+                if(tab) parent = tab;
+            }
+            // @ts-ignore
+            const group = parent.children.find(n => MARK_NAME_PATTERNS.STACKED_GROUP.test(n.name));
+            if(group && "children" in group) {
+                // @ts-ignore
+                const visibleBars = group.children.filter(n => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name) && n.visible);
+                groupStructure.push(visibleBars.length);
+            } else {
+                groupStructure.push(0);
+            }
+        });
+        markNum = groupStructure;
+        rowCount = Math.max(...groupStructure) || 1;
+
+    } else if (chartType === "bar" || chartType === "line") {
+        // 단일 컬럼 내 최대 레이어 개수 파악
+        let maxRows = 1;
+        cols.forEach(c => {
+            let parent = c.node;
+            // @ts-ignore
+            const tab = c.node.children ? (c.node as FrameNode).children.find(n => n.name === "tab") : null;
+            if(tab) parent = tab;
+            
+            // Bar or Line 카운트
+            let count = 0;
+            // @ts-ignore
+            if (parent.children) {
+                 // @ts-ignore
+                parent.children.forEach(child => {
+                     if (!child.visible) return;
+                     if (chartType === "bar") {
+                         if (MARK_NAME_PATTERNS.BAR_ITEM_MULTI.test(child.name)) count++;
+                     } else {
+                         if (MARK_NAME_PATTERNS.LINE.test(child.name)) count++;
+                     }
+                });
+            }
+            // 단일 Bar 레이어 처리
+            if (chartType === "bar" && count === 0) {
+                 // @ts-ignore
+                 const singleBar = parent.children.find(n => MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(n.name));
+                 if(singleBar && singleBar.visible) count = 1;
+            }
+            if(count > maxRows) maxRows = count;
+        });
+        markNum = maxRows;
+        rowCount = maxRows;
+    }
+
+    // 4. 빈 데이터 생성 (0으로 채움)
+    const emptyValues = Array.from({ length: rowCount }, () => Array(colCount).fill(0));
+
+    return {
+        values: emptyValues,
+        markNum: markNum,
+        cellCount: detectedCellCount
+    };
+}
+
+function inferChartType(node: SceneNode): string {
+    if (node.type === "INSTANCE") {
+        const props = node.componentProperties;
+        if (props[VARIANT_PROPERTY_TYPE]) return props[VARIANT_PROPERTY_TYPE].value;
+    }
+    let found = 'bar';
+    traverse(node, n => {
+        if (MARK_NAME_PATTERNS.STACKED_GROUP.test(n.name)) found = 'stackedBar';
+        if (MARK_NAME_PATTERNS.LINE.test(n.name)) found = 'line';
+    });
+    return found;
+}
+
+function collectColumns(node: SceneNode) {
+    const cols: { node: SceneNode, index: number }[] = [];
+    if ("children" in node) {
+        for (const child of node.children) {
+            const match = MARK_NAME_PATTERNS.COL_ALL.exec(child.name);
+            if (match) {
+                cols.push({ node: child, index: parseInt(match[1], 10) });
+            }
+        }
+    }
+    return cols.sort((a, b) => a.index - b.index);
+}
+
+function getGraphHeight(node: FrameNode) {
+    let xh = 0;
+    const xEmpty = node.findOne(n => n.name === "x-empty");
+    if (xEmpty) xh = xEmpty.height;
+    return node.height - xh;
+}
+
+function setVariantProperty(instance: InstanceNode, key: string, value: string) {
+    try {
+        const props = instance.componentProperties;
+        const propKey = Object.keys(props).find(k => k === key || k.startsWith(key + "#"));
+        if (propKey && props[propKey].value !== value) {
+            instance.setProperties({ [propKey]: value });
+        }
+    } catch (e) {}
+}
+
+function setLayerVisibility(parent: SceneNode, namePrefix: string, count: number) {
+    if (!("children" in parent)) return;
+    parent.children.forEach(child => {
+        if (child.name.startsWith(namePrefix)) {
+            const num = parseInt(child.name.replace(namePrefix, ""));
+            child.visible = num <= count;
+        }
+    });
+}
+
+function applyCells(node: SceneNode, count: number) {
+    traverse(node, n => {
+        const match = MARK_NAME_PATTERNS.CEL.exec(n.name);
+        if (match) {
+            const idx = parseInt(match[1]);
+            n.visible = idx <= count;
+        }
+    });
+}
+
+// ==========================================
+// 6. DRAWING FUNCTIONS (Apply Logic)
 // ==========================================
 
 function applyStackedBar(config: any, H: number, graph: SceneNode) {
     const { values, mode, markNum } = config; 
-    
     if (!values || values.length === 0) return;
 
-    const rowCount = values.length; // Stack Layers
+    const rowCount = values.length; 
     const totalDataCols = values[0].length; 
 
     // Max Sum Calc for Normalization
@@ -398,7 +648,6 @@ function applyStackedBar(config: any, H: number, graph: SceneNode) {
     columns.forEach((colObj, index) => {
         if (globalDataIdx >= totalDataCols) return;
 
-        // Determine Bars in THIS Group
         let currentGroupBarCount = 1; 
         if (Array.isArray(markNum)) {
             if (index < markNum.length) currentGroupBarCount = markNum[index];
@@ -466,12 +715,10 @@ function applySegmentsToBar(
 ) {
     if (!("children" in barInstance)) return;
 
-    // 1. 데이터가 있는 세그먼트 (bar-01 ~ bar-n) 처리
     for (let r = 0; r < rowCount; r++) {
         const val = Number(values[r][colIndex]) || 0;
         const targetNum = r + 1;
         
-        // 정규식: bar-01, bar-1, bar01 등 허용
         const segmentPattern = new RegExp(`^bar[-_]?0*(${targetNum})$`);
         // @ts-ignore
         const targetLayer = barInstance.children.find(n => segmentPattern.test(n.name)) as (SceneNode & LayoutMixin);
@@ -482,38 +729,24 @@ function applySegmentsToBar(
             } else {
                 targetLayer.visible = true;
                 let ratio = 0;
-                
-                // 모드에 따른 비율 계산
                 if (mode === "raw") {
                     ratio = maxSum === 0 ? 0 : val / maxSum;
                 } else {
-                    // percent 모드는 0~100 사이 값
                     ratio = Math.min(Math.max(val, 0), 100) / 100;
                 }
-
-                // 높이 적용 (소수점 첫째자리 반올림)
                 const finalHeight = Math.round((H * ratio) * 10) / 10;
-                
-                // Frame이어야 paddingBottom 속성이 있음
                 if ('paddingBottom' in targetLayer) {
                     targetLayer.paddingBottom = finalHeight;
                 }
             }
         }
     }
-
-    // 2. 데이터 범위를 벗어난 잉여 세그먼트 숨김 처리 (Safety Logic)
-    // 예: 데이터는 3개(bar-01~03)인데 컴포넌트에 bar-04, bar-05가 있다면 숨김
     // @ts-ignore
     barInstance.children.forEach(child => {
-        // bar로 시작하고 뒤에 숫자가 붙는 레이어인지 확인
         const match = /^bar[-_]?0*(\d+)$/.exec(child.name);
         if (match) {
             const layerNum = parseInt(match[1]);
-            // 현재 입력된 데이터 행 개수(rowCount)보다 번호가 크면 숨김
-            if (layerNum > rowCount) {
-                child.visible = false;
-            }
+            if (layerNum > rowCount) child.visible = false;
         }
     });
 }
@@ -522,6 +755,7 @@ function applyBar(config: any, H: number, graph: SceneNode) {
     const { values, mode, markNum } = config;
     const cols = collectColumns(graph);
     
+    // 1. Max Value 계산
     let maxVal = 100;
     if (mode === "raw") {
         let allValues: number[] = [];
@@ -542,27 +776,43 @@ function applyBar(config: any, H: number, graph: SceneNode) {
              if(tab) targetParent = tab;
         }
         
+        // 2. Bar Instance (컨테이너) 찾기
         // @ts-ignore
         const barInst = targetParent.children.find(n => MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name));
         
         if(barInst && barInst.type === "INSTANCE") {
+             // Figma 컴포넌트의 'markNum' Variant 속성 변경
              setVariantProperty(barInst, VARIANT_PROPERTY_MARK_NUM, String(numMarks));
+             
              for(let m=0; m<numMarks; m++) {
                  let val = 0;
                  if (values.length > m) val = Number(values[m][cIdx]) || 0;
                  
                  const targetNum = m + 1;
-                 const pattern = (numMarks === 1) ? MARK_NAME_PATTERNS.BAR_ITEM_SINGLE : new RegExp(`^bar[-_]?0*(${targetNum})$`);
+                 
+                 // [패턴 통일] 
+                 // 1개일 때도 내부는 'bar-01'이므로 분기 없이 항상 숫자가 포함된 패턴을 사용합니다.
+                 // ^bar : bar로 시작
+                 // [-_]? : 하이픈이나 언더바가 있거나 없음
+                 // 0* : 숫자 앞 0 허용
+                 // (${targetNum})$ : 현재 순번의 숫자로 끝남
+                 const pattern = new RegExp(`^bar[-_]?0*(${targetNum})$`);
                  
                  // @ts-ignore
                  const barLayer = barInst.children.find(n => pattern.test(n.name)) as (SceneNode & LayoutMixin);
+                 
                  if(barLayer) {
-                     if(val === 0) barLayer.visible = false;
-                     else {
+                     if(val === 0) {
+                         barLayer.visible = false;
+                     } else {
                          barLayer.visible = true;
                          let ratio = (mode === "raw") ? (val / maxVal) : (val / 100);
-                         const finalH = H * ratio;
-                         if('paddingBottom' in barLayer) barLayer.paddingBottom = finalH;
+                         const finalH = Math.round((H * ratio) * 10) / 10;
+                         
+                         // Autolayout Frame인지 체크 후 높이 적용
+                         if('paddingBottom' in barLayer) {
+                             barLayer.paddingBottom = finalH;
+                         }
                      }
                  }
              }
@@ -570,11 +820,11 @@ function applyBar(config: any, H: number, graph: SceneNode) {
     });
 }
 
+
 function applyLine(config: any, H: number, graph: SceneNode) {
     const { values, mode } = config; 
     let min = 0, max = 100;
     
-    // [Improved safe calculation from code2 principles]
     if (mode === "raw") {
         const flat = values.flat().map(v => Number(v)||0);
         min = Math.min(...flat);
@@ -610,13 +860,10 @@ function applyLine(config: any, H: number, graph: SceneNode) {
             if(lineInst && lineInst.type === "INSTANCE") {
                 lineInst.visible = true;
                 
-                // Normalization using range
                 const startRatio = (startVal - min) / safeRange;
                 const endRatio = (endVal - min) / safeRange;
-                
                 const startPx = H * clamp(startRatio, 0, 1);
                 const endPx = H * clamp(endRatio, 0, 1);
-                
                 const pBottom = Math.min(startPx, endPx);
                 const pTop = H - Math.max(startPx, endPx);
                 
@@ -626,335 +873,12 @@ function applyLine(config: any, H: number, graph: SceneNode) {
                 let dir = LINE_VARIANT_VALUES.FLAT;
                 if (endPx > startPx) dir = LINE_VARIANT_VALUES.UP;
                 if (endPx < startPx) dir = LINE_VARIANT_VALUES.DOWN;
-                
                 setVariantProperty(lineInst, LINE_VARIANT_KEY_DEFAULT, dir);
             }
         }
     }
 }
 
-// ==========================================
-// 5. HELPER FUNCTIONS
-// ==========================================
-
-function initPluginUI(node: SceneNode, autoApply = false) {
-    const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
-    
-    // Retrieve Saved Data
-    const lastVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);           // UI용 (All 포함)
-    const lastDrawingVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES); // [NEW] 그리기용 (All 제외)
-    
-    const lastMarkNum = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM);
-    const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
-    const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
-    const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
-    const lastCell = node.getPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT);
-
-    const extractedColors = extractChartColors(node, chartType);
-
-    // [수정된 Auto Apply Logic]
-    if (autoApply && lastVals) {
-        let markNumToUse: any = 1;
-        if (lastMarkNum) {
-            try { markNumToUse = JSON.parse(lastMarkNum); } catch(e) {}
-        }
-
-        // [핵심] 리사이즈할 때는 DrawingValue가 있으면 그걸 쓰고, 없으면(구버전) lastVals를 씀
-        let valuesToUse = JSON.parse(lastVals);
-        if (lastDrawingVals) {
-            try {
-                valuesToUse = JSON.parse(lastDrawingVals);
-            } catch(e) {}
-        }
-
-        const payload = {
-            type: chartType,
-            mode: lastMode || 'raw',
-            values: valuesToUse,      // 여기가 수정됨 (Drawing Vals 사용)
-            rawValues: JSON.parse(lastVals),
-            cols: 0, 
-            cellCount: Number(lastCell)||4,
-            yMin: Number(lastYMin)||0,
-            yMax: Number(lastYMax)||100,
-            markNum: markNumToUse 
-        };
-        
-        const H = getGraphHeight(node as FrameNode);
-        if(chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
-        else if(chartType === 'bar') applyBar(payload, H, node);
-        else if(chartType === 'line') applyLine(payload, H, node);
-        return; 
-    }
-
-    // Infer Data
-    const inferred = inferValuesFromGraph(chartType, (node as FrameNode).height, node);
-    
-    figma.ui.postMessage({
-        type: 'init',
-        uiMode: 'edit',
-        chartType: chartType,
-        
-        // 1. Inferred Data
-        inferredValues: inferred ? inferred.values : null,
-        inferredMarkNum: inferred ? inferred.markNum : null,
-        
-        // 2. Saved Data (UI will prioritize this)
-        savedValues: lastVals ? JSON.parse(lastVals) : null,
-        savedMarkNum: lastMarkNum ? JSON.parse(lastMarkNum) : null,
-        
-        lastMode: lastMode,
-        lastCellCount: Number(lastCell) || inferred?.cellCount || 4,
-        lastYMin: lastYMin ? Number(lastYMin) : undefined,
-        lastYMax: lastYMax ? Number(lastYMax) : undefined,
-        
-        // 3. Colors
-        markColors: extractedColors
-    });
-}
-
-function inferChartType(node: SceneNode): string {
-    if (node.type === "INSTANCE") {
-        const props = node.componentProperties;
-        if (props[VARIANT_PROPERTY_TYPE]) return props[VARIANT_PROPERTY_TYPE].value;
-    }
-    let found = 'bar';
-    traverse(node, n => {
-        if (MARK_NAME_PATTERNS.STACKED_GROUP.test(n.name)) found = 'stackedBar';
-        if (MARK_NAME_PATTERNS.LINE.test(n.name)) found = 'line';
-    });
-    return found;
-}
-
-// Unified Inference (Bar & Stacked)
-function inferValuesFromGraph(chartType: string, fullHeight: number, graph: SceneNode) {
-    let xh = 0;
-    // @ts-ignore
-    const xEmpty = graph.findOne ? graph.findOne(n => n.name === "x-empty") : null;
-    if (xEmpty) xh = xEmpty.height;
-    
-    const H = fullHeight - xh;
-    if (H <= 0) return null;
-  
-    const cols = collectColumns(graph);
-    if (!cols.length) return null;
-  
-    // Detect Cell Count
-    let detectedCellCount = 4;
-    const yAxis = (graph as FrameNode).findOne(n => MARK_NAME_PATTERNS.Y_AXIS_CONTAINER.test(n.name));
-    if(yAxis && "children" in yAxis) {
-            let maxIdx = 0;
-            yAxis.children.forEach(c => {
-                const match = MARK_NAME_PATTERNS.Y_CEL_ITEM.exec(c.name);
-                if(match && c.visible) maxIdx = Math.max(maxIdx, parseInt(match[1]));
-            });
-            if(maxIdx > 0) detectedCellCount = maxIdx;
-    }
-  
-    // 1. STACKED BAR INFERENCE
-    if (chartType === "stackedBar") {
-        const groupStructure: number[] = [];
-        const flattenedBars: SceneNode[] = [];
-        
-        cols.forEach(colObj => {
-            let parent = colObj.node;
-            if("children" in parent) {
-                // @ts-ignore
-                const tab = parent.children.find(n => n.name === "tab");
-                if(tab) parent = tab;
-            }
-            // @ts-ignore
-            const group = parent.children.find(n => MARK_NAME_PATTERNS.STACKED_GROUP.test(n.name));
-            
-            if(group && "children" in group) {
-                // @ts-ignore
-                const visibleBars = group.children.filter(n => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name) && n.visible);
-                // @ts-ignore
-                visibleBars.sort((a, b) => {
-                    const numA = parseInt(a.name.match(/\d+/)?.[0] || "0");
-                    const numB = parseInt(b.name.match(/\d+/)?.[0] || "0");
-                    return numA - numB;
-                });
-                
-                groupStructure.push(visibleBars.length);
-                flattenedBars.push(...visibleBars);
-            } else {
-                groupStructure.push(0); 
-            }
-        });
-
-        let maxRows = 1;
-        if(flattenedBars.length > 0) {
-             // @ts-ignore
-             const segments = flattenedBars[0].children.filter(n => MARK_NAME_PATTERNS.STACKED_SEGMENT.test(n.name) && n.visible);
-             if(segments.length > 0) maxRows = segments.length;
-        }
-
-        const extractedValues: number[][] = Array.from({ length: maxRows }, () => []);
-
-        for (let r = 0; r < maxRows; r++) {
-            flattenedBars.forEach(bar => {
-                let val = 0;
-                // @ts-ignore
-                const segment = bar.children.find(n => {
-                    const match = MARK_NAME_PATTERNS.STACKED_SEGMENT.exec(n.name);
-                    return match && parseInt(match[1]) === (r + 1);
-                });
-                
-                if (segment && segment.visible && 'paddingBottom' in segment) {
-                    const ratio = segment.paddingBottom / H;
-                    val = Math.round(ratio * 100 * 10) / 10;
-                }
-                extractedValues[r].push(val);
-            });
-        }
-
-        return { 
-            mode: "percent", 
-            values: extractedValues, 
-            cellCount: detectedCellCount,
-            markNum: groupStructure 
-        };
-    }
-
-    // 2. LINE CHART INFERENCE (Restored from code2)
-    if (chartType === "line") {
-        let maxRows = 1;
-        cols.forEach(c => {
-            let parent = c.node;
-            // @ts-ignore
-            const tab = c.node.children ? (c.node as FrameNode).children.find(n => n.name === "tab") : null;
-            if(tab) parent = tab;
-            
-            const layers = findAllLineLayers(parent);
-            layers.forEach(l => {
-                if(!l.visible) return;
-                const match = MARK_NAME_PATTERNS.LINE.exec(l.name);
-                if(match) {
-                    const num = match[1] ? parseInt(match[1], 10) : 1;
-                    if(num > maxRows) maxRows = num;
-                }
-            });
-        });
-
-        const extractedValues: number[][] = Array.from({ length: maxRows }, () => []);
-
-        for (let r = 0; r < maxRows; r++) {
-            const targetNum = r + 1;
-            cols.forEach((c, index) => {
-                let parentNode: SceneNode = c.node;
-                // @ts-ignore
-                const tabNode = c.node.children ? (c.node as FrameNode).children.find(n => n.name === "tab") : null;
-                if (tabNode) parentNode = tabNode;
-
-                const lineLayers = findAllLineLayers(parentNode);
-                const targetLayer = lineLayers.find(layer => {
-                    const match = MARK_NAME_PATTERNS.LINE.exec(layer.name);
-                    if (!match) return false;
-                    const layerNum = match[1] ? parseInt(match[1], 10) : 1;
-                    return layerNum === targetNum;
-                });
-
-                let startVal = 0;
-                let endVal = 0;
-
-                if (targetLayer && targetLayer.visible && targetLayer.type === "INSTANCE") {
-                    const pb = targetLayer.paddingBottom;
-                    const pt = targetLayer.paddingTop;    
-                    const props = targetLayer.componentProperties;
-                    
-                    let foundDir = "";
-                    for (const valueObj of Object.values(props)) {
-                        const rawVal = String(valueObj.value).toLowerCase().trim();
-                        if (rawVal === LINE_VARIANT_VALUES.UP) foundDir = LINE_VARIANT_VALUES.UP;
-                        else if (rawVal === LINE_VARIANT_VALUES.DOWN) foundDir = LINE_VARIANT_VALUES.DOWN;
-                    }
-                    
-                    const minPx = pb;
-                    const maxPx = H - pt;
-                    const minVal = Math.round((minPx / H) * 100 * 10) / 10;
-                    const maxVal = Math.round((maxPx / H) * 100 * 10) / 10;
-
-                    if (foundDir === LINE_VARIANT_VALUES.UP) {
-                        startVal = minVal;
-                        endVal = maxVal;
-                    } else if (foundDir === LINE_VARIANT_VALUES.DOWN) {
-                        startVal = maxVal;
-                        endVal = minVal;
-                    } else {
-                        startVal = minVal;
-                        endVal = minVal;
-                    }
-                }
-
-                if (index === 0) extractedValues[r].push(startVal);
-                extractedValues[r].push(endVal);
-            });
-        }
-        return { mode: "percent", values: extractedValues, cellCount: detectedCellCount };
-    }
-
-    // 3. BAR CHART INFERENCE
-    if (chartType === "bar") {
-        let rowCount = 1; 
-        const extractedValues: number[][] = [[]];
-        cols.forEach(c => extractedValues[0].push(0)); 
-        return { mode: "percent", values: extractedValues, cellCount: detectedCellCount };
-    }
-
-    return null;
-}
-
-function collectColumns(node: SceneNode) {
-    const cols: { node: SceneNode, index: number }[] = [];
-    if ("children" in node) {
-        for (const child of node.children) {
-            const match = MARK_NAME_PATTERNS.COL_ALL.exec(child.name);
-            if (match) {
-                cols.push({ node: child, index: parseInt(match[1], 10) });
-            }
-        }
-    }
-    return cols.sort((a, b) => a.index - b.index);
-}
-
-function getGraphHeight(node: FrameNode) {
-    let xh = 0;
-    const xEmpty = node.findOne(n => n.name === "x-empty");
-    if (xEmpty) xh = xEmpty.height;
-    return node.height - xh;
-}
-
-function setVariantProperty(instance: InstanceNode, key: string, value: string) {
-    try {
-        const props = instance.componentProperties;
-        const propKey = Object.keys(props).find(k => k === key || k.startsWith(key + "#"));
-        if (propKey && props[propKey].value !== value) {
-            instance.setProperties({ [propKey]: value });
-        }
-    } catch (e) {}
-}
-
-function setLayerVisibility(parent: SceneNode, namePrefix: string, count: number) {
-    if (!("children" in parent)) return;
-    parent.children.forEach(child => {
-        if (child.name.startsWith(namePrefix)) {
-            const num = parseInt(child.name.replace(namePrefix, ""));
-            child.visible = num <= count;
-        }
-    });
-}
-
-function applyCells(node: SceneNode, count: number) {
-    traverse(node, n => {
-        const match = MARK_NAME_PATTERNS.CEL.exec(n.name);
-        if (match) {
-            const idx = parseInt(match[1]);
-            n.visible = idx <= count;
-        }
-    });
-}
-
-// [Updated] applyYAxis: Component Property Logic (code2.ts 기반 복구)
 function applyYAxis(node: SceneNode, cellCount: number, payload: any) {
     const { yMin, yMax } = payload;
     // @ts-ignore
@@ -968,65 +892,34 @@ function applyYAxis(node: SceneNode, cellCount: number, payload: any) {
         const match = MARK_NAME_PATTERNS.Y_CEL_ITEM.exec(child.name);
         if (match) {
             const idx = parseInt(match[1]);
-            
-            // 유효한 인덱스인지 확인
             if (idx <= cellCount) {
                 child.visible = true;
-
                 if (child.type === "INSTANCE") {
                     try {
                         const propsToSet: any = {};
                         const currentProps = child.componentProperties;
-
-                        // [값 계산]
-                        // yLabel: 해당 셀의 시작 값 (예: 1번 셀은 0 * step)
                         const valLabel = yMin + (step * (idx - 1));
-                        // yEnd: 해당 셀의 끝 값 (예: 마지막 셀은 n * step)
                         const valEnd = yMin + (step * idx);
-
                         const textLabel = formatValue(valLabel);
                         const textEnd = formatValue(valEnd);
 
-                        // [프로퍼티 키 찾기]
                         const keyCelType = findActualPropKey(currentProps, VARIANT_PROPERTY_CEL_TYPE);
                         const keyLabel = findActualPropKey(currentProps, VARIANT_PROPERTY_Y_LABEL);
                         const keyEnd = findActualPropKey(currentProps, VARIANT_PROPERTY_Y_END);
 
-                        // 1. yLabel 설정 (모든 셀 공통)
-                        if (keyLabel) {
-                            propsToSet[keyLabel] = textLabel;
-                        }
-
-                        // 2. 마지막 셀 처리 (yEnd 및 celType)
+                        if (keyLabel) propsToSet[keyLabel] = textLabel;
                         if (idx === cellCount) {
                             if (keyCelType) propsToSet[keyCelType] = "end";
-                            // 질문하신대로 마지막 셀의 yEnd에 Y Max 값이 들어갑니다.
                             if (keyEnd) propsToSet[keyEnd] = textEnd;
                         } else {
                             if (keyCelType) propsToSet[keyCelType] = "default";
                         }
-
-                        if (Object.keys(propsToSet).length > 0) {
-                            child.setProperties(propsToSet);
-                        }
-
-                    } catch(e) {
-                        console.error(`Error applying props to ${child.name}`, e);
-                    }
+                        if (Object.keys(propsToSet).length > 0) child.setProperties(propsToSet);
+                    } catch(e) {}
                 }
-
             } else {
                 child.visible = false;
             }
         }
     });
-}
-
-async function loadFontAndSetText(textNode: TextNode, text: string) {
-    try {
-        await figma.loadFontAsync(textNode.fontName as FontName);
-        textNode.characters = text;
-    } catch(e) {
-        console.log("Font load error", e);
-    }
 }

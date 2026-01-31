@@ -19,7 +19,11 @@
                         'border-strong': '#BDBDBD',
                         danger: '#F24822',
                         text: '#333333',
-                        'text-sub': '#888888'
+                        'text-sub': '#888888',
+                        // Custom Grays for Charts
+                        'chart-gray-400': '#9CA3AF',
+                        'chart-gray-500': '#6B7280',
+                        'chart-highlight': '#0EA5E9'
                     },
                     fontSize: {
                         xxs: '10px',
@@ -59,6 +63,9 @@
         
         /* Row Header Hover Effects */
         .row-header:hover .del-row-btn { display: flex; }
+        
+        /* Hover Header Highlight Effect */
+        .header-hover { background-color: #E0F2FE !important; color: #0284C7 !important; transition: all 0.2s; }
     </style>
 </head>
 <body class="bg-white text-text flex flex-col h-screen box-border text-xs overflow-hidden">
@@ -162,6 +169,16 @@
             <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Data Setting</h2>
 
             <div class="flex flex-col gap-2 h-full">
+                <div id="preview-section" class="bg-white border border-border rounded-md p-2 shadow-sm shrink-0 flex flex-col gap-2">
+                    <div class="flex items-center justify-between">
+                         <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
+                         <span class="text-xxs text-text-sub">* Hover grid headers to highlight</span>
+                    </div>
+                    <div id="chart-preview-container" class="w-full h-52 bg-surface rounded border border-border flex items-center justify-center overflow-hidden relative">
+                        <span class="text-text-sub text-xs">Generating Preview...</span>
+                    </div>
+                </div>
+
                 <div class="bg-white border border-border rounded-md px-3 py-2 shadow-sm shrink-0 flex items-center justify-between">
                     <div class="flex items-center gap-2 overflow-hidden">
                          <span class="text-xs font-semibold text-text-sub shrink-0">CSV</span>
@@ -216,14 +233,14 @@
 
                     <div id="grid-container-wrapper" class="flex flex-1 relative overflow-hidden bg-white">
                         <div class="flex flex-col border-t border-border z-10 shadow-left-scroll bg-surface shrink min-w-[72px]">
-                            <div class="h-6 border-r border-b border-border-strong bg-surface shrink-0"></div>
+                            <div id="header-corner-tl" class="h-6 border-r border-b border-border-strong bg-surface shrink-0"></div>
                             <div id="row-header-container" class="overflow-hidden flex-col no-scrollbar pb-10"></div>
                         </div>
                         <div id="grid-scroll-area" class="flex-1 overflow-auto relative scroll-smooth">
                             <div id="data-grid" class="grid gap-0 border-t border-l border-border w-fit"></div>
                         </div>
                         <div class="w-8 shrink-0 border-l border-b border-t border-border bg-white flex flex-col z-20 shadow-left-scroll">
-                            <div class="h-6 border-b border-border-strong bg-surface flex items-center justify-center shrink-0">
+                            <div id="header-corner-tr" class="h-6 border-b border-border-strong bg-surface flex items-center justify-center shrink-0">
                                 <svg class="w-3 h-3 fill-text-sub" viewBox="0 0 0 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                             </div>
                             <button id="add-col-fixed-btn" class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors" title="Add Column / Group">+</button>
@@ -258,7 +275,7 @@
             rows: 3,        
             cols: 3, 
             cellCount: 4,
-            groupStructure: [2, 2, 2], 
+            groupStructure: [2, 2, 2],
             data: [], 
             mode: 'edit', chartType: 'bar', 
             dataMode: 'raw', 
@@ -356,16 +373,13 @@
         function clearRangeErrors() {
             ui.gridContainer.querySelectorAll('input').forEach(input => {
                 const wrapper = input.parentElement;
-                wrapper.classList.remove('bg-red-50', 'bg-red-200'); // Remove all error backgrounds
+                wrapper.classList.remove('bg-red-50', 'bg-red-200'); 
                 const row = parseInt(input.dataset.row);
-                
-                // Stacked Bar Row 0(All) 배경 처리
                 if (state.chartType === 'stackedBar' && row === 0) {
                     wrapper.classList.add('bg-blue-50');
                 } else {
                     wrapper.classList.add((row % 2 === 1) ? 'bg-surface' : 'bg-white');
                 }
-                
                 input.classList.remove('text-danger', 'font-medium', 'font-bold');
             });
         }
@@ -434,7 +448,6 @@
             ui.chartTypeDisplay.textContent = displayType;
             ui.chartTypeIcon.innerHTML = CHART_ICONS[state.chartType] || CHART_ICONS['bar'];
             
-            // Tooltip toggle
             if(state.chartType === 'stackedBar') ui.tooltipStackedHint.classList.remove('hidden');
             else ui.tooltipStackedHint.classList.add('hidden');
         }
@@ -449,15 +462,13 @@
                 ui.mainCta.style.display = 'none';
                 ui.editModeBtn.classList.add('hidden'); 
                 removeCsv();
-                parent.postMessage({ pluginMessage: { type: 'resize', width: 300, height: 400 } }, '*');
                 state.uiMode = 'create';
             } else {
                 ui.step2.classList.add('active');
                 ui.backBtn.classList.remove('hidden');
                 ui.chartTypeWrapper.classList.remove('hidden'); 
                 
-                const targetHeight = state.chartType === 'stackedBar' ? 680 : 620;
-                parent.postMessage({ pluginMessage: { type: 'resize', width: 600, height: targetHeight } }, '*'); 
+                const targetHeight = state.chartType === 'stackedBar' ? 780 : 720; 
 
                 updateHeaderIcon();
                 ui.mainCta.style.display = 'block';
@@ -503,7 +514,6 @@
                     let targetData = null;
                     let targetMarkNum = null;
 
-                    // Priority: Saved Data > Inferred Data
                     if (msg.savedValues) {
                         targetData = msg.savedValues;
                         targetMarkNum = msg.savedMarkNum;
@@ -513,7 +523,6 @@
                     }
 
                     if (targetData) {
-                        // Apply Data
                         state.data = targetData.map(row => row.map(v => String(v)));
                         
                         if (msg.chartType === 'stackedBar') {
@@ -525,21 +534,12 @@
                                 state.groupStructure = [state.data[0].length];
                             }
                             
-                            // [SMART LOAD LOGIC]
-                            // 저장된 데이터가 All 행을 포함하고 있는지 확인 (Visual Rows vs Data Rows)
-                            // 1. Inferred(Visual) Data가 있다면 Row 수는 실제 막대 개수
-                            // 2. 만약 Saved Data의 Row 수가 Visual Row 수와 같다면 -> All 행이 없는 구버전 데이터 -> unshift 필요
-                            // 3. 만약 Saved Data가 더 많다면 -> All 행이 있는 신버전 데이터 -> unshift 불필요
-                            
                             let shouldAddAllRow = false;
                             
                             if (targetData === msg.inferredValues) {
-                                // 그래프에서 읽어온 데이터는 무조건 All 행 없음 (Visual only)
                                 shouldAddAllRow = true;
                             } else if (targetData === msg.savedValues) {
-                                // 저장된 데이터 로드 시
                                 const visualRowCount = msg.inferredValues ? msg.inferredValues.length : 0;
-                                // 저장된 데이터 행이 시각적 행보다 같거나 적으면 'All' 행이 없는 것으로 간주
                                 if (state.data.length <= visualRowCount) {
                                     shouldAddAllRow = true;
                                 }
@@ -549,7 +549,6 @@
                                 const colsCount = state.data.length > 0 ? state.data[0].length : state.cols;
                                 state.data.unshift(new Array(colsCount).fill(""));
                             }
-                            
                             state.rows = state.data.length; 
 
                         } else {
@@ -558,10 +557,10 @@
                             if (msg.chartType === 'line') state.cols = Math.max(1, state.cols - 1);
                         }
                     } else {
-                        // Default Initialization
+                        // Reverted Default Initialization for Stacked Bar
                         if (msg.chartType === 'stackedBar') {
-                            state.groupStructure = [2, 2, 2];
-                            state.data = initData(4, 6); // Row 0(All) + 3 Stacks = 4 rows
+                            state.groupStructure = [2, 2, 2]; // 3 Groups, 2 Bars each
+                            state.data = initData(4, 6); // All + 3 Stacks = 4 rows, 6 cols total
                             state.rows = 4;
                             state.cols = 3;
                         } else {
@@ -581,9 +580,6 @@
             }
         };
 
-        // ==========================================
-        // VALIDATION LOGIC FOR STACKED BAR
-        // ==========================================
         function validateStackedData() {
             if (state.chartType !== 'stackedBar') return;
             if (state.data.length < 2) return; 
@@ -591,11 +587,9 @@
             const totalCols = state.data[0].length;
 
             for (let c = 0; c < totalCols; c++) {
-                // 1. Get All Value (Row 0)
                 const allValStr = state.data[0][c];
                 const allVal = Number(allValStr);
                 
-                // If All is empty, skip strict validation but clear errors
                 if (allValStr === "" || isNaN(allVal)) {
                      for (let r = 0; r < state.rows; r++) {
                          const cellInput = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
@@ -613,8 +607,6 @@
                 }
 
                 let stackSum = 0;
-                
-                // 2. Iterate Stacks (Row 1 ~ End)
                 for (let r = 1; r < state.rows; r++) {
                     const stackValStr = state.data[r][c];
                     const stackVal = Number(stackValStr);
@@ -626,8 +618,6 @@
 
                         if (stackValStr !== "" && !isNaN(stackVal)) {
                             stackSum += stackVal;
-                            
-                            // Condition B: Single Stack > All
                             if (stackVal > allVal) {
                                 isError = true;
                                 wrapper.classList.remove('bg-white', 'bg-surface');
@@ -644,7 +634,6 @@
                     }
                 }
 
-                // 3. Condition A: Sum of Stacks > All
                 const allInput = document.querySelector(`input[data-row="0"][data-col="${c}"]`);
                 if (allInput) {
                     const wrapper = allInput.parentElement;
@@ -675,21 +664,27 @@
             
             ui.gridContainer.style.gridTemplateColumns = `repeat(${gridCols}, minmax(60px, 1fr))`;
 
-            // ----------------------------------------------------
             // [HEADER AREA]
-            // ----------------------------------------------------
             if (state.chartType === 'stackedBar') {
                 // [Level 1] Super Header (Groups)
                 for (let g = 0; g < state.groupStructure.length; g++) { 
                     const groupHeader = document.createElement('div');
+                    groupHeader.id = `header-group-${g}`;
+                    
                     const spanCount = state.groupStructure[g];
                     groupHeader.style.gridColumn = `span ${spanCount}`;
                     
-                    groupHeader.className = 'sticky top-0 z-30 bg-gray-100 border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-bold text-text group relative';
+                    // [UPDATED] Added border-r-2 for thicker border
+                    groupHeader.className = 'sticky top-0 z-30 bg-gray-100 border-r-2 border-b border-border-strong flex items-center justify-center h-6 text-xxs font-bold text-text group relative cursor-pointer hover:bg-blue-50';
                     groupHeader.innerHTML = `<span>Group ${g + 1}</span>`;
+                    
+                    // Interaction: Hover Group
+                    groupHeader.addEventListener('mouseenter', () => highlightPreview('group', g));
+                    groupHeader.addEventListener('mouseleave', () => resetPreviewHighlight());
 
                     if (state.mode === 'edit') {
                         const addBarBtn = document.createElement('button');
+                        addBarBtn.id = `btn-add-bar-group-${g}`;
                         addBarBtn.className = 'absolute left-1 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-primary hover:text-primary-hover';
                         addBarBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>`;
                         addBarBtn.title = "Add Bar to Group";
@@ -697,6 +692,7 @@
                         groupHeader.appendChild(addBarBtn);
 
                         const delBtn = document.createElement('button');
+                        delBtn.id = `btn-del-group-${g}`;
                         delBtn.className = 'absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
                         delBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
                         delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(g); };
@@ -706,14 +702,29 @@
                 }
 
                 // [Level 2] Sub Header (Bars)
+                let colCursor = 0;
                 state.groupStructure.forEach((count, gIdx) => {
                     for (let b = 0; b < count; b++) {
                         const subHeader = document.createElement('div');
-                        subHeader.className = 'sticky top-6 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-[9px] font-medium text-text-sub group relative';
+                        const actualColIndex = colCursor; 
+                        
+                        subHeader.id = `header-sub-group-${gIdx}-bar-${b}`;
+                        subHeader.className = 'sticky top-6 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-[9px] font-medium text-text-sub group relative cursor-pointer hover:text-primary';
                         subHeader.textContent = `Bar ${b + 1}`;
                         
+                        // Interaction: Hover Sub-bar
+                        subHeader.addEventListener('mouseenter', () => { 
+                            subHeader.classList.add('header-hover');
+                            highlightPreview('col', actualColIndex); 
+                        });
+                        subHeader.addEventListener('mouseleave', () => { 
+                            subHeader.classList.remove('header-hover');
+                            resetPreviewHighlight(); 
+                        });
+
                         if (state.mode === 'edit') {
                             const delSubBtn = document.createElement('button');
+                            delSubBtn.id = `btn-del-sub-group-${gIdx}-bar-${b}`;
                             delSubBtn.className = 'absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
                             delSubBtn.innerHTML = `<svg class="w-2 h-2 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
                             const currentG = gIdx; 
@@ -722,6 +733,7 @@
                             subHeader.appendChild(delSubBtn);
                         }
                         ui.gridContainer.appendChild(subHeader);
+                        colCursor++;
                     }
                 });
 
@@ -729,14 +741,26 @@
                 // CASE B: Normal Charts
                 for (let j = 0; j < gridCols; j++) {
                     const headerCell = document.createElement('div');
-                    headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-semibold text-text-sub group relative';
+                    headerCell.id = `header-col-${j}`;
+                    headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-semibold text-text-sub group relative cursor-pointer transition-colors';
                     
                     let colLabel = `${j + 1}`;
                     if (state.chartType === 'line') colLabel = `P ${j + 1}`;
                     
                     headerCell.innerHTML = `<span>${colLabel}</span>`;
+                    
+                    headerCell.addEventListener('mouseenter', () => {
+                        headerCell.classList.add('header-hover');
+                        highlightPreview('col', j);
+                    });
+                    headerCell.addEventListener('mouseleave', () => {
+                        headerCell.classList.remove('header-hover');
+                        resetPreviewHighlight();
+                    });
+
                     if (state.mode === 'edit') {
                         const delBtn = document.createElement('button');
+                        delBtn.id = `btn-del-col-${j}`;
                         delBtn.className = 'absolute right-0.5 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
                         delBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
                         delBtn.onclick = () => deleteColumn(j);
@@ -746,18 +770,16 @@
                 }
             }
 
-            // ----------------------------------------------------
             // [BODY AREA] Rows
-            // ----------------------------------------------------
             state.data.forEach((row, rowIndex) => {
                 const isStackedAll = (state.chartType === 'stackedBar' && rowIndex === 0);
-                
                 const isZebra = (rowIndex % 2 === 1);
                 let bgClass = isZebra ? 'bg-surface' : 'bg-white';
                 if (isStackedAll) bgClass = 'bg-blue-50'; 
 
                 const rowHeader = document.createElement('div');
-                rowHeader.className = `row-header group relative w-full h-6 px-2 border-b border-r border-border-strong text-xxs font-semibold text-text-sub flex items-center justify-between truncate ${bgClass}`;
+                rowHeader.id = `header-row-${rowIndex}`;
+                rowHeader.className = `row-header group relative w-full h-6 px-2 border-b border-r border-border-strong text-xxs font-semibold text-text-sub flex items-center justify-between truncate ${bgClass} cursor-pointer transition-colors`;
                 
                 let rowLabelText = "";
                 if (state.chartType === 'line') rowLabelText = `Line ${rowIndex + 1}`;
@@ -774,8 +796,19 @@
                 if (isStackedAll) textSpan.classList.add('text-primary-hover', 'font-bold');
                 rowHeader.appendChild(textSpan);
                 
+                // Interaction: Hover Row
+                rowHeader.addEventListener('mouseenter', () => {
+                    rowHeader.classList.add('header-hover');
+                    highlightPreview('row', rowIndex);
+                });
+                rowHeader.addEventListener('mouseleave', () => {
+                    rowHeader.classList.remove('header-hover');
+                    resetPreviewHighlight();
+                });
+
                 if (state.mode === 'edit' && !isStackedAll) {
                      const delRowBtn = document.createElement('button');
+                     delRowBtn.id = `btn-del-row-${rowIndex}`;
                      delRowBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 17.59 13.41 12 19 6.41z"/></svg>`;
                      delRowBtn.className = 'del-row-btn w-4 h-4 hidden items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger shrink-0';
                      delRowBtn.onclick = (e) => { e.stopPropagation(); deleteRow(rowIndex); };
@@ -786,8 +819,11 @@
                 // Cells
                 row.forEach((cellValue, colIndex) => {
                     const cellWrapper = document.createElement('div');
-                    cellWrapper.className = `flex items-center w-full h-6 border-r border-b border-border-strong ${bgClass}`;
+                    // [UPDATED] Added hover:bg-blue-50
+                    cellWrapper.className = `flex items-center w-full h-6 border-r border-b border-border-strong ${bgClass} hover:bg-blue-50 transition-colors`;
                     const input = document.createElement('input');
+                    input.id = `input-cell-${rowIndex}-${colIndex}`;
+                    
                     input.type = 'text'; input.value = cellValue; input.dataset.row = rowIndex; input.dataset.col = colIndex;
                     
                     let isError = false; 
@@ -802,6 +838,14 @@
                     if (isStackedAll) classes += ' font-bold text-primary';
 
                     input.className = classes;
+                    
+                    // Input Interaction: Focus & Hover to Highlight
+                    // [UPDATED] Added mouseenter/mouseleave events
+                    input.addEventListener('focus', () => highlightPreview('cell', rowIndex, colIndex));
+                    input.addEventListener('mouseenter', () => highlightPreview('cell', rowIndex, colIndex));
+                    input.addEventListener('mouseleave', () => resetPreviewHighlight());
+                    input.addEventListener('blur', () => resetPreviewHighlight());
+                    
                     input.addEventListener('input', (e) => {
                         state.data[rowIndex][colIndex] = e.target.value;
                         updateModeButtonState(); 
@@ -819,6 +863,7 @@
                         }
                         
                         checkCtaValidation();
+                        renderPreview(); 
                     });
                     cellWrapper.appendChild(input);
                     if (state.dataMode === 'percent') {
@@ -835,7 +880,325 @@
                 ui.rowHeaderContainer.style.marginTop = '0px'; 
             }
             checkCtaValidation();
+            renderPreview(); 
         }
+
+        // ==========================================
+        // PREVIEW SECTION (Refactored)
+        // ==========================================
+
+        const PREVIEW_OPTS = {
+            padding: { top: 20, right: 80, bottom: 20, left: 80 },
+            colors: {
+                default: '#9CA3AF', // Gray-400
+                secondary: '#6B7280', // Gray-500
+                highlight: '#0EA5E9' // Sky-500
+            },
+            barWidthRatio: 0.6 
+        };
+
+        function renderPreview() {
+            const container = document.getElementById('chart-preview-container');
+            if (!container) return;
+
+            const rows = state.rows;
+            const chartType = state.chartType;
+            
+            const width = container.clientWidth || 300;
+            const height = container.clientHeight || 208;
+            
+            const { padding, colors, barWidthRatio } = PREVIEW_OPTS;
+            
+            const drawW = width - padding.left - padding.right;
+            const drawH = height - padding.top - padding.bottom;
+            const svgNS = "http://www.w3.org/2000/svg";
+            
+            const svg = document.createElementNS(svgNS, "svg");
+            svg.setAttribute("width", "100%");
+            svg.setAttribute("height", "100%");
+            svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+            // Axis Lines
+            const yAxis = document.createElementNS(svgNS, "line");
+            yAxis.setAttribute("x1", padding.left); yAxis.setAttribute("y1", padding.top);
+            yAxis.setAttribute("x2", padding.left); yAxis.setAttribute("y2", height - padding.bottom);
+            yAxis.setAttribute("stroke", "#E0E0E0"); yAxis.setAttribute("stroke-width", "1");
+            svg.appendChild(yAxis);
+
+            const xAxis = document.createElementNS(svgNS, "line");
+            xAxis.setAttribute("x1", padding.left); xAxis.setAttribute("y1", height - padding.bottom);
+            xAxis.setAttribute("x2", width - padding.right); xAxis.setAttribute("y2", height - padding.bottom);
+            xAxis.setAttribute("stroke", "#E0E0E0"); xAxis.setAttribute("stroke-width", "1");
+            svg.appendChild(xAxis);
+
+            let totalGridCols = 0;
+            if(state.data.length > 0) totalGridCols = state.data[0].length;
+            if(totalGridCols === 0) return;
+
+            // [FIXED] Dynamic Scale Calculation
+            // 1. 사용자 설정값 가져오기
+            const settingYMin = Number(ui.settingYMin.value) || 0;
+            const settingYMax = Number(ui.settingYMax.value) || 100;
+            
+            // 2. 실제 데이터의 최댓값(Max) 계산
+            let dataMax = 0;
+            if (chartType === 'stackedBar') {
+                // Stacked Bar는 '쌓인 높이(Sum)'가 기준이 되어야 함
+                for(let c = 0; c < totalGridCols; c++) {
+                    let colSum = 0;
+                    // Row 0(Total)은 제외하고 실제 쌓이는 Row 1부터 합산
+                    for(let r = 1; r < rows; r++) {
+                        const val = Number(state.data[r][c]);
+                        if (!isNaN(val)) colSum += val;
+                    }
+                    if (colSum > dataMax) dataMax = colSum;
+                }
+            } else {
+                // Bar, Line 차트는 개별 값 중 최댓값 찾기
+                state.data.forEach(row => {
+                    row.forEach(val => {
+                        const num = Number(val);
+                        if (!isNaN(num) && num > dataMax) dataMax = num;
+                    });
+                });
+            }
+
+            // 3. 최종 Y Max 결정 (설정값보다 데이터가 크면 데이터 기준, 아니면 설정값 기준)
+            // Raw 모드일 때만 자동 확장을 적용합니다.
+            let finalYMax = settingYMax;
+            if (state.dataMode === 'raw') {
+                finalYMax = Math.max(settingYMax, dataMax);
+            }
+
+            const yMin = settingYMin;
+            const yRange = (finalYMax - yMin) === 0 ? 1 : (finalYMax - yMin);
+
+
+            // ==========================================
+            // LINE CHART RENDERING
+            // ==========================================
+            if (chartType === 'line') {
+                const segmentWidth = drawW / state.cols; 
+
+                for (let r = 0; r < rows; r++) {
+                    let points = "";
+                    let circleElements = [];
+                    
+                    for (let c = 0; c < totalGridCols; c++) {
+                        let rawVal = "";
+                        if (state.data[r] && state.data[r][c]) rawVal = state.data[r][c];
+                        
+                        const numVal = Number(rawVal);
+                        let val = (rawVal === "" || isNaN(numVal)) ? yMin : numVal;
+
+                        const normalizedVal = Math.max(0, val - yMin);
+                        // 비율 계산 시 finalYMax 기준인 yRange 사용
+                        const ratio = Math.min(Math.max(normalizedVal / yRange, 0), 1);
+                        const barH = drawH * ratio;
+
+                        const cx = padding.left + (c * segmentWidth);
+                        const cy = (height - padding.bottom) - barH;
+
+                        points += `${cx},${cy} `;
+
+                        const circle = document.createElementNS(svgNS, "circle");
+                        circle.setAttribute("cx", cx);
+                        circle.setAttribute("cy", cy);
+                        circle.setAttribute("r", "3");
+                        circle.setAttribute("fill", colors.default);
+                        circle.setAttribute("stroke", "#fff");
+                        circle.setAttribute("stroke-width", "1");
+                        
+                        circle.setAttribute("data-row", r);
+                        circle.setAttribute("data-col", c);
+                        circle.setAttribute("data-original-fill", colors.default);
+                        circle.classList.add('preview-mark');
+                        
+                        circleElements.push(circle);
+                    }
+
+                    const polyline = document.createElementNS(svgNS, "polyline");
+                    polyline.setAttribute("points", points);
+                    polyline.setAttribute("fill", "none");
+                    polyline.setAttribute("stroke", colors.secondary);
+                    polyline.setAttribute("stroke-width", "2");
+                    polyline.setAttribute("stroke-linejoin", "round");
+                    polyline.setAttribute("stroke-linecap", "round");
+                    
+                    // 호버 효과용 속성
+                    polyline.setAttribute("data-row", r);
+                    polyline.classList.add('preview-line');
+
+                    svg.appendChild(polyline);
+                    circleElements.forEach(circle => svg.appendChild(circle));
+                }
+
+            } else {
+                // ==========================================
+                // BAR / STACKED BAR RENDERING
+                // ==========================================
+                let colToGroupMap = [];
+                if (chartType === 'stackedBar') {
+                    state.groupStructure.forEach((count, gIdx) => {
+                        for(let i=0; i<count; i++) {
+                            colToGroupMap.push({ groupIdx: gIdx, colInGroup: i, totalInGroup: count });
+                        }
+                    });
+                }
+
+                for (let c = 0; c < totalGridCols; c++) {
+                    let stackY = 0;
+
+                    for (let r = 0; r < rows; r++) {
+                        if (chartType === 'stackedBar' && r === 0) continue;
+
+                        let rawVal = "";
+                        if (state.data[r] && state.data[r][c]) rawVal = state.data[r][c];
+                        const numVal = Number(rawVal);
+                        let val = (rawVal === "" || isNaN(numVal)) ? 
+                                  ((chartType === 'stackedBar') ? (finalYMax - yMin)/(rows-1) : (finalYMax - yMin)*0.7) : numVal;
+                        
+                        const normalizedVal = Math.max(0, val - yMin);
+                        const ratio = Math.min(Math.max(normalizedVal / yRange, 0), 1);
+                        const barH = drawH * ratio;
+
+                        const rect = document.createElementNS(svgNS, "rect");
+                        let x = 0, y = 0, rectWidth = 0;
+
+                        if (chartType === 'stackedBar') {
+                            const mapInfo = colToGroupMap[c];
+                            if (mapInfo) {
+                                const groupSlotWidth = drawW / state.groupStructure.length;
+                                const effectiveBarWidth = (groupSlotWidth * barWidthRatio) / mapInfo.totalInGroup;
+                                x = padding.left + (mapInfo.groupIdx * groupSlotWidth) + (groupSlotWidth * (1 - barWidthRatio) / 2) + (mapInfo.colInGroup * effectiveBarWidth);
+                                y = (height - padding.bottom) - stackY - barH;
+                                stackY += barH;
+                                rectWidth = Math.max(0, effectiveBarWidth - 1);
+                            }
+                        } else {
+                            let effectiveColWidth = drawW / state.cols;
+                            let effectiveBarWidth = (effectiveColWidth * barWidthRatio) / rows;
+                            x = padding.left + (c * effectiveColWidth) + (effectiveColWidth * (1 - barWidthRatio) / 2) + (r * effectiveBarWidth);
+                            y = (height - padding.bottom) - barH;
+                            rectWidth = Math.max(0, effectiveBarWidth - 1);
+                        }
+
+                        rect.setAttribute("x", x);
+                        rect.setAttribute("y", y);
+                        rect.setAttribute("width", rectWidth);
+                        rect.setAttribute("height", Math.max(0, barH));
+                        rect.setAttribute("fill", (chartType === 'stackedBar' && r % 2 === 0) ? colors.secondary : colors.default);
+                        rect.setAttribute("data-original-fill", rect.getAttribute("fill"));
+                        rect.setAttribute("data-row", r);
+                        rect.setAttribute("data-col", c);
+                        
+                        rect.classList.add('preview-mark');
+                        svg.appendChild(rect);
+                    }
+                }
+            }
+            container.innerHTML = '';
+            container.appendChild(svg);
+        }
+
+        function highlightPreview(type, indexOrRow, colIndex) {
+            const marks = document.querySelectorAll('.preview-mark');
+            const lines = document.querySelectorAll('.preview-line');
+            const { highlight } = PREVIEW_OPTS.colors;
+
+            // 1. 라인(Line) 먼저 처리 (점보다 아래에 위치해야 하므로 먼저 처리)
+            lines.forEach(line => {
+                let shouldThicken = false;
+                const r = line.getAttribute('data-row');
+
+                if (type === 'row') {
+                    if (r == indexOrRow) shouldThicken = true;
+                } else if (type === 'cell') {
+                    // Cell 호버 시 해당 Row 라인도 강조
+                    if (r == indexOrRow) shouldThicken = true;
+                }
+
+                if (shouldThicken) {
+                    line.setAttribute('stroke-width', "4");
+                    line.setAttribute('stroke', highlight);
+                    
+                    // [핵심] 하이라이트된 라인을 DOM 맨 끝으로 이동 (최상위 노출)
+                    line.parentNode.appendChild(line);
+                } else {
+                    line.setAttribute('stroke-width', "2");
+                    line.setAttribute('stroke', PREVIEW_OPTS.colors.secondary);
+                }
+            });
+
+            // 2. 마크(Point/Bar) 처리 (라인 위에 그려져야 하므로 나중에 처리)
+            marks.forEach(mark => {
+                let shouldHighlight = false;
+                
+                if (type === 'col') { 
+                    if (state.chartType === 'stackedBar') {
+                         if (mark.getAttribute('data-col') == indexOrRow) shouldHighlight = true;
+                    } else {
+                        if (mark.getAttribute('data-col') == indexOrRow) shouldHighlight = true;
+                    }
+                } else if (type === 'row') { 
+                    if (mark.getAttribute('data-row') == indexOrRow) shouldHighlight = true;
+                } else if (type === 'group') { 
+                    let startCol = 0;
+                    for(let i=0; i<indexOrRow; i++) startCol += state.groupStructure[i];
+                    let endCol = startCol + state.groupStructure[indexOrRow];
+                    
+                    const c = parseInt(mark.getAttribute('data-col'));
+                    if (c >= startCol && c < endCol) shouldHighlight = true;
+                } else if (type === 'cell') { 
+                    const r = indexOrRow;
+                    const c = colIndex;
+                    if (state.chartType === 'stackedBar' && r === 0) {
+                        if (mark.getAttribute('data-col') == c) shouldHighlight = true;
+                    } else {
+                        if (mark.getAttribute('data-row') == r && mark.getAttribute('data-col') == c) shouldHighlight = true;
+                    }
+                }
+
+                if (shouldHighlight) {
+                    mark.setAttribute('fill', highlight);
+                    
+                    if (mark.tagName === 'circle') {
+                        mark.setAttribute('r', "6"); // 크기 확대
+                    }
+
+                    // [핵심] 하이라이트된 마크를 DOM 맨 끝으로 이동 (최상위 노출)
+                    mark.parentNode.appendChild(mark); 
+
+                } else {
+                    mark.setAttribute('fill', mark.getAttribute('data-original-fill'));
+                    if (mark.tagName === 'circle') {
+                        mark.setAttribute('r', "3"); // 크기 복구
+                    }
+                }
+            });
+        }
+
+        function resetPreviewHighlight() {
+            // 마크(점/바) 초기화
+            const marks = document.querySelectorAll('.preview-mark');
+            marks.forEach(mark => {
+                mark.setAttribute('fill', mark.getAttribute('data-original-fill'));
+                if (mark.tagName === 'circle') {
+                    mark.setAttribute('r', "3"); // 반지름 초기화
+                }
+            });
+
+            // 라인 초기화
+            const lines = document.querySelectorAll('.preview-line');
+            lines.forEach(line => {
+                line.setAttribute('stroke-width', "2"); // 두께 초기화
+                line.setAttribute('stroke', PREVIEW_OPTS.colors.secondary); // 색상 초기화
+            });
+        }
+
+        // ==========================================
+        // DATA MANIPULATION HELPERS
+        // ==========================================
 
         function addBarToGroup(groupIndex) {
             if (state.groupStructure[groupIndex] >= 10) return;
@@ -873,12 +1236,13 @@
             let inputCols = parseInt(ui.settingColInput.value);
             if (inputCols < 1) inputCols = 1; if (inputCols > MAX_SIZE) inputCols = MAX_SIZE;
             
+            // Reverted Dimension Logic
             if (state.chartType === 'stackedBar') {
                 const currentGroupCount = state.cols;
                 if (inputCols > currentGroupCount) {
                     const addedCount = inputCols - currentGroupCount;
                     for(let k=0; k<addedCount; k++) {
-                        state.groupStructure.push(2); 
+                        state.groupStructure.push(2); // Default 2 bars per new group
                         state.data.forEach(row => { row.push("", ""); });
                     }
                 } else if (inputCols < currentGroupCount) {
@@ -980,26 +1344,27 @@
             state.rows--;
             updateSettingInputs(); renderGrid();
         }
-        
+
+        // ==========================================
+        // OTHER LOGIC (Load/Save/Reset)
+        // ==========================================
+
         function resetData() {
-            state.rows = 3;
-            state.cols = 3; 
-            
             if (state.chartType === 'stackedBar') {
-                state.groupStructure = [2, 2, 2];
-                state.data = initData(4, 6); // Row 0(All) + 3 Stacks = 4 rows
-                state.rows = 4;
-                state.cols = 3; 
+                state.cols = 3;
+                state.groupStructure = [2, 2, 2]; // Reverted default structure (2 bars per group)
+                state.rows = 4; // All + 3 Stacks
+                state.data = initData(4, 6); // All + 3 Stacks = 4 rows, 6 cols total
             } else if (state.chartType === 'line') {
-                state.data = initData(3, 4);
+                state.rows = 3; state.cols = 3; state.data = initData(3, 4);
             } else {
-                state.data = initData(3, 3);
+                state.rows = 3; state.cols = 3; state.data = initData(3, 3);
             }
             state.dataMode = 'raw'; 
             updateSettingInputs();
             renderGrid();
         }
-        
+
         function updateSettingInputs() {
             ui.settingCellInput.value = state.cellCount;
             
@@ -1117,7 +1482,6 @@
         }
 
         function submitData() {
-            // 1. 현재 데이터 복사 (숫자로 변환)
             let finalValues = state.data.map(row => 
                 row.map(cell => {
                     const num = Number(cell);
@@ -1125,50 +1489,35 @@
                 })
             );
             
-            // 2. 변수 초기화
-            let rawValues = finalValues;    // 저장용 (All 포함 전체)
-            let drawingValues = finalValues; // 그리기용 (All 제외 예정)
-            
-            // 기본적으로 markNumPayload는 그룹 구조(배열)를 따름
+            let rawValues = finalValues;
+            let drawingValues = finalValues;
             let markNumPayload = state.groupStructure; 
             
-            // 3. 차트 타입 체크 및 데이터 가공
-            // 'stackedBar' 뿐만 아니라 혹시 모를 'stacked' 등 변형된 이름도 방어
             if (state.chartType === 'stackedBar' || state.chartType === 'stacked') {
-                
-                // [핵심 Fix] Stacked Bar는 무조건 첫 번째 줄(All)을 잘라내고 보냄
                 if (finalValues.length > 1) {
                     drawingValues = finalValues.slice(1);
                 }
-                
-                // [핵심 Fix] Stacked Bar는 markNumPayload가 무조건 그룹 구조(Array)여야 함
-                // 여기서 state.rows를 할당하지 않도록 보장
                 markNumPayload = state.groupStructure;
-
             } else {
-                // 일반 Bar, Line 차트일 경우에만 Rows 개수를 markNum으로 사용
                 markNumPayload = state.rows; 
             }
 
             const msgType = state.uiMode === 'create' ? 'generate' : 'apply';
             
-            // 4. Figma로 전송
             parent.postMessage({ 
                 pluginMessage: { 
                     type: msgType, 
                     payload: {
                         type: state.chartType,
                         mode: state.dataMode, 
-                        values: drawingValues, // 그리기용 (All 제외됨)
-                        rawValues: rawValues,  // 저장용 (All 포함됨)
-                        
-                        // Stacked Bar는 All 행을 빼고(rows-1) 알려줌
+                        values: drawingValues, 
+                        rawValues: rawValues,
                         rows: (state.chartType === 'stackedBar' || state.chartType === 'stacked') ? (state.rows - 1) : state.rows,
                         cols: state.cols,
                         cellCount: state.cellCount,
                         yMin: Number(ui.settingYMin.value),
                         yMax: Number(ui.settingYMax.value),
-                        markNum: markNumPayload // 이제 Array([2, 2...])가 전송됨
+                        markNum: markNumPayload 
                     }
                 } 
             }, '*');
