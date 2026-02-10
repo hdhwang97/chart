@@ -1,0 +1,20 @@
+body { font-family: 'Inter', sans-serif; }
+.step { display: none; opacity: 0; transform: translateY(2px); transition: all 0.3s ease-in-out; }
+.step.active { display: flex; opacity: 1; transform: translateY(0); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.tooltip-trigger:hover .tooltip-content { display: block; }
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: inner-spin-button !important;
+  opacity: 1 !important;
+  cursor: pointer;
+  display: block;
+}

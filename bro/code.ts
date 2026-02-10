@@ -1,3 +1,5 @@
+import { CHART_TYPES } from './src/shared/constants';
+
 // code.ts
 
 // ==========================================
@@ -20,9 +22,9 @@ const VARIANT_PROPERTY_Y_LABEL = "yLabel";
 const VARIANT_PROPERTY_Y_END = "yEnd";     
 
 const VARIANT_MAPPING: { [key: string]: string } = {
-  'bar': 'bar',           
-  'line': 'line',         
-  'stackedBar': 'stackedBar' 
+  [CHART_TYPES.BAR]: CHART_TYPES.BAR,
+  [CHART_TYPES.LINE]: CHART_TYPES.LINE,
+  [CHART_TYPES.STACKED_BAR]: CHART_TYPES.STACKED_BAR
 };
 
 const LINE_VARIANT_KEY_DEFAULT = "direction"; 

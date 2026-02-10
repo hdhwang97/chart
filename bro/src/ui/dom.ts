@@ -1,0 +1,46 @@
+export const ui = {
+  step1: document.getElementById('step-1') as HTMLElement,
+  step2: document.getElementById('step-2') as HTMLElement,
+  backBtn: document.getElementById('back-btn') as HTMLButtonElement,
+  mainCta: document.getElementById('main-cta') as HTMLButtonElement,
+  editModeBtn: document.getElementById('edit-mode-btn') as HTMLButtonElement,
+  chartTypeWrapper: document.getElementById('chart-type-wrapper') as HTMLElement,
+  chartTypeIcon: document.getElementById('chart-type-icon') as HTMLElement,
+  chartTypeDisplay: document.getElementById('chart-type-display') as HTMLElement,
+  settingColInput: document.getElementById('setting-col-input') as HTMLInputElement,
+  settingCellInput: document.getElementById('setting-cell-input') as HTMLInputElement,
+  settingMarkSelect: document.getElementById('setting-mark-select') as HTMLSelectElement,
+  containerMarkWrapper: document.getElementById('container-mark-wrapper') as HTMLElement,
+  containerMarkNormal: document.getElementById('container-mark-normal') as HTMLElement,
+  labelColInput: document.getElementById('label-col-input') as HTMLElement,
+  labelMarkPosition: document.getElementById('label-mark-position') as HTMLElement,
+  settingYMin: document.getElementById('setting-y-min') as HTMLInputElement,
+  settingYMax: document.getElementById('setting-y-max') as HTMLInputElement,
+  csvInput: document.getElementById('csv-upload') as HTMLInputElement,
+  csvStatusText: document.getElementById('csv-status-text') as HTMLElement,
+  csvDeleteBtn: document.getElementById('csv-delete-btn') as HTMLButtonElement,
+  gridScrollArea: document.getElementById('grid-scroll-area') as HTMLElement,
+  gridContainer: document.getElementById('data-grid') as HTMLElement,
+  rowHeaderContainer: document.getElementById('row-header-container') as HTMLElement,
+  addColFixedBtn: document.getElementById('add-col-fixed-btn') as HTMLButtonElement,
+  addRowFixedBtn: document.getElementById('add-row-fixed-btn') as HTMLButtonElement,
+  resetBtn: document.getElementById('reset-btn') as HTMLButtonElement,
+  modeToggleContainer: document.getElementById('mode-toggle-container') as HTMLElement,
+  modeRawBtn: document.getElementById('mode-raw') as HTMLButtonElement,
+  modePercentBtn: document.getElementById('mode-percent') as HTMLButtonElement,
+  tooltipNormal: document.getElementById('tooltip-normal') as HTMLElement,
+  tooltipWarning: document.getElementById('tooltip-warning') as HTMLElement,
+  mainTooltip: document.getElementById('main-tooltip') as HTMLElement,
+  tooltipStackedHint: document.getElementById('tooltip-stacked-hint') as HTMLElement,
+  csvExportBtn: document.getElementById('csv-export-btn') as HTMLButtonElement,
+  toast: document.getElementById('restore-toast') as HTMLElement,
+  toastYesBtn: document.getElementById('toast-yes-btn') as HTMLButtonElement,
+  toastCloseBtn: document.getElementById('toast-close-btn') as HTMLButtonElement,
+  errorToast: document.getElementById('error-toast') as HTMLElement,
+};
+
+export function bindGridScrollSync() {
+  ui.gridScrollArea.addEventListener('scroll', () => {
+    if (ui.rowHeaderContainer) ui.rowHeaderContainer.scrollTop = ui.gridScrollArea.scrollTop;
+  });
+}
