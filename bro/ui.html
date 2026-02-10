@@ -652,8 +652,51 @@
             }
         }
 
-        // ==========================================
-        // MAIN GRID RENDERER
+
+        // HELPER: Stacked Bar Auto-Fill Calculation
+        function getAutoFillValue(colIndex) {
+            // 1. 차트 타입이 StackedBar가 아니거나, 데이터가 없으면 중단
+            if (state.chartType !== 'stackedBar') return null;
+            
+            // 2. Total(Row 0) 값 확인
+            const totalStr = state.data[0][colIndex];
+            const totalVal = Number(totalStr);
+            if (totalStr === "" || isNaN(totalVal)) return null;
+
+            // 3. Stack 행들(Row 1 ~ End) 순회
+            let currentSum = 0;
+            let emptyCount = 0;
+            let emptyRowIndex = -1;
+
+            for (let r = 1; r < state.rows; r++) {
+                const valStr = state.data[r][colIndex];
+                if (valStr === "") {
+                    emptyCount++;
+                    emptyRowIndex = r;
+                } else {
+                    const val = Number(valStr);
+                    if (!isNaN(val)) currentSum += val;
+                }
+            }
+
+            // 4. 조건 충족 확인: 빈 칸이 딱 1개일 때
+            if (emptyCount === 1) {
+                let remainder = totalVal - currentSum;
+                // 0보다 작은 경우(Total보다 합이 큰 경우)는 사용자 판단에 맡기기 위해 그대로 노출하거나, 
+                // 필요하다면 Math.max(0, remainder) 처리를 할 수 있습니다. 현재는 그대로 반환합니다.
+                const displayValue = Number.isInteger(remainder) ? String(remainder) : remainder.toFixed(1).replace('.0','');
+                
+                return {
+                    rowIndex: emptyRowIndex,
+                    value: displayValue
+                };
+            }
+
+            return null;
+        }
+        
+
+        // MAIN GRID RENDERER (Updated with Auto-Fill Preview)
         // ==========================================
         function renderGrid() {
             ui.gridContainer.innerHTML = ''; 
@@ -662,73 +705,69 @@
             if (!state.data || state.data.length === 0) return;
             let gridCols = state.data[0].length;
             
-            ui.gridContainer.style.gridTemplateColumns = `repeat(${gridCols}, minmax(60px, 1fr))`;
+            // 콘텐츠 길이에 맞춰 최소 너비 자동 조절
+            ui.gridContainer.style.gridTemplateColumns = `repeat(${gridCols}, minmax(auto, 1fr))`;
 
-            // [HEADER AREA]
+            // [HEADER AREA] - (이전 수정사항 유지)
             if (state.chartType === 'stackedBar') {
-                // [Level 1] Super Header (Groups)
+                // ... (이전과 동일한 Header 생성 로직) ...
                 for (let g = 0; g < state.groupStructure.length; g++) { 
                     const groupHeader = document.createElement('div');
                     groupHeader.id = `header-group-${g}`;
-                    
                     const spanCount = state.groupStructure[g];
                     groupHeader.style.gridColumn = `span ${spanCount}`;
-                    
-                    // [UPDATED] Added border-r-2 for thicker border
-                    groupHeader.className = 'sticky top-0 z-30 bg-gray-100 border-r-2 border-b border-border-strong flex items-center justify-center h-6 text-xxs font-bold text-text group relative cursor-pointer hover:bg-blue-50';
-                    groupHeader.innerHTML = `<span>Group ${g + 1}</span>`;
-                    
-                    // Interaction: Hover Group
-                    groupHeader.addEventListener('mouseenter', () => highlightPreview('group', g));
-                    groupHeader.addEventListener('mouseleave', () => resetPreviewHighlight());
+                    groupHeader.className = 'sticky top-0 z-30 bg-gray-100 border-r-2 border-b border-border-strong flex items-center justify-between px-2 h-6 text-xxs font-bold text-text group relative cursor-pointer hover:bg-blue-50';
 
                     if (state.mode === 'edit') {
                         const addBarBtn = document.createElement('button');
                         addBarBtn.id = `btn-add-bar-group-${g}`;
-                        addBarBtn.className = 'absolute left-1 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-primary hover:text-primary-hover';
+                        addBarBtn.className = 'w-4 h-4 flex items-center justify-center bg-transparent border-0 cursor-pointer text-gray-400 hover:text-primary shrink-0';
                         addBarBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>`;
-                        addBarBtn.title = "Add Bar to Group";
                         addBarBtn.onclick = (e) => { e.stopPropagation(); addBarToGroup(g); };
                         groupHeader.appendChild(addBarBtn);
+                    }
 
+                    const textSpan = document.createElement('span');
+                    textSpan.textContent = `Group ${g + 1}`;
+                    textSpan.className = "truncate mx-1";
+                    groupHeader.appendChild(textSpan);
+
+                    if (state.mode === 'edit') {
                         const delBtn = document.createElement('button');
                         delBtn.id = `btn-del-group-${g}`;
-                        delBtn.className = 'absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
+                        delBtn.className = 'w-4 h-4 flex items-center justify-center bg-transparent border-0 cursor-pointer text-gray-400 hover:text-danger shrink-0';
                         delBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
                         delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(g); };
                         groupHeader.appendChild(delBtn);
                     }
+                    
+                    groupHeader.addEventListener('mouseenter', () => highlightPreview('group', g));
+                    groupHeader.addEventListener('mouseleave', () => resetPreviewHighlight());
                     ui.gridContainer.appendChild(groupHeader);
                 }
 
-                // [Level 2] Sub Header (Bars)
                 let colCursor = 0;
                 state.groupStructure.forEach((count, gIdx) => {
                     for (let b = 0; b < count; b++) {
                         const subHeader = document.createElement('div');
                         const actualColIndex = colCursor; 
-                        
                         subHeader.id = `header-sub-group-${gIdx}-bar-${b}`;
-                        subHeader.className = 'sticky top-6 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-[9px] font-medium text-text-sub group relative cursor-pointer hover:text-primary';
-                        subHeader.textContent = `Bar ${b + 1}`;
+                        subHeader.className = 'sticky top-6 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-between px-2 h-6 text-[9px] font-medium text-text-sub group relative cursor-pointer hover:text-primary';
                         
-                        // Interaction: Hover Sub-bar
-                        subHeader.addEventListener('mouseenter', () => { 
-                            subHeader.classList.add('header-hover');
-                            highlightPreview('col', actualColIndex); 
-                        });
-                        subHeader.addEventListener('mouseleave', () => { 
-                            subHeader.classList.remove('header-hover');
-                            resetPreviewHighlight(); 
-                        });
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = `Bar ${b + 1}`;
+                        textSpan.className = "truncate";
+                        subHeader.appendChild(textSpan);
+                        
+                        subHeader.addEventListener('mouseenter', () => { subHeader.classList.add('header-hover'); highlightPreview('col', actualColIndex); });
+                        subHeader.addEventListener('mouseleave', () => { subHeader.classList.remove('header-hover'); resetPreviewHighlight(); });
 
                         if (state.mode === 'edit') {
                             const delSubBtn = document.createElement('button');
                             delSubBtn.id = `btn-del-sub-group-${gIdx}-bar-${b}`;
-                            delSubBtn.className = 'absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
+                            delSubBtn.className = 'w-3 h-3 flex items-center justify-center bg-transparent border-0 cursor-pointer text-gray-400 hover:text-danger shrink-0 ml-1';
                             delSubBtn.innerHTML = `<svg class="w-2 h-2 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
-                            const currentG = gIdx; 
-                            const currentB = b;
+                            const currentG = gIdx; const currentB = b;
                             delSubBtn.onclick = (e) => { e.stopPropagation(); removeBarFromGroup(currentG, currentB); };
                             subHeader.appendChild(delSubBtn);
                         }
@@ -738,30 +777,26 @@
                 });
 
             } else {
-                // CASE B: Normal Charts
+                // CASE B: Normal Charts (Bar, Line)
                 for (let j = 0; j < gridCols; j++) {
                     const headerCell = document.createElement('div');
                     headerCell.id = `header-col-${j}`;
-                    headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-center h-6 text-xxs font-semibold text-text-sub group relative cursor-pointer transition-colors';
-                    
+                    headerCell.className = 'sticky top-0 z-20 bg-surface border-r border-b border-border-strong flex items-center justify-between px-2 h-6 text-xxs font-semibold text-text-sub group relative cursor-pointer transition-colors';
                     let colLabel = `${j + 1}`;
                     if (state.chartType === 'line') colLabel = `P ${j + 1}`;
                     
-                    headerCell.innerHTML = `<span>${colLabel}</span>`;
+                    const textSpan = document.createElement('span');
+                    textSpan.textContent = colLabel;
+                    textSpan.className = "truncate";
+                    headerCell.appendChild(textSpan);
                     
-                    headerCell.addEventListener('mouseenter', () => {
-                        headerCell.classList.add('header-hover');
-                        highlightPreview('col', j);
-                    });
-                    headerCell.addEventListener('mouseleave', () => {
-                        headerCell.classList.remove('header-hover');
-                        resetPreviewHighlight();
-                    });
+                    headerCell.addEventListener('mouseenter', () => { headerCell.classList.add('header-hover'); highlightPreview('col', j); });
+                    headerCell.addEventListener('mouseleave', () => { headerCell.classList.remove('header-hover'); resetPreviewHighlight(); });
 
                     if (state.mode === 'edit') {
                         const delBtn = document.createElement('button');
                         delBtn.id = `btn-del-col-${j}`;
-                        delBtn.className = 'absolute right-0.5 top-1/2 -translate-y-1/2 w-4 h-4 hidden group-hover:flex items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger';
+                        delBtn.className = 'w-4 h-4 flex items-center justify-center bg-transparent border-0 cursor-pointer text-gray-400 hover:text-danger shrink-0 ml-1';
                         delBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
                         delBtn.onclick = () => deleteColumn(j);
                         headerCell.appendChild(delBtn);
@@ -796,51 +831,78 @@
                 if (isStackedAll) textSpan.classList.add('text-primary-hover', 'font-bold');
                 rowHeader.appendChild(textSpan);
                 
-                // Interaction: Hover Row
-                rowHeader.addEventListener('mouseenter', () => {
-                    rowHeader.classList.add('header-hover');
-                    highlightPreview('row', rowIndex);
-                });
-                rowHeader.addEventListener('mouseleave', () => {
-                    rowHeader.classList.remove('header-hover');
-                    resetPreviewHighlight();
-                });
+                rowHeader.addEventListener('mouseenter', () => { rowHeader.classList.add('header-hover'); highlightPreview('row', rowIndex); });
+                rowHeader.addEventListener('mouseleave', () => { rowHeader.classList.remove('header-hover'); resetPreviewHighlight(); });
 
                 if (state.mode === 'edit' && !isStackedAll) {
-                     const delRowBtn = document.createElement('button');
-                     delRowBtn.id = `btn-del-row-${rowIndex}`;
-                     delRowBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 17.59 13.41 12 19 6.41z"/></svg>`;
-                     delRowBtn.className = 'del-row-btn w-4 h-4 hidden items-center justify-center bg-transparent border-0 cursor-pointer text-text-sub hover:text-danger shrink-0';
-                     delRowBtn.onclick = (e) => { e.stopPropagation(); deleteRow(rowIndex); };
-                     rowHeader.appendChild(delRowBtn);
+                    const delRowBtn = document.createElement('button');
+                    delRowBtn.id = `btn-del-row-${rowIndex}`;
+                    delRowBtn.innerHTML = `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 17.59 13.41 12 19 6.41z"/></svg>`;
+                    delRowBtn.className = 'del-row-btn w-4 h-4 flex items-center justify-center bg-transparent border-0 cursor-pointer text-gray-400 hover:text-danger shrink-0';
+                    delRowBtn.onclick = (e) => { e.stopPropagation(); deleteRow(rowIndex); };
+                    rowHeader.appendChild(delRowBtn);
                 }
                 ui.rowHeaderContainer.appendChild(rowHeader);
 
                 // Cells
                 row.forEach((cellValue, colIndex) => {
                     const cellWrapper = document.createElement('div');
-                    // [UPDATED] Added hover:bg-blue-50
                     cellWrapper.className = `flex items-center w-full h-6 border-r border-b border-border-strong ${bgClass} hover:bg-blue-50 transition-colors`;
+                    
                     const input = document.createElement('input');
                     input.id = `input-cell-${rowIndex}-${colIndex}`;
+                    input.type = 'text'; 
+                    input.value = cellValue; 
+                    input.dataset.row = rowIndex; 
+                    input.dataset.col = colIndex;
                     
-                    input.type = 'text'; input.value = cellValue; input.dataset.row = rowIndex; input.dataset.col = colIndex;
-                    
+                    // [기존] 스타일 처리
                     let isError = false; 
                     if (state.dataMode === 'percent' && cellValue !== "") { 
                         const num = Number(cellValue); 
                         if (!isNaN(num) && (num < 0 || num > 100)) isError = true; 
                     }
                     let classes = `flex-1 w-full h-full px-2 text-xs text-right focus:outline-none bg-transparent min-w-0`;
-                    if (isError) { cellWrapper.classList.remove('bg-white', 'bg-surface', 'bg-blue-50'); cellWrapper.classList.add('bg-red-50'); classes += ' text-danger font-medium'; }
+                    if (isError) { 
+                        cellWrapper.classList.remove('bg-white', 'bg-surface', 'bg-blue-50'); 
+                        cellWrapper.classList.add('bg-red-50'); 
+                        classes += ' text-danger font-medium'; 
+                    }
                     if (state.mode === 'read') classes += ' text-gray-400 cursor-not-allowed';
-                    
                     if (isStackedAll) classes += ' font-bold text-primary';
 
                     input.className = classes;
                     
-                    // Input Interaction: Focus & Hover to Highlight
-                    // [UPDATED] Added mouseenter/mouseleave events
+                    // [추가됨] 자동 계산 미리보기 (Stacked Bar & Row > 0 일 때)
+                    if (state.chartType === 'stackedBar' && rowIndex > 0) {
+                        const showPreview = () => {
+                            if (input.value !== "") return; // 값이 있으면 무시
+
+                            const result = getAutoFillValue(colIndex);
+                            // 계산 결과가 있고, 현재 셀이 바로 그 '빈 칸'이라면
+                            if (result && result.rowIndex === rowIndex) {
+                                input.placeholder = result.value;
+                                input.classList.add('placeholder-blue-400');
+                            }
+                        };
+
+                        const hidePreview = () => {
+                            input.placeholder = "";
+                            input.classList.remove('placeholder-blue-400');
+                        };
+
+                        input.addEventListener('mouseenter', showPreview);
+                        input.addEventListener('focus', showPreview);
+                        
+                        input.addEventListener('mouseleave', () => {
+                             // 포커스 중이 아닐 때만 마우스 나가면 지움
+                             if (document.activeElement !== input) hidePreview();
+                        });
+                        
+                        input.addEventListener('blur', hidePreview);
+                    }
+
+                    // [기존] 이벤트 리스너
                     input.addEventListener('focus', () => highlightPreview('cell', rowIndex, colIndex));
                     input.addEventListener('mouseenter', () => highlightPreview('cell', rowIndex, colIndex));
                     input.addEventListener('mouseleave', () => resetPreviewHighlight());
@@ -865,9 +927,13 @@
                         checkCtaValidation();
                         renderPreview(); 
                     });
+
                     cellWrapper.appendChild(input);
                     if (state.dataMode === 'percent') {
-                        const unitSpan = document.createElement('span'); unitSpan.className = 'shrink-0 pr-2 pl-0.5 text-[10px] text-text-sub pointer-events-none'; unitSpan.innerText = '%'; cellWrapper.appendChild(unitSpan);
+                        const unitSpan = document.createElement('span'); 
+                        unitSpan.className = 'shrink-0 pr-2 pl-0.5 text-[10px] text-text-sub pointer-events-none'; 
+                        unitSpan.innerText = '%'; 
+                        cellWrapper.appendChild(unitSpan);
                     }
                     ui.gridContainer.appendChild(cellWrapper);
                 });
