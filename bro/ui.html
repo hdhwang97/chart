@@ -1682,7 +1682,7 @@ function renderD3Preview(style) {
     if (!container) return;
     container.innerHTML = '';
 
-    // 1. Data Gen
+    // [데이터 생성]
     let seriesCount = 1;
     if (Array.isArray(style.markNum)) {
         seriesCount = style.markNum.length > 0 ? style.markNum[0] : 1; 
@@ -1693,12 +1693,12 @@ function renderD3Preview(style) {
     const data = Array.from({ length: colCount }, (_, i) => {
         const item = { col: i };
         for (let s = 0; s < seriesCount; s++) {
-            item[`v${s}`] = Math.floor(Math.random() * 80) + 10;
+            item[`v${s}`] = Math.floor(Math.random() * 60) + 20; // 20~80 랜덤값
         }
         return item;
     });
 
-    // 2. Setup
+    // [설정]
     const width = container.clientWidth || 300;
     const height = container.clientHeight || 200;
     const margin = { top: 20, right: 20, bottom: 30, left: 40 };
@@ -1708,22 +1708,29 @@ function renderD3Preview(style) {
         .attr('width', width)
         .attr('height', height);
 
+    // [X축 스케일]
+    // markRatio = (Bar Width / Col Width)
+    // padding = 1 - markRatio
+    const paddingVal = 1 - (style.markRatio || 0.8);
+    
     const x0 = d3.scaleBand()
         .domain(d3.range(colCount))
         .range([margin.left, width - margin.right])
-        .padding(1 - (style.markRatio || 0.8)); // [Bar Width 적용]
+        .padding(paddingVal); // <-- [핵심] Figma에서 추출한 Padding 적용
 
     const y = d3.scaleLinear()
         .domain([0, 100])
         .nice()
         .range([height - margin.bottom, margin.top]);
-
+    const yCount = style.yCount || 4;
+    const rangeMax = 100;
+    const tickValues = Array.from({ length: yCount + 1 }, (_, i) => i * (rangeMax / yCount));
     const colors = style.colors && style.colors.length > 0 ? style.colors : ['#18A0FB', '#9CA3AF'];
 
-    // 3. Render
+    // [그리기]
     if (style.chartType === 'line') {
         // [Line Chart] Stroke Width 적용
-        const strokeWidth = style.strokeWidth || 2; // Figma 값 적용
+        const strokeWidth = style.strokeWidth || 2; 
         
         for (let s = 0; s < seriesCount; s++) {
             const line = d3.line()
@@ -1735,15 +1742,16 @@ function renderD3Preview(style) {
                 .datum(data)
                 .attr("fill", "none")
                 .attr("stroke", colors[s % colors.length])
-                .attr("stroke-width", strokeWidth) // <-- 여기 적용됨
+                .attr("stroke-width", strokeWidth) // <-- [핵심] 추출한 두께 적용
                 .attr("d", line);
-
+            
+            // 점(Dot)도 선 두께에 비례해서 크기 조절
             svg.selectAll(`.dot-s${s}`)
                 .data(data)
                 .enter().append("circle")
                 .attr("cx", (d) => x0(d.col) + x0.bandwidth() / 2)
                 .attr("cy", (d) => y(d[`v${s}`]))
-                .attr("r", strokeWidth + 1) // 점 크기도 선 두께에 비례
+                .attr("r", strokeWidth + 1.5) 
                 .attr("fill", "#fff")
                 .attr("stroke", colors[s % colors.length])
                 .attr("stroke-width", 2);
@@ -1751,7 +1759,7 @@ function renderD3Preview(style) {
 
     } else {
         // [Bar Chart] Corner Radius 적용
-        const radius = style.cornerRadius || 0; // Figma 값 적용
+        const radius = style.cornerRadius || 0; 
 
         const x1 = d3.scaleBand()
             .domain(d3.range(seriesCount))
@@ -1772,13 +1780,13 @@ function renderD3Preview(style) {
             .attr("width", x1.bandwidth())
             .attr("height", d => y(0) - y(d.value))
             .attr("fill", d => colors[d.key % colors.length])
-            .attr("rx", radius); // <-- 여기 적용됨 (Rounded Corner)
+            .attr("rx", radius); // <-- [핵심] 추출한 Round 값 적용
     }
 
-    // Axes
+    // Axes (축 그리기)
     svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
-        .call(d3.axisLeft(y).ticks(style.yCount || 4))
+        .call(d3.axisLeft(y).tickValues(tickValues)) 
         .call(g => g.select(".domain").remove())
         .call(g => g.selectAll(".tick line").attr("stroke-opacity", 0.1));
 
@@ -1788,13 +1796,24 @@ function renderD3Preview(style) {
         .call(g => g.select(".domain").attr("stroke", "#E0E0E0"));
 }
 
-// 4. D3 코드 생성 (기존 유지)
+// 4. Export Code 생성 함수 업데이트
 function generateD3CodeString(style) {
     const colorsJson = JSON.stringify(style.colors && style.colors.length > 0 ? style.colors : ['#18A0FB']);
+    
+    // D3 Padding = 1 - (Bar Width Ratio)
     const paddingVal = (1 - (style.markRatio || 0.8)).toFixed(2);
-    const yTicksVal = style.yCount || 4;
-    return `// D3.js Config \nconst config = { colors: ${colorsJson}, padding: ${paddingVal}, yTicks: ${yTicksVal} };`;
+    const strokeVal = style.strokeWidth || 2;
+    const radiusVal = style.cornerRadius || 0;
+    
+    return `// D3.js Config Export
+const config = {
+  colors: ${colorsJson},
+  padding: ${paddingVal},      // Based on Figma AutoLayout Padding
+  strokeWidth: ${strokeVal},   // Based on Figma Line Stroke
+  cornerRadius: ${radiusVal}   // Based on Figma Corner Radius
+};`;
 }
+
 
 // 5. 복사 기능 (기존 유지)
 window.copyToClipboard = function() {

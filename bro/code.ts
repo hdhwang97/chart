@@ -41,12 +41,15 @@ const PLUGIN_DATA_KEYS = {
   LAST_VALUES: "lastAppliedValues",       // UI용 원본 (All 포함)
   LAST_DRAWING_VALUES: "lastDrawingValues", // 그리기용 (All 제외)
   
-  // 차트 설정 (이 부분들이 확실히 저장됨)
+  // 차트 설정
   LAST_MODE: "lastAppliedMode",           
   LAST_CELL_COUNT: "lastCellCount",       
   LAST_MARK_NUM: "lastMarkNum", 
   LAST_Y_MIN: "lastYMin",                 
   LAST_Y_MAX: "lastYMax",
+  LAST_BAR_PADDING: "lastBarPadding",
+  LAST_CORNER_RADIUS: "lastCornerRadius",
+  LAST_STROKE_WIDTH: "lastStrokeWidth"
 } as const;
 
 // Naming Patterns (Regex)
@@ -71,12 +74,9 @@ const MARK_NAME_PATTERNS = {
 // 2. DATA LAYER (저장/로드 핵심 로직)
 // ==========================================
 
-// Helper: JSON Parse with safety
 const safeParse = (data: string | undefined) => (data ? JSON.parse(data) : null);
 
-// [핵심 1] 차트 데이터 저장 (모든 설정을 빠짐없이 저장)
-function saveChartData(node: SceneNode, msg: any) {
-    // 1. 기본 설정 및 값 저장
+function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(msg.rawValues));
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(msg.values));
@@ -84,21 +84,30 @@ function saveChartData(node: SceneNode, msg: any) {
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN, String(msg.yMin));
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, String(msg.yMax));
     
-    // 2. [요청사항 반영] Cell Count와 Mark Num 명시적 저장
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(msg.cellCount));
     if (msg.markNum) {
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(msg.markNum));
     }
+    
+    if (styleInfo) {
+        if (styleInfo.markRatio !== undefined) {
+             node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(styleInfo.markRatio));
+        }
+        if (styleInfo.cornerRadius !== undefined) {
+             node.setPluginData(PLUGIN_DATA_KEYS.LAST_CORNER_RADIUS, String(styleInfo.cornerRadius));
+        }
+        if (styleInfo.strokeWidth !== undefined) {
+             node.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(styleInfo.strokeWidth));
+        }
+    }
+    
 }
 
-// [핵심 2] 차트 데이터 불러오기 (저장된 값 우선, 없으면 구조만 파악)
 async function loadChartData(node: SceneNode, chartType: string) {
-    // A. 저장된 데이터 확인
     const savedValuesStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
     const savedCell = node.getPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT);
     const savedMarkNumStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM);
     
-    // B. 저장된 데이터가 있으면 -> 그걸 그대로 반환 (시각적 역산 무시)
     if (savedValuesStr) {
         return {
             values: JSON.parse(savedValuesStr),
@@ -108,12 +117,11 @@ async function loadChartData(node: SceneNode, chartType: string) {
         };
     }
 
-    // C. 저장된 게 없으면 -> 구조(Structure)만 파악하여 빈 데이터 생성
     const structure = inferStructureFromGraph(chartType, node);
     return {
-        values: structure.values,     // 0으로 채워진 빈 배열
-        markNum: structure.markNum,   // 감지된 막대/그룹 개수
-        cellCount: structure.cellCount, // 감지된 눈금 개수
+        values: structure.values,     
+        markNum: structure.markNum,   
+        cellCount: structure.cellCount, 
         isSaved: false
     };
 }
@@ -165,6 +173,10 @@ function findAllLineLayers(parentNode: SceneNode): (SceneNode & LayoutMixin)[] {
     return results;
 }
 
+// ==========================================
+// 4. STYLE EXTRACTION LOGIC (New & Modularized)
+// ==========================================
+
 function extractChartColors(graph: SceneNode, chartType: string): string[] {
     const colors: string[] = [];
     const columns = collectColumns(graph);
@@ -179,7 +191,6 @@ function extractChartColors(graph: SceneNode, chartType: string): string[] {
         if (tab) targetParent = tab;
     }
 
-    // 1. Bar / Stacked Bar Color
     if (chartType === "bar" || chartType === "stackedBar") {
         // @ts-ignore
         const barInstance = targetParent.children.find(n => MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name));
@@ -206,7 +217,6 @@ function extractChartColors(graph: SceneNode, chartType: string): string[] {
             }
         }
     } 
-    // 2. Line Chart Color
     else if (chartType === "line") {
         const layers = findAllLineLayers(targetParent);
         layers.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
@@ -243,6 +253,85 @@ function extractChartColors(graph: SceneNode, chartType: string): string[] {
     return colors;
 }
 
+// [통합] 노드에서 스타일 정보(비율, 라운드, 두께 등) 추출
+function extractStyleFromNode(node: SceneNode, chartType: string) {
+    const cols = collectColumns(node);
+    const colors = extractChartColors(node, chartType);
+    
+    let markRatio = 0.8;
+    let cornerRadius = 0;
+    let strokeWidth = 2;
+
+    try {
+        if (cols.length > 0) {
+            const firstColNode = cols[0].node as FrameNode;
+            if (firstColNode.width > 0) {
+                // 1. Container 탐색
+                let container: SceneNode = firstColNode;
+                if ("children" in firstColNode) {
+                    // @ts-ignore
+                    const tab = firstColNode.children.find(n => n.name === "tab");
+                    if (tab) container = tab;
+                }
+                
+                // 2. Mark 탐색
+                if ("children" in container) {
+                    // @ts-ignore
+                    const mark = container.children.find(child => 
+                        child.visible && 
+                        (child.name.includes("bar") || child.name.includes("mark") || child.name.includes("line"))
+                    );
+                    
+                    if (mark) {
+                        // A. 너비 비율 (Bar Width Ratio)
+                        if (mark.width > 0) {
+                            markRatio = mark.width / firstColNode.width;
+                            if (markRatio < 0.01) markRatio = 0.01;
+                            if (markRatio > 1.0) markRatio = 1.0;
+                        }
+
+                        // B. 라운드 값 (Corner Radius) - Bar 차트용
+                        if (chartType !== 'line' && 'cornerRadius' in mark) {
+                            if (typeof mark.cornerRadius === 'number') {
+                                cornerRadius = mark.cornerRadius;
+                            } else if (typeof mark.cornerRadius === 'object') {
+                                cornerRadius = mark.topLeftRadius || 0;
+                            }
+                        }
+
+                        // C. 선 두께 (Stroke Weight) - Line 차트용
+                        if (chartType === 'line') {
+                            if ('strokeWeight' in mark && typeof mark.strokeWeight === 'number') {
+                                strokeWidth = mark.strokeWeight;
+                            } else if ('children' in mark) {
+                                // @ts-ignore
+                                const vector = mark.children.find(c => c.type === "VECTOR" || c.type === "LINE");
+                                if (vector && 'strokeWeight' in vector) {
+                                    strokeWidth = vector.strokeWeight;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Style Extract Error", e);
+    }
+
+    return {
+        colors,
+        markRatio,
+        cornerRadius,
+        strokeWidth
+    };
+}
+
+
+// ==========================================
+// 5. MAIN LOGIC (Controller)
+// ==========================================
+
 async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode | null> {
     const { KEY, NAME } = MASTER_COMPONENT_CONFIG;
 
@@ -277,10 +366,6 @@ async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode 
     return found as (ComponentNode | ComponentSetNode);
 }
 
-
-// ==========================================
-// 4. MAIN LOGIC (Controller)
-// ==========================================
 
 figma.showUI(__html__, { width: 600, height: 800 });
 
@@ -333,10 +418,10 @@ figma.ui.onmessage = async (msg) => {
        figma.currentPage.selection = [instance];
     }
 
-    // 1. [NEW] 중앙화된 데이터 저장 함수 호출
+    // 1. 데이터 저장
     saveChartData(targetNode, msg.payload);
 
-    // 2. Chart Type Variant Setup
+    // 2. Variant Setup
     if (targetNode.type === "INSTANCE") {
         const variantValue = VARIANT_MAPPING[type] || 'bar';
         setVariantProperty(targetNode, VARIANT_PROPERTY_TYPE, variantValue);
@@ -357,14 +442,32 @@ figma.ui.onmessage = async (msg) => {
     else if (type === "line") applyLine(drawConfig, H, targetNode);
     else if (type === "stackedBar" || type === "stacked") applyStackedBar(drawConfig, H, targetNode);
 
+    // 5. [NEW] 스타일 자동 추출 및 전송 (Integrate Logic)
+    // 주입된 데이터를 그대로 사용하여(구조 역산 생략) 스타일만 추출해 합칩니다.
+    const styleInfo = extractStyleFromNode(targetNode, type);
+    
+    const stylePayload = {
+        chartType: type,
+        markNum: markNum,        // 주입된 값 재사용
+        yCount: cellCount,       // 주입된 값 재사용
+        colCount: cols,          // 주입된 값 재사용
+        
+        colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
+        markRatio: styleInfo.markRatio,
+        cornerRadius: styleInfo.cornerRadius,
+        strokeWidth: styleInfo.strokeWidth
+    };
+
+    figma.ui.postMessage({ type: 'style_extracted', payload: stylePayload });
+    
     if (msg.type === 'generate') {
         figma.notify("Chart Generated!");
     } else {
-        figma.notify("Chart Updated!");
+        figma.notify("Chart Updated & Style Synced!");
     }
   }
 
-  // [Code.ts] Export를 위한 스타일 추출 로직 (Radius, StrokeWidth 추가)
+  // [Code.ts] Export를 위한 스타일 추출 로직 (별도 호출 시)
   else if (msg.type === 'extract_style') {
     const nodes = figma.currentPage.selection;
     if (nodes.length !== 1) {
@@ -372,92 +475,33 @@ figma.ui.onmessage = async (msg) => {
       return;
     }
     const node = nodes[0];
-    
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
+    
+    // 주입된 payload가 없으므로 역산(Inference) 수행
     const structure = inferStructureFromGraph(chartType, node);
+    // const cols = collectColumns(node);
+    // const colCount = cols.length > 0 ? cols.length : 5;
     const cols = collectColumns(node);
-    const colCount = cols.length > 0 ? cols.length : 5;
-    const colors = extractChartColors(node, chartType);
+    const visibleCols = cols.filter(c => c.node.visible); // visible 체크 추가
+    const colCount = visibleCols.length > 0 ? visibleCols.length : 5;
 
-    // [신규 변수]
-    let markRatio = 0.8;
-    let cornerRadius = 0;
-    let strokeWidth = 2;
-
-    try {
-        if (cols.length > 0) {
-            const firstColNode = cols[0].node as FrameNode;
-            if (firstColNode.width > 0) {
-                // 1. Container 탐색
-                let container: SceneNode = firstColNode;
-                if ("children" in firstColNode) {
-                    // @ts-ignore
-                    const tab = firstColNode.children.find(n => n.name === "tab");
-                    if (tab) container = tab;
-                }
-                
-                // 2. Mark 탐색
-                if ("children" in container) {
-                    // @ts-ignore
-                    const mark = container.children.find(child => 
-                        child.visible && 
-                        (child.name.includes("bar") || child.name.includes("mark") || child.name.includes("line"))
-                    );
-                    
-                    if (mark) {
-                        // A. 너비 비율 (Bar Width Ratio)
-                        if (mark.width > 0) {
-                            markRatio = mark.width / firstColNode.width;
-                            if (markRatio < 0.01) markRatio = 0.01;
-                            if (markRatio > 1.0) markRatio = 1.0;
-                        }
-
-                        // B. 라운드 값 (Corner Radius) - Bar 차트용
-                        if (chartType !== 'line' && 'cornerRadius' in mark) {
-                            if (typeof mark.cornerRadius === 'number') {
-                                cornerRadius = mark.cornerRadius;
-                            } else if (typeof mark.cornerRadius === 'object') {
-                                // mixed인 경우 상단 왼쪽 기준 (d3는 전체 적용이 기본)
-                                cornerRadius = mark.topLeftRadius || 0;
-                            }
-                        }
-
-                        // C. 선 두께 (Stroke Weight) - Line 차트용
-                        if (chartType === 'line') {
-                            if ('strokeWeight' in mark && typeof mark.strokeWeight === 'number') {
-                                strokeWidth = mark.strokeWeight;
-                            } else if ('children' in mark) {
-                                // 내부에 실제 벡터가 있는 경우 (Instance 구조 등)
-                                // @ts-ignore
-                                const vector = mark.children.find(c => c.type === "VECTOR" || c.type === "LINE");
-                                if (vector && 'strokeWeight' in vector) {
-                                    strokeWidth = vector.strokeWeight;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Style Extract Error", e);
-    }
+    // 공통 함수 사용
+    const styleInfo = extractStyleFromNode(node, chartType);
 
     const payload = {
         chartType: chartType,
         markNum: structure.markNum,
         yCount: structure.cellCount || 4,
         colCount: colCount,
-        colors: colors.length > 0 ? colors : ['#3b82f6', '#9CA3AF'],
         
-        // [추가된 스타일 정보]
-        markRatio: markRatio,
-        cornerRadius: cornerRadius,
-        strokeWidth: strokeWidth
+        colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
+        markRatio: styleInfo.markRatio,
+        cornerRadius: styleInfo.cornerRadius,
+        strokeWidth: styleInfo.strokeWidth
     };
 
     figma.ui.postMessage({ type: 'style_extracted', payload: payload });
-    figma.notify("Style Extracted (Radius & Stroke)!");
+    figma.notify("Style Extracted!");
   }
 };
 
@@ -496,13 +540,11 @@ setInterval(() => {
 
 
 // ==========================================
-// 5. HELPER FUNCTIONS (Init & Inference)
+// 6. HELPER FUNCTIONS (Init & Inference)
 // ==========================================
 
 async function initPluginUI(node: SceneNode, autoApply = false) {
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
-    
-    // [NEW] 통합 데이터 로드 함수 사용
     const chartData = await loadChartData(node, chartType);
     
     // Auto-Resize 처리
@@ -546,7 +588,6 @@ async function initPluginUI(node: SceneNode, autoApply = false) {
         uiMode: 'edit',
         chartType: chartType,
         
-        // 데이터 전송 (저장된 값 우선, 없으면 구조 기반 빈 값)
         savedValues: chartData.values, 
         savedMarkNum: chartData.markNum,
         lastCellCount: chartData.cellCount,
@@ -559,8 +600,6 @@ async function initPluginUI(node: SceneNode, autoApply = false) {
     });
 }
 
-// [리팩토링] 구조(Structure)만 파악하는 역산 함수
-// 더 이상 높이(값)를 계산하지 않고, 레이어 개수만 세어서 반환함
 function inferStructureFromGraph(chartType: string, graph: SceneNode) {
     const cols = collectColumns(graph);
     
@@ -584,7 +623,6 @@ function inferStructureFromGraph(chartType: string, graph: SceneNode) {
     let rowCount = 1;
 
     if (chartType === "stackedBar") {
-        // 그룹별 구조 파악 (예: [2, 3, 2] 형태)
         const groupStructure: number[] = [];
         cols.forEach(colObj => {
             let parent = colObj.node;
@@ -607,7 +645,6 @@ function inferStructureFromGraph(chartType: string, graph: SceneNode) {
         rowCount = Math.max(...groupStructure) || 1;
 
     } else if (chartType === "bar" || chartType === "line") {
-        // 단일 컬럼 내 최대 레이어 개수 파악
         let maxRows = 1;
         cols.forEach(c => {
             let parent = c.node;
@@ -615,7 +652,6 @@ function inferStructureFromGraph(chartType: string, graph: SceneNode) {
             const tab = c.node.children ? (c.node as FrameNode).children.find(n => n.name === "tab") : null;
             if(tab) parent = tab;
             
-            // Bar or Line 카운트
             let count = 0;
             // @ts-ignore
             if (parent.children) {
@@ -629,7 +665,6 @@ function inferStructureFromGraph(chartType: string, graph: SceneNode) {
                      }
                 });
             }
-            // 단일 Bar 레이어 처리
             if (chartType === "bar" && count === 0) {
                  // @ts-ignore
                  const singleBar = parent.children.find(n => MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(n.name));
@@ -641,7 +676,6 @@ function inferStructureFromGraph(chartType: string, graph: SceneNode) {
         rowCount = maxRows;
     }
 
-    // 4. 빈 데이터 생성 (0으로 채움)
     const emptyValues = Array.from({ length: rowCount }, () => Array(colCount).fill(0));
 
     return {
@@ -715,7 +749,7 @@ function applyCells(node: SceneNode, count: number) {
 }
 
 // ==========================================
-// 6. DRAWING FUNCTIONS (Apply Logic)
+// 7. DRAWING FUNCTIONS (Apply Logic)
 // ==========================================
 
 function applyStackedBar(config: any, H: number, graph: SceneNode) {
@@ -725,7 +759,6 @@ function applyStackedBar(config: any, H: number, graph: SceneNode) {
     const rowCount = values.length; 
     const totalDataCols = values[0].length; 
 
-    // Max Sum Calc for Normalization
     let globalMaxSum = 100;
     if (mode === "raw") {
         const colSums = new Array(totalDataCols).fill(0);
@@ -862,6 +895,11 @@ function applyBar(config: any, H: number, graph: SceneNode) {
         if(maxVal===0) maxVal=1;
     }
 
+    // [NEW] 저장된 Mark Ratio(너비 비율) 불러오기
+    // 리사이징 시 이 비율을 유지하기 위해 사용됩니다.
+    const savedRatioStr = graph.getPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING);
+    const targetRatio = savedRatioStr ? parseFloat(savedRatioStr) : null;
+
     const numMarks = Number(markNum) || 1;
 
     cols.forEach((colObj, cIdx) => {
@@ -879,6 +917,24 @@ function applyBar(config: any, H: number, graph: SceneNode) {
         const barInst = targetParent.children.find(n => MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name));
         
         if(barInst && barInst.type === "INSTANCE") {
+             // [NEW] 너비 리사이징 (Mark Ratio 적용)
+             // 저장된 비율이 있고, 컬럼 너비가 유효할 때만 실행
+             if (targetRatio !== null && "width" in colObj.node && colObj.node.width > 0) {
+                 try {
+                     const colWidth = colObj.node.width;
+                     const newBarWidth = Math.max(1, colWidth * targetRatio); // 최소 1px 보장
+
+                     // Auto Layout 내부에서도 강제로 너비를 바꾸기 위해 Fixed 설정
+                     if (barInst.layoutSizingHorizontal !== 'FIXED') {
+                         barInst.layoutSizingHorizontal = 'FIXED';
+                     }
+                     // 높이는 그대로 유지하고 너비만 변경
+                     barInst.resize(newBarWidth, barInst.height);
+                 } catch (e) {
+                     console.error("Bar Resizing Error", e);
+                 }
+             }
+
              // Figma 컴포넌트의 'markNum' Variant 속성 변경
              setVariantProperty(barInst, VARIANT_PROPERTY_MARK_NUM, String(numMarks));
              
@@ -887,13 +943,6 @@ function applyBar(config: any, H: number, graph: SceneNode) {
                  if (values.length > m) val = Number(values[m][cIdx]) || 0;
                  
                  const targetNum = m + 1;
-                 
-                 // [패턴 통일] 
-                 // 1개일 때도 내부는 'bar-01'이므로 분기 없이 항상 숫자가 포함된 패턴을 사용합니다.
-                 // ^bar : bar로 시작
-                 // [-_]? : 하이픈이나 언더바가 있거나 없음
-                 // 0* : 숫자 앞 0 허용
-                 // (${targetNum})$ : 현재 순번의 숫자로 끝남
                  const pattern = new RegExp(`^bar[-_]?0*(${targetNum})$`);
                  
                  // @ts-ignore
