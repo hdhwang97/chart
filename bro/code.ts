@@ -47,9 +47,11 @@ const PLUGIN_DATA_KEYS = {
   LAST_MARK_NUM: "lastMarkNum", 
   LAST_Y_MIN: "lastYMin",                 
   LAST_Y_MAX: "lastYMax",
-  LAST_BAR_PADDING: "lastBarPadding",
-  LAST_CORNER_RADIUS: "lastCornerRadius",
-  LAST_STROKE_WIDTH: "lastStrokeWidth"
+
+  // [NEW] 스타일 관련 키 추가
+  LAST_BAR_PADDING: "lastBarPadding",   
+  LAST_CORNER_RADIUS: "lastCornerRadius", 
+  LAST_STROKE_WIDTH: "lastStrokeWidth"    
 } as const;
 
 // Naming Patterns (Regex)
@@ -76,6 +78,7 @@ const MARK_NAME_PATTERNS = {
 
 const safeParse = (data: string | undefined) => (data ? JSON.parse(data) : null);
 
+// [수정] styleInfo를 받아 스타일 데이터도 함께 저장
 function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(msg.rawValues));
@@ -89,6 +92,14 @@ function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(msg.markNum));
     }
     
+    // [NEW] UI에서 직접 넘어온 Stroke Width가 있다면 우선 저장
+    if (msg.strokeWidth) {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(msg.strokeWidth));
+    } else if (styleInfo && styleInfo.strokeWidth !== undefined) {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(styleInfo.strokeWidth));
+    }
+
+    // [NEW] 추출된 스타일 정보 저장
     if (styleInfo) {
         if (styleInfo.markRatio !== undefined) {
              node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(styleInfo.markRatio));
@@ -96,11 +107,7 @@ function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         if (styleInfo.cornerRadius !== undefined) {
              node.setPluginData(PLUGIN_DATA_KEYS.LAST_CORNER_RADIUS, String(styleInfo.cornerRadius));
         }
-        if (styleInfo.strokeWidth !== undefined) {
-             node.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(styleInfo.strokeWidth));
-        }
     }
-    
 }
 
 async function loadChartData(node: SceneNode, chartType: string) {
@@ -174,7 +181,7 @@ function findAllLineLayers(parentNode: SceneNode): (SceneNode & LayoutMixin)[] {
 }
 
 // ==========================================
-// 4. STYLE EXTRACTION LOGIC (New & Modularized)
+// 4. STYLE EXTRACTION LOGIC
 // ==========================================
 
 function extractChartColors(graph: SceneNode, chartType: string): string[] {
@@ -380,7 +387,8 @@ figma.ui.onmessage = async (msg) => {
     figma.ui.resize(msg.width, msg.height);
   }
   else if (msg.type === 'generate' || msg.type === 'apply') {
-    const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum } = msg.payload;
+    // [수정] strokeWidth 추가
+    const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth } = msg.payload;
     
     const nodes = figma.currentPage.selection;
     let targetNode: FrameNode | ComponentNode | InstanceNode;
@@ -418,8 +426,7 @@ figma.ui.onmessage = async (msg) => {
        figma.currentPage.selection = [instance];
     }
 
-    // 1. 데이터 저장
-    saveChartData(targetNode, msg.payload);
+    // (기존 데이터 저장은 차트 생성 후로 이동)
 
     // 2. Variant Setup
     if (targetNode.type === "INSTANCE") {
@@ -436,7 +443,8 @@ figma.ui.onmessage = async (msg) => {
 
     // 4. Draw Chart
     const H = getGraphHeight(targetNode as FrameNode);
-    const drawConfig = { values, mode, markNum, rows, yMin, yMax };
+    // [수정] drawConfig에 strokeWidth 전달
+    const drawConfig = { values, mode, markNum, rows, yMin, yMax, strokeWidth };
 
     if (type === "bar") applyBar(drawConfig, H, targetNode);
     else if (type === "line") applyLine(drawConfig, H, targetNode);
@@ -446,6 +454,9 @@ figma.ui.onmessage = async (msg) => {
     // 주입된 데이터를 그대로 사용하여(구조 역산 생략) 스타일만 추출해 합칩니다.
     const styleInfo = extractStyleFromNode(targetNode, type);
     
+    // [NEW] 차트 생성 후 데이터 및 스타일 저장
+    saveChartData(targetNode, msg.payload, styleInfo);
+
     const stylePayload = {
         chartType: type,
         markNum: markNum,        // 주입된 값 재사용
@@ -479,10 +490,10 @@ figma.ui.onmessage = async (msg) => {
     
     // 주입된 payload가 없으므로 역산(Inference) 수행
     const structure = inferStructureFromGraph(chartType, node);
-    // const cols = collectColumns(node);
-    // const colCount = cols.length > 0 ? cols.length : 5;
+    
+    // [수정] 숨겨진 레이어 제외하고 카운트 (Visible Column Only)
     const cols = collectColumns(node);
-    const visibleCols = cols.filter(c => c.node.visible); // visible 체크 추가
+    const visibleCols = cols.filter(c => c.node.visible); 
     const colCount = visibleCols.length > 0 ? visibleCols.length : 5;
 
     // 공통 함수 사용
@@ -547,6 +558,9 @@ async function initPluginUI(node: SceneNode, autoApply = false) {
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
     const chartData = await loadChartData(node, chartType);
     
+    // [NEW] 저장된 두께 값 로드
+    const lastStrokeWidth = node.getPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH);
+
     // Auto-Resize 처리
     if (autoApply && chartData.isSaved) {
         const lastDrawingVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES);
@@ -568,7 +582,8 @@ async function initPluginUI(node: SceneNode, autoApply = false) {
             cellCount: chartData.cellCount,
             yMin: Number(lastYMin)||0,
             yMax: Number(lastYMax)||100,
-            markNum: chartData.markNum
+            markNum: chartData.markNum,
+            strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined // [NEW] 두께 포함
         };
         
         const H = getGraphHeight(node as FrameNode);
@@ -596,7 +611,8 @@ async function initPluginUI(node: SceneNode, autoApply = false) {
         lastYMin: lastYMin ? Number(lastYMin) : undefined,
         lastYMax: lastYMax ? Number(lastYMax) : undefined,
         
-        markColors: extractedColors
+        markColors: extractedColors,
+        lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2 // [NEW] UI로 전송
     });
 }
 
@@ -970,6 +986,8 @@ function applyBar(config: any, H: number, graph: SceneNode) {
 
 function applyLine(config: any, H: number, graph: SceneNode) {
     const { values, mode } = config; 
+    const thickness = config.strokeWidth || 2; // [NEW] 두께 가져오기
+
     let min = 0, max = 100;
     
     if (mode === "raw") {
@@ -1007,6 +1025,15 @@ function applyLine(config: any, H: number, graph: SceneNode) {
             if(lineInst && lineInst.type === "INSTANCE") {
                 lineInst.visible = true;
                 
+                // [NEW] 인스턴스 내부의 Vector(선) 레이어를 찾아 두께 적용
+                // @ts-ignore
+                const vectorLayer = lineInst.children.find(n => n.type === "VECTOR" || n.type === "LINE") as (VectorNode | LineNode);
+                if (vectorLayer) {
+                    if (vectorLayer.strokeWeight !== thickness) {
+                        vectorLayer.strokeWeight = thickness;
+                    }
+                }
+
                 const startRatio = (startVal - min) / safeRange;
                 const endRatio = (endVal - min) / safeRange;
                 const startPx = H * clamp(startRatio, 0, 1);

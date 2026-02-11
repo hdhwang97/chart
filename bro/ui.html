@@ -151,7 +151,11 @@
                     <label class="text-xxs font-medium text-text-sub">Y Max</label>
                     <input type="number" id="setting-y-max" value="100" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                 </div>
-                <div class="flex-1"></div> 
+                <div id="container-stroke-width" class="flex flex-col gap-1 flex-1 hidden">
+                    <label class="text-xxs font-medium text-text-sub">Thickness</label>
+                    <input type="number" id="setting-stroke-input" value="2" min="1" max="20" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                </div>
+                <div id="spacer-stroke" class="flex-1"></div> 
             </div>
         </div>
     </div>
@@ -276,7 +280,8 @@
             csvFileName: null,
             uiMode: 'create',
             cachedRawData: null, 
-            conversionMax: 100 
+            conversionMax: 100,
+            strokeWidth: 2 // [NEW] 두께 state
         };
         
         const CHART_ICONS = {
@@ -309,6 +314,11 @@
             settingYMin: document.getElementById('setting-y-min'),
             settingYMax: document.getElementById('setting-y-max'),
             
+            // [NEW] Stroke Width UI Elements
+            settingStrokeInput: document.getElementById('setting-stroke-input'),
+            containerStrokeWidth: document.getElementById('container-stroke-width'),
+            spacerStroke: document.getElementById('spacer-stroke'),
+
             csvInput: document.getElementById('csv-upload'),
             csvStatusText: document.getElementById('csv-status-text'),
             csvDeleteBtn: document.getElementById('csv-delete-btn'), 
@@ -501,6 +511,11 @@
             if (msg.type === 'init') {
                 state.uiMode = msg.uiMode || 'create';
                 
+                // [NEW] Load Saved Stroke Width
+                if (msg.lastStrokeWidth) {
+                    state.strokeWidth = Number(msg.lastStrokeWidth);
+                }
+
                 if (msg.chartType) {
                     state.chartType = msg.chartType;
                     
@@ -563,6 +578,7 @@
                         }
                     }
                     
+                    switchTab('data');
                     updateSettingInputs();
                     updateModeButtonState(); 
                     goToStep(2); 
@@ -1037,7 +1053,10 @@
             // LINE CHART RENDERING
             // ==========================================
             if (chartType === 'line') {
-                const segmentWidth = drawW / state.cols; 
+                const segmentWidth = drawW / state.cols;
+                
+                // [NEW] Stroke Width applied here
+                const strokeWidth = state.strokeWidth || 2; 
 
                 for (let r = 0; r < rows; r++) {
                     let points = "";
@@ -1063,7 +1082,10 @@
                         const circle = document.createElementNS(svgNS, "circle");
                         circle.setAttribute("cx", cx);
                         circle.setAttribute("cy", cy);
-                        circle.setAttribute("r", "3");
+                        
+                        // [NEW] Dot size proportional to line width
+                        circle.setAttribute("r", Math.max(3, strokeWidth + 1)); 
+                        
                         circle.setAttribute("fill", colors.default);
                         circle.setAttribute("stroke", "#fff");
                         circle.setAttribute("stroke-width", "1");
@@ -1080,7 +1102,10 @@
                     polyline.setAttribute("points", points);
                     polyline.setAttribute("fill", "none");
                     polyline.setAttribute("stroke", colors.secondary);
-                    polyline.setAttribute("stroke-width", "2");
+                    
+                    // [NEW] Apply Stroke Width
+                    polyline.setAttribute("stroke-width", strokeWidth);
+                    
                     polyline.setAttribute("stroke-linejoin", "round");
                     polyline.setAttribute("stroke-linecap", "round");
                     
@@ -1178,13 +1203,14 @@
                 }
 
                 if (shouldThicken) {
-                    line.setAttribute('stroke-width', "4");
+                    const currentStroke = state.strokeWidth || 2;
+                    line.setAttribute('stroke-width', currentStroke + 2); // Highlight: +2px
                     line.setAttribute('stroke', highlight);
                     
                     // [핵심] 하이라이트된 라인을 DOM 맨 끝으로 이동 (최상위 노출)
                     line.parentNode.appendChild(line);
                 } else {
-                    line.setAttribute('stroke-width', "2");
+                    line.setAttribute('stroke-width', state.strokeWidth || 2);
                     line.setAttribute('stroke', PREVIEW_OPTS.colors.secondary);
                 }
             });
@@ -1222,7 +1248,8 @@
                     mark.setAttribute('fill', highlight);
                     
                     if (mark.tagName === 'circle') {
-                        mark.setAttribute('r', "6"); // 크기 확대
+                        const currentStroke = state.strokeWidth || 2;
+                        mark.setAttribute('r', Math.max(5, currentStroke + 3)); // 크기 확대
                     }
 
                     // [핵심] 하이라이트된 마크를 DOM 맨 끝으로 이동 (최상위 노출)
@@ -1231,27 +1258,29 @@
                 } else {
                     mark.setAttribute('fill', mark.getAttribute('data-original-fill'));
                     if (mark.tagName === 'circle') {
-                        mark.setAttribute('r', "3"); // 크기 복구
+                        const currentStroke = state.strokeWidth || 2;
+                        mark.setAttribute('r', Math.max(3, currentStroke + 1)); // 크기 복구
                     }
                 }
             });
         }
 
         function resetPreviewHighlight() {
+            // 라인 초기화
+            const lines = document.querySelectorAll('.preview-line');
+            lines.forEach(line => {
+                line.setAttribute('stroke-width', state.strokeWidth || 2); // 두께 초기화
+                line.setAttribute('stroke', PREVIEW_OPTS.colors.secondary); // 색상 초기화
+            });
+
             // 마크(점/바) 초기화
             const marks = document.querySelectorAll('.preview-mark');
             marks.forEach(mark => {
                 mark.setAttribute('fill', mark.getAttribute('data-original-fill'));
                 if (mark.tagName === 'circle') {
-                    mark.setAttribute('r', "3"); // 반지름 초기화
+                     const currentStroke = state.strokeWidth || 2;
+                     mark.setAttribute('r', Math.max(3, currentStroke + 1)); // 반지름 초기화
                 }
-            });
-
-            // 라인 초기화
-            const lines = document.querySelectorAll('.preview-line');
-            lines.forEach(line => {
-                line.setAttribute('stroke-width', "2"); // 두께 초기화
-                line.setAttribute('stroke', PREVIEW_OPTS.colors.secondary); // 색상 초기화
             });
         }
 
@@ -1420,6 +1449,8 @@
                 state.rows = 3; state.cols = 3; state.data = initData(3, 3);
             }
             state.dataMode = 'raw'; 
+            // Reset strokeWidth if needed, or keep it
+            // state.strokeWidth = 2; 
             updateSettingInputs();
             renderGrid();
         }
@@ -1427,6 +1458,16 @@
         function updateSettingInputs() {
             ui.settingCellInput.value = state.cellCount;
             
+            // [NEW] Toggle Stroke Width Input
+            if (state.chartType === 'line') {
+                ui.containerStrokeWidth.classList.remove('hidden');
+                ui.spacerStroke.classList.add('hidden');
+                ui.settingStrokeInput.value = state.strokeWidth;
+            } else {
+                ui.containerStrokeWidth.classList.add('hidden');
+                ui.spacerStroke.classList.remove('hidden');
+            }
+
             if (state.chartType === 'stackedBar') {
                  ui.labelColInput.textContent = "Group Count"; 
                  ui.settingColInput.value = state.cols; 
@@ -1500,6 +1541,7 @@
                 ui.settingMarkSelect.disabled = true;
                 ui.settingYMin.disabled = true;
                 ui.settingYMax.disabled = true;
+                ui.settingStrokeInput.disabled = true; // [NEW]
              } else {
                 state.mode = 'edit';
                 ui.editModeBtn.textContent = "Save";
@@ -1509,6 +1551,7 @@
                 ui.settingMarkSelect.disabled = false;
                 ui.settingYMin.disabled = false;
                 ui.settingYMax.disabled = false;
+                ui.settingStrokeInput.disabled = false; // [NEW]
              }
              renderGrid(); checkCtaValidation(); 
         }
@@ -1576,7 +1619,8 @@
                         cellCount: state.cellCount,
                         yMin: Number(ui.settingYMin.value),
                         yMax: Number(ui.settingYMax.value),
-                        markNum: markNumPayload 
+                        markNum: markNumPayload,
+                        strokeWidth: state.strokeWidth // [NEW] Send stroke width to Figma
                     }
                 } 
             }, '*');
@@ -1591,6 +1635,14 @@
         ui.settingCellInput.addEventListener('input', handleDimensionInput); 
         ui.settingMarkSelect.addEventListener('change', handleDimensionInput);
         
+        // [NEW] Stroke Width Event Listener
+        ui.settingStrokeInput.addEventListener('input', (e) => {
+            let val = parseInt(e.target.value);
+            if (isNaN(val) || val < 1) val = 1;
+            state.strokeWidth = val;
+            renderPreview();
+        });
+
         ui.addColFixedBtn.addEventListener('click', addColumn);
         ui.addRowFixedBtn.addEventListener('click', addRow);
         ui.csvExportBtn.addEventListener('click', downloadCsv);
@@ -1722,9 +1774,14 @@ function renderD3Preview(style) {
         .domain([0, 100])
         .nice()
         .range([height - margin.bottom, margin.top]);
+    
+    // [Y축 눈금]
     const yCount = style.yCount || 4;
-    const rangeMax = 100;
+    // const rangeMax = 100;
+    // style에 yMax가 없다면 기본값 100 사용
+    const rangeMax = (style.yMax !== undefined) ? style.yMax : 100; 
     const tickValues = Array.from({ length: yCount + 1 }, (_, i) => i * (rangeMax / yCount));
+    
     const colors = style.colors && style.colors.length > 0 ? style.colors : ['#18A0FB', '#9CA3AF'];
 
     // [그리기]
@@ -1751,7 +1808,7 @@ function renderD3Preview(style) {
                 .enter().append("circle")
                 .attr("cx", (d) => x0(d.col) + x0.bandwidth() / 2)
                 .attr("cy", (d) => y(d[`v${s}`]))
-                .attr("r", strokeWidth + 1.5) 
+                .attr("r", Math.max(3, strokeWidth + 1)) 
                 .attr("fill", "#fff")
                 .attr("stroke", colors[s % colors.length])
                 .attr("stroke-width", 2);
