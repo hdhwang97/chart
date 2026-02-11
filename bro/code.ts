@@ -288,11 +288,12 @@ let currentSelectionId: string | null = null;
 let prevWidth = 0;
 let prevHeight = 0;
 
+
 // Message Handler
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'resize') {
     figma.ui.resize(msg.width, msg.height);
-  } 
+  }
   else if (msg.type === 'generate' || msg.type === 'apply') {
     const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum } = msg.payload;
     
@@ -349,7 +350,7 @@ figma.ui.onmessage = async (msg) => {
     applyYAxis(targetNode, cellCount, { yMin, yMax });
 
     // 4. Draw Chart
-    const H = getGraphHeight(targetNode);
+    const H = getGraphHeight(targetNode as FrameNode);
     const drawConfig = { values, mode, markNum, rows, yMin, yMax };
 
     if (type === "bar") applyBar(drawConfig, H, targetNode);
@@ -362,7 +363,80 @@ figma.ui.onmessage = async (msg) => {
         figma.notify("Chart Updated!");
     }
   }
+  // [Code.ts] Export를 위한 스타일 추출 로직 (업데이트됨)
+  else if (msg.type === 'extract_style') {
+    const nodes = figma.currentPage.selection;
+    if (nodes.length !== 1) {
+      figma.notify("Please select exactly one chart component.");
+      return;
+    }
+    const node = nodes[0];
+    
+    // 1. 차트 타입 및 구조 파악
+    const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
+    
+    // 구조에서 markNum(시리즈 개수)과 cellCount(Y축 눈금) 가져오기
+    const structure = inferStructureFromGraph(chartType, node); 
+    
+    // 컬럼 개수 파악
+    const cols = collectColumns(node);
+    const colCount = cols.length > 0 ? cols.length : 5;
+
+    // 2. 색상 추출
+    const colors = extractChartColors(node, chartType);
+
+    // 3. Mark Ratio (너비 비율) 계산
+    let markRatio = 0.8;
+    try {
+        if (cols.length > 0) {
+            const firstColNode = cols[0].node as FrameNode;
+            if (firstColNode.width > 0) {
+                // 내부 컨테이너(tab) 찾기
+                let container: SceneNode = firstColNode;
+                if ("children" in firstColNode) {
+                    // @ts-ignore
+                    const tab = firstColNode.children.find(n => n.name === "tab");
+                    if (tab) container = tab;
+                }
+                
+                // 내부 마크(bar, line 등) 찾기
+                if ("children" in container) {
+                    // @ts-ignore
+                    const mark = container.children.find(child => 
+                        child.visible && 
+                        (child.name.includes("bar") || child.name.includes("mark") || child.name.includes("line"))
+                    );
+                    
+                    // 비율 계산 (마크 너비 / 컬럼 전체 너비)
+                    if (mark && mark.width > 0) {
+                        markRatio = mark.width / firstColNode.width;
+                        // 비정상적인 값 보정 (0.1 ~ 1.0)
+                        if (markRatio < 0.1) markRatio = 0.1;
+                        if (markRatio > 1.0) markRatio = 1.0;
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Mark Ratio Calc Error", e);
+    }
+
+    // 4. UI로 전송할 데이터 구성
+    const payload = {
+        chartType: chartType,          // 'bar', 'line', 'stackedBar' (D3 렌더링 분기용)
+        markNum: structure.markNum,    // number or array (다중 마크 개수 확인용)
+        yCount: structure.cellCount || 4,
+        colCount: colCount,
+        colors: colors.length > 0 ? colors : ['#3b82f6', '#9CA3AF'],
+        markRatio: markRatio
+    };
+
+    // 데이터 전송
+    figma.ui.postMessage({ type: 'style_extracted', payload: payload });
+    figma.notify("Style Extracted!");
+  }
 };
+
 
 // Selection Change
 figma.on("selectionchange", () => {

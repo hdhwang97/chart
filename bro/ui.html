@@ -6,6 +6,7 @@
     <title>Chart Data Setting</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     
     <script>
         tailwind.config = {
@@ -71,203 +72,195 @@
 <body class="bg-white text-text flex flex-col h-screen box-border text-xs overflow-hidden">
 
     <header class="flex justify-between items-center h-12 shrink-0 px-3 border-b border-border bg-white z-50">
-        <div class="flex items-center">
-            <button id="back-btn" class="hidden text-text-sub hover:text-text bg-transparent border-0 cursor-pointer p-1 mr-1" title="Back">
-                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-            </button>
-            
-            <h1 class="text-sm font-semibold flex items-center gap-2 m-0">
-                Chart Data 
-                <div id="chart-type-wrapper" class="hidden flex items-center gap-1.5 bg-surface border border-border px-2 py-0.5 rounded text-text-sub">
-                    <span id="chart-type-icon" class="flex items-center justify-center"></span>
-                    <span id="chart-type-display" class="text-xxs font-medium uppercase tracking-wide">Bar</span>
-                </div>
-            </h1>
-        </div>
-
-        <div class="flex items-center gap-2">
-            <button id="edit-mode-btn" class="hidden bg-transparent border-0 text-primary hover:text-primary-hover font-semibold text-xs cursor-pointer transition-colors min-w-[40px]">
-                Save
-            </button>
-            <button id="main-cta" disabled class="bg-primary text-white px-3 py-1.5 rounded font-semibold text-xs cursor-pointer transition-colors hover:bg-primary-hover disabled:bg-surface disabled:text-text-sub disabled:border disabled:border-border disabled:cursor-not-allowed">
-                Apply to Figma
-            </button>
-        </div>
-    </header>
-
-    <div id="step-1" class="step active flex-col gap-3 w-full p-3">
-        <div class="border border-border rounded-md p-3 bg-white flex flex-col gap-2">
-            <h2 class="text-xs font-semibold text-text-sub m-0 mb-1">Select Chart Type</h2>
-            <div class="grid grid-cols-2 gap-3 mt-2">
-                <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('bar')">
-                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z"/></svg>
-                    <span class="font-semibold text-text">Bar Chart</span>
-                </button>
-                <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('line')">
-                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
-                    <span class="font-semibold text-text">Line Chart</span>
-                </button>
-                <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('stackedBar')">
-                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>
-                    <span class="font-semibold text-text">Stacked Bar</span>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <div id="step-2" class="step flex-col w-full h-full overflow-hidden bg-surface">
+    <div class="flex items-center">
+        <button id="back-btn" class="hidden text-text-sub hover:text-text bg-transparent border-0 cursor-pointer p-1 mr-1" title="Back">
+            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
         
-        <div class="px-3 pt-3 pb-1 shrink-0 flex flex-col gap-1.5">
-            <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Graph Setting</h2>
-            
-            <div class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
-                <div class="flex items-center gap-3">
-                    <div class="flex flex-col gap-1 flex-1">
-                        <label id="label-col-input" class="text-xxs font-medium text-text-sub">Graph Col</label>
-                        <input type="number" id="setting-col-input" value="3" min="1" max="12" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
-                    </div>
+        <h1 class="text-sm font-semibold flex items-center gap-2 m-0">
+            Chart Data 
+            <div id="chart-type-wrapper" class="hidden flex items-center gap-1.5 bg-surface border border-border px-2 py-0.5 rounded text-text-sub">
+                <span id="chart-type-icon" class="flex items-center justify-center"></span>
+                <span id="chart-type-display" class="text-xxs font-medium uppercase tracking-wide">Bar</span>
+            </div>
+        </h1>
 
-                    <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Cell Count</label>
-                        <input type="number" id="setting-cell-input" value="4" min="1" max="10" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
-                    </div>
+        <div class="flex bg-surface rounded p-0.5 border border-border ml-4">
+            <button id="tab-data" class="px-3 py-0.5 text-xs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer" onclick="switchTab('data')">Data</button>
+            <button id="tab-export" class="px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer" onclick="switchTab('export')">Export</button>
+        </div>
+    </div>
 
-                    <div class="flex flex-col gap-1 flex-1">
-                        <div id="container-mark-wrapper">
-                            <label id="label-mark-position" class="text-xxs font-medium text-text-sub">Mark Count</label>
-                            <div id="container-mark-normal" class="relative">
-                                <select id="setting-mark-select" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none appearance-none bg-white cursor-pointer hover:border-text-sub transition-colors">
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                    <option value="4">4</option>
-                                    <option value="5">5</option>
-                                </select>
-                                <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-sub">
-                                    <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
-                                </div>
-                            </div>
+    <div class="flex items-center gap-2">
+        <button id="edit-mode-btn" class="hidden bg-transparent border-0 text-primary hover:text-primary-hover font-semibold text-xs cursor-pointer transition-colors min-w-[40px]">Save</button>
+        <button id="main-cta" disabled class="bg-primary text-white px-3 py-1.5 rounded font-semibold text-xs cursor-pointer transition-colors hover:bg-primary-hover disabled:bg-surface disabled:text-text-sub disabled:border disabled:border-border disabled:cursor-not-allowed">Apply to Figma</button>
+    </div>
+</header>
+
+<div id="step-1" class="step active flex-col gap-3 w-full p-3">
+    <div class="border border-border rounded-md p-3 bg-white flex flex-col gap-2">
+        <h2 class="text-xs font-semibold text-text-sub m-0 mb-1">Select Chart Type</h2>
+        <div class="grid grid-cols-2 gap-3 mt-2">
+            <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('bar')">
+                <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z"/></svg>
+                <span class="font-semibold text-text">Bar Chart</span>
+            </button>
+            <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('line')">
+                <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                <span class="font-semibold text-text">Line Chart</span>
+            </button>
+            <button class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm" onclick="selectType('stackedBar')">
+                <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24"><path d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z"/></svg>
+                <span class="font-semibold text-text">Stacked Bar</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="step-2" class="step flex-col w-full h-full overflow-hidden bg-surface">
+    <div class="px-3 pt-3 pb-1 shrink-0 flex flex-col gap-1.5">
+        <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Graph Setting</h2>
+        <div class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
+            <div class="flex items-center gap-3">
+                <div class="flex flex-col gap-1 flex-1">
+                    <label id="label-col-input" class="text-xxs font-medium text-text-sub">Graph Col</label>
+                    <input type="number" id="setting-col-input" value="3" min="1" max="12" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                </div>
+                <div class="flex flex-col gap-1 flex-1">
+                    <label class="text-xxs font-medium text-text-sub">Cell Count</label>
+                    <input type="number" id="setting-cell-input" value="4" min="1" max="10" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                </div>
+                <div class="flex flex-col gap-1 flex-1">
+                    <div id="container-mark-wrapper">
+                        <label id="label-mark-position" class="text-xxs font-medium text-text-sub">Mark Count</label>
+                        <div id="container-mark-normal" class="relative">
+                            <select id="setting-mark-select" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none appearance-none bg-white cursor-pointer hover:border-text-sub transition-colors">
+                                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+                            </select>
+                            <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-sub"><svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg></div>
                         </div>
                     </div>
-                </div>
-
-                <div class="flex items-center gap-3 border-t border-border pt-2 mt-1">
-                    <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Y Min</label>
-                        <input type="number" id="setting-y-min" value="0" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
-                    </div>
-                    <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Y Max</label>
-                        <input type="number" id="setting-y-max" value="100" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
-                    </div>
-                    <div class="flex-1"></div> 
                 </div>
             </div>
-        </div>
-
-        <div class="px-3 py-1 flex-1 flex flex-col gap-1.5 overflow-hidden pb-3">
-            <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Data Setting</h2>
-
-            <div class="flex flex-col gap-2 h-full">
-                <div id="preview-section" class="bg-white border border-border rounded-md p-2 shadow-sm shrink-0 flex flex-col gap-2">
-                    <div class="flex items-center justify-between">
-                         <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
-                         <span class="text-xxs text-text-sub">* Hover grid headers to highlight</span>
-                    </div>
-                    <div id="chart-preview-container" class="w-full h-52 bg-surface rounded border border-border flex items-center justify-center overflow-hidden relative">
-                        <span class="text-text-sub text-xs">Generating Preview...</span>
-                    </div>
+            <div class="flex items-center gap-3 border-t border-border pt-2 mt-1">
+                <div class="flex flex-col gap-1 flex-1">
+                    <label class="text-xxs font-medium text-text-sub">Y Min</label>
+                    <input type="number" id="setting-y-min" value="0" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                 </div>
-
-                <div class="bg-white border border-border rounded-md px-3 py-2 shadow-sm shrink-0 flex items-center justify-between">
-                    <div class="flex items-center gap-2 overflow-hidden">
-                         <span class="text-xs font-semibold text-text-sub shrink-0">CSV</span>
-                         <div class="w-[1px] h-3 bg-border shrink-0"></div>
-                         <span id="csv-status-text" class="text-xs text-text-sub truncate">csv를 업로드해주세요.</span>
-                    </div>
-
-                    <div class="flex items-center gap-2 shrink-0">
-                        <button id="csv-delete-btn" class="hidden w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 hover:bg-danger hover:text-white text-gray-500 transition-colors cursor-pointer" title="Remove CSV">
-                            <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 13.41 12z"/></svg>
-                        </button>
-                        <button id="csv-export-btn" class="text-text-sub hover:text-primary p-1 rounded transition-colors" title="Export CSV">
-                             <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                        </button>
-                        <label for="csv-upload" class="bg-white border border-border rounded px-2 py-1 text-xxs font-medium text-text cursor-pointer hover:border-text-sub hover:bg-gray-50 transition-all whitespace-nowrap">
-                            Upload
-                        </label>
-                        <input type="file" id="csv-upload" accept=".csv" class="hidden">
-                    </div>
+                <div class="flex flex-col gap-1 flex-1">
+                    <label class="text-xxs font-medium text-text-sub">Y Max</label>
+                    <input type="number" id="setting-y-max" value="100" class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                 </div>
-
-                <div id="editor-card" class="bg-white border border-border rounded-md shadow-sm flex flex-col flex-1 overflow-hidden">
-                    
-                    <div class="px-3 border-b border-border flex justify-between items-center bg-white shrink-0 h-9">
-                        <button id="reset-btn" class="text-text-sub hover:text-primary hover:bg-surface border border-transparent hover:border-border rounded px-1.5 py-0.5 text-xxs font-medium transition-all flex items-center gap-1 cursor-pointer">
-                            <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-                            초기화
-                        </button>
-
-                        <div class="flex items-center gap-1.5">
-                            <div id="mode-toggle-container" class="flex bg-surface rounded p-0.5 border border-border relative transition-colors duration-200">
-                                <button id="mode-raw" class="px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all" onclick="setMode('raw')">Raw</button>
-                                <button id="mode-percent" class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all" onclick="setMode('percent')">%</button>
-                            </div>
-                            <div class="relative tooltip-trigger cursor-help">
-                                <svg class="w-3.5 h-3.5 fill-text-sub hover:fill-primary transition-colors" viewBox="0 0 24 24">
-                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-                                </svg>
-                                <div id="main-tooltip" class="tooltip-content hidden absolute right-0 mt-2 w-52 bg-gray-800 text-white text-xxs rounded p-2 z-50 shadow-lg text-left leading-relaxed">
-                                    <div id="tooltip-normal">
-                                        <p class="mb-1"><strong class="text-primary-hover">Raw:</strong> 입력값의 제한이 없습니다.</p>
-                                        <p><strong class="text-primary-hover">%:</strong> 0~100 사이의 비율값으로 보여집니다.</p>
-                                        <p id="tooltip-stacked-hint" class="hidden text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-600">* Stacked Bar: Row 1은 All(Total) 목표값입니다.</p>
-                                    </div>
-                                    <div id="tooltip-warning" class="hidden text-danger font-medium">
-                                        ⚠️ % 모드에서는 0~100 사이의 값만 입력할 수 있습니다.
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="grid-container-wrapper" class="flex flex-1 relative overflow-hidden bg-white">
-                        <div class="flex flex-col border-t border-border z-10 shadow-left-scroll bg-surface shrink min-w-[72px]">
-                            <div id="header-corner-tl" class="h-6 border-r border-b border-border-strong bg-surface shrink-0"></div>
-                            <div id="row-header-container" class="overflow-hidden flex-col no-scrollbar pb-10"></div>
-                        </div>
-                        <div id="grid-scroll-area" class="flex-1 overflow-auto relative scroll-smooth">
-                            <div id="data-grid" class="grid gap-0 border-t border-l border-border w-fit"></div>
-                        </div>
-                        <div class="w-8 shrink-0 border-l border-b border-t border-border bg-white flex flex-col z-20 shadow-left-scroll">
-                            <div id="header-corner-tr" class="h-6 border-b border-border-strong bg-surface flex items-center justify-center shrink-0">
-                                <svg class="w-3 h-3 fill-text-sub" viewBox="0 0 0 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                            </div>
-                            <button id="add-col-fixed-btn" class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors" title="Add Column / Group">+</button>
-                        </div>
-                    </div>
-
-                    <div class="h-7 flex shrink-0 border-t border-border bg-white z-20 shadow-top-scroll">
-                        <button id="add-row-fixed-btn" class="flex-1 text-primary hover:bg-surface flex items-center justify-center cursor-pointer text-xs font-medium focus:outline-none active:bg-blue-50 transition-colors">+ Add Row</button>
-                        <div class="w-8 shrink-0 border-l border-border bg-surface"></div>
-                    </div>
-                </div>
+                <div class="flex-1"></div> 
             </div>
         </div>
     </div>
 
-    <div id="error-toast" class="hidden fixed bottom-16 left-1/2 -translate-x-1/2 bg-danger text-white text-xs px-4 py-2.5 rounded-md shadow-lg z-50 flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-2 pointer-events-none">
-        <svg class="w-4 h-4 fill-white shrink-0" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-        <span>% 모드는 0~100 사이의 값이어야 합니다.</span>
-    </div>
-
-    <div id="restore-toast" class="hidden fixed bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-4 py-3 rounded-md shadow-lg z-50 flex items-center gap-4 transition-all duration-300 opacity-0 translate-y-2">
-        <span>저장된 데이터를 불러올까요?</span>
-        <div class="flex items-center gap-3">
-            <button id="toast-yes-btn" class="font-bold text-primary hover:text-blue-300 cursor-pointer">예</button>
-            <button id="toast-close-btn" class="text-gray-400 hover:text-white cursor-pointer">✕</button>
+    <div class="px-3 py-1 flex-1 flex flex-col gap-1.5 overflow-hidden pb-3">
+        <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Data Setting</h2>
+        <div class="flex flex-col gap-2 h-full">
+            <div id="preview-section" class="bg-white border border-border rounded-md p-2 shadow-sm shrink-0 flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
+                        <span class="text-xxs text-text-sub">* Hover grid headers to highlight</span>
+                </div>
+                <div id="chart-preview-container" class="w-full h-52 bg-surface rounded border border-border flex items-center justify-center overflow-hidden relative">
+                    <span class="text-text-sub text-xs">Generating Preview...</span>
+                </div>
+            </div>
+            <div class="bg-white border border-border rounded-md px-3 py-2 shadow-sm shrink-0 flex items-center justify-between">
+                <div class="flex items-center gap-2 overflow-hidden">
+                        <span class="text-xs font-semibold text-text-sub shrink-0">CSV</span>
+                        <div class="w-[1px] h-3 bg-border shrink-0"></div>
+                        <span id="csv-status-text" class="text-xs text-text-sub truncate">csv를 업로드해주세요.</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="csv-delete-btn" class="hidden w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 hover:bg-danger hover:text-white text-gray-500 transition-colors cursor-pointer" title="Remove CSV"><svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 13.41 12z"/></svg></button>
+                    <button id="csv-export-btn" class="text-text-sub hover:text-primary p-1 rounded transition-colors" title="Export CSV"><svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></button>
+                    <label for="csv-upload" class="bg-white border border-border rounded px-2 py-1 text-xxs font-medium text-text cursor-pointer hover:border-text-sub hover:bg-gray-50 transition-all whitespace-nowrap">Upload</label>
+                    <input type="file" id="csv-upload" accept=".csv" class="hidden">
+                </div>
+            </div>
+            <div id="editor-card" class="bg-white border border-border rounded-md shadow-sm flex flex-col flex-1 overflow-hidden">
+                <div class="px-3 border-b border-border flex justify-between items-center bg-white shrink-0 h-9">
+                    <button id="reset-btn" class="text-text-sub hover:text-primary hover:bg-surface border border-transparent hover:border-border rounded px-1.5 py-0.5 text-xxs font-medium transition-all flex items-center gap-1 cursor-pointer">
+                        <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                        초기화
+                    </button>
+                    <div class="flex items-center gap-1.5">
+                        <div id="mode-toggle-container" class="flex bg-surface rounded p-0.5 border border-border relative transition-colors duration-200">
+                            <button id="mode-raw" class="px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all" onclick="setMode('raw')">Raw</button>
+                            <button id="mode-percent" class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all" onclick="setMode('percent')">%</button>
+                        </div>
+                        <div class="relative tooltip-trigger cursor-help">
+                            <svg class="w-3.5 h-3.5 fill-text-sub hover:fill-primary transition-colors" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                            <div id="main-tooltip" class="tooltip-content hidden absolute right-0 mt-2 w-52 bg-gray-800 text-white text-xxs rounded p-2 z-50 shadow-lg text-left leading-relaxed">
+                                <div id="tooltip-normal">
+                                    <p class="mb-1"><strong class="text-primary-hover">Raw:</strong> 입력값의 제한이 없습니다.</p>
+                                    <p><strong class="text-primary-hover">%:</strong> 0~100 사이의 비율값으로 보여집니다.</p>
+                                    <p id="tooltip-stacked-hint" class="hidden text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-600">* Stacked Bar: Row 1은 All(Total) 목표값입니다.</p>
+                                </div>
+                                <div id="tooltip-warning" class="hidden text-danger font-medium">⚠️ % 모드에서는 0~100 사이의 값만 입력할 수 있습니다.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="grid-container-wrapper" class="flex flex-1 relative overflow-hidden bg-white">
+                    <div class="flex flex-col border-t border-border z-10 shadow-left-scroll bg-surface shrink min-w-[72px]">
+                        <div id="header-corner-tl" class="h-6 border-r border-b border-border-strong bg-surface shrink-0"></div>
+                        <div id="row-header-container" class="overflow-hidden flex-col no-scrollbar pb-10"></div>
+                    </div>
+                    <div id="grid-scroll-area" class="flex-1 overflow-auto relative scroll-smooth">
+                        <div id="data-grid" class="grid gap-0 border-t border-l border-border w-fit"></div>
+                    </div>
+                    <div class="w-8 shrink-0 border-l border-b border-t border-border bg-white flex flex-col z-20 shadow-left-scroll">
+                        <div id="header-corner-tr" class="h-6 border-b border-border-strong bg-surface flex items-center justify-center shrink-0"><svg class="w-3 h-3 fill-text-sub" viewBox="0 0 0 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+                        <button id="add-col-fixed-btn" class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors" title="Add Column / Group">+</button>
+                    </div>
+                </div>
+                <div class="h-7 flex shrink-0 border-t border-border bg-white z-20 shadow-top-scroll">
+                    <button id="add-row-fixed-btn" class="flex-1 text-primary hover:bg-surface flex items-center justify-center cursor-pointer text-xs font-medium focus:outline-none active:bg-blue-50 transition-colors">+ Add Row</button>
+                    <div class="w-8 shrink-0 border-l border-border bg-surface"></div>
+                </div>
+            </div>
         </div>
     </div>
+</div> 
+<div id="step-export" class="step flex-col gap-3 w-full p-3 h-full overflow-hidden bg-surface">
+    <div class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm h-1/2 shrink-0">
+        <div class="flex justify-between items-center">
+            <h2 class="text-xs font-semibold text-text-sub m-0">D3.js Preview</h2>
+            <span class="text-[10px] text-gray-400">*Based on Figma Styles</span>
+        </div>
+        <div id="d3-preview-container" class="w-full flex-1 border border-border rounded bg-white flex items-center justify-center overflow-hidden relative">
+            <span class="text-text-sub text-xs">Loading Style...</span>
+        </div>
+    </div>
+
+    <div class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm flex-1 overflow-hidden">
+        <div class="flex justify-between items-center shrink-0">
+            <h2 class="text-xs font-semibold text-text-sub m-0">Export Code</h2>
+            <button onclick="copyToClipboard()" class="text-primary text-xs hover:text-primary-hover font-medium bg-transparent border-0 cursor-pointer flex items-center gap-1">
+                <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                Copy
+            </button>
+        </div>
+        <textarea id="d3-code-output" class="w-full h-full p-2 text-[10px] font-mono border border-border rounded bg-gray-50 resize-none focus:outline-none focus:border-primary text-text leading-relaxed" readonly spellcheck="false"></textarea>
+    </div>
+</div>
+
+<div id="error-toast" class="hidden fixed bottom-16 left-1/2 -translate-x-1/2 bg-danger text-white text-xs px-4 py-2.5 rounded-md shadow-lg z-50 flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-2 pointer-events-none">
+    <svg class="w-4 h-4 fill-white shrink-0" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+    <span>% 모드는 0~100 사이의 값이어야 합니다.</span>
+</div>
+<div id="restore-toast" class="hidden fixed bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-4 py-3 rounded-md shadow-lg z-50 flex items-center gap-4 transition-all duration-300 opacity-0 translate-y-2">
+    <span>저장된 데이터를 불러올까요?</span>
+    <div class="flex items-center gap-3">
+        <button id="toast-yes-btn" class="font-bold text-primary hover:text-blue-300 cursor-pointer">예</button>
+        <button id="toast-close-btn" class="text-gray-400 hover:text-white cursor-pointer">✕</button>
+    </div>
+</div>
+
 
     <script>
         const MAX_SIZE = 25;
@@ -1602,6 +1595,233 @@
         ui.addRowFixedBtn.addEventListener('click', addRow);
         ui.csvExportBtn.addEventListener('click', downloadCsv);
         ui.resetBtn.addEventListener('click', resetData);
-    </script>
+
+        /* ==========================================
+   [DEBUG] Export & D3 Logic
+   ========================================== */
+
+// 0. D3.js 로드 확인 (가장 먼저 실행)
+if (typeof d3 === 'undefined') {
+    console.error("🚨 [ERROR] D3.js 라이브러리가 로드되지 않았습니다. 인터넷 연결을 확인하거나 로컬 파일을 사용하세요.");
+    alert("D3.js 로드 실패! 프리뷰가 작동하지 않을 수 있습니다.");
+} else {
+    console.log("✅ [SUCCESS] D3.js 로드 완료:", d3.version);
+}
+
+// 1. 탭 전환 기능
+window.switchTab = function(tabName) {
+    console.log(`👉 [UI] 탭 전환 요청: ${tabName}`);
+    
+    const tabData = document.getElementById('tab-data');
+    const tabExport = document.getElementById('tab-export');
+    const step1 = document.getElementById('step-1');
+    const step2 = document.getElementById('step-2');
+    const stepExport = document.getElementById('step-export');
+
+    const activeClass = 'px-3 py-0.5 text-xs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer';
+    const inactiveClass = 'px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer';
+
+    if (tabName === 'data') {
+        tabData.className = activeClass;
+        tabExport.className = inactiveClass;
+        stepExport.classList.remove('active');
+        
+        if (state.currentStep === 1) step1.classList.add('active');
+        else step2.classList.add('active');
+        
+        if (state.currentStep === 2) ui.mainCta.style.display = 'block';
+
+    } else if (tabName === 'export') {
+        tabData.className = inactiveClass;
+        tabExport.className = activeClass;
+        step1.classList.remove('active');
+        step2.classList.remove('active');
+        stepExport.classList.add('active'); // 화면 먼저 표시 (렌더링 사이즈 확보)
+
+        ui.mainCta.style.display = 'none';
+
+        // 스타일 추출 요청 전송
+        console.log("📤 [UI] 'extract_style' 메시지 전송");
+        parent.postMessage({ pluginMessage: { type: 'extract_style' } }, '*');
+    }
+};
+
+// 2. 메시지 수신 핸들러 (디버깅 로그 추가)
+const originalOnMessage = window.onmessage;
+window.onmessage = (event) => {
+    if (originalOnMessage) originalOnMessage(event);
+
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === 'style_extracted') {
+        console.log("📥 [UI] 'style_extracted' 메시지 수신:", msg.payload);
+        
+        const styleData = msg.payload;
+        
+        // 데이터 유효성 검사
+        if (!styleData) {
+            console.error("🚨 [UI] 스타일 데이터가 비어있습니다.");
+            return;
+        }
+
+        // 렌더링 시작
+        try {
+            renderD3Preview(styleData);
+            document.getElementById('d3-code-output').value = generateD3CodeString(styleData);
+            console.log("✅ [UI] D3 프리뷰 렌더링 완료");
+        } catch (error) {
+            console.error("🚨 [UI] 렌더링 중 에러 발생:", error);
+        }
+    }
+};
+
+// 3. D3.js 프리뷰 렌더링 함수
+// [UI.html] D3.js 프리뷰 렌더링 함수 (고도화)
+function renderD3Preview(style) {
+    const container = document.getElementById('d3-preview-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // 1. 데이터 생성 로직 (다중 시리즈 지원)
+    // markNum이 배열(Stacked)인 경우 단순화를 위해 첫 번째 그룹 크기나 1로 취급
+    let seriesCount = 1;
+    if (Array.isArray(style.markNum)) {
+        seriesCount = style.markNum.length > 0 ? style.markNum[0] : 1; 
+    } else {
+        seriesCount = Number(style.markNum) || 1;
+    }
+
+    const colCount = style.colCount || 5;
+    
+    // 데이터 구조: [{ col: 0, v0: 10, v1: 20 }, { col: 1, ... }]
+    const data = Array.from({ length: colCount }, (_, i) => {
+        const item = { col: i };
+        for (let s = 0; s < seriesCount; s++) {
+            item[`v${s}`] = Math.floor(Math.random() * 80) + 10; // 10~90 랜덤값
+        }
+        return item;
+    });
+
+    // 2. SVG 설정
+    const width = container.clientWidth || 300;
+    const height = container.clientHeight || 200;
+    const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+
+    // X축 스케일 (컬럼용)
+    const x0 = d3.scaleBand()
+        .domain(d3.range(colCount))
+        .range([margin.left, width - margin.right])
+        .padding(1 - (style.markRatio || 0.8));
+
+    // Y축 스케일
+    const y = d3.scaleLinear()
+        .domain([0, 100])
+        .nice()
+        .range([height - margin.bottom, margin.top]);
+
+    // 3. 차트 타입별 그리기
+    const colors = style.colors && style.colors.length > 0 ? style.colors : ['#18A0FB', '#9CA3AF', '#FCD34D'];
+
+    // === CASE A: LINE CHART ===
+    if (style.chartType === 'line') {
+        // 시리즈별로 Line 그리기
+        for (let s = 0; s < seriesCount; s++) {
+            const line = d3.line()
+                .x((d) => x0(d.col) + x0.bandwidth() / 2) // 밴드 중앙에 점 찍기
+                .y((d) => y(d[`v${s}`]))
+                .curve(d3.curveMonotoneX); // 부드러운 곡선
+
+            // Path 추가
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", colors[s % colors.length])
+                .attr("stroke-width", 2)
+                .attr("d", line);
+
+            // 점(Circle) 추가
+            svg.selectAll(`.dot-s${s}`)
+                .data(data)
+                .enter().append("circle")
+                .attr("cx", (d) => x0(d.col) + x0.bandwidth() / 2)
+                .attr("cy", (d) => y(d[`v${s}`]))
+                .attr("r", 3)
+                .attr("fill", "#fff")
+                .attr("stroke", colors[s % colors.length])
+                .attr("stroke-width", 2);
+        }
+
+    // === CASE B: BAR CHART (Grouped or Simple) ===
+    } else {
+        // Grouped Bar를 위한 서브 스케일 (x1)
+        const x1 = d3.scaleBand()
+            .domain(d3.range(seriesCount))
+            .range([0, x0.bandwidth()])
+            .padding(0.05);
+
+        const group = svg.append("g")
+            .selectAll("g")
+            .data(data)
+            .join("g")
+            .attr("transform", d => `translate(${x0(d.col)},0)`);
+
+        group.selectAll("rect")
+            .data(d => Array.from({ length: seriesCount }, (_, i) => ({ key: i, value: d[`v${i}`] })))
+            .join("rect")
+            .attr("x", d => x1(d.key))
+            .attr("y", d => y(d.value))
+            .attr("width", x1.bandwidth())
+            .attr("height", d => y(0) - y(d.value))
+            .attr("fill", d => colors[d.key % colors.length])
+            .attr("rx", 2);
+    }
+
+    // 4. 축 그리기 (공통)
+    // Y Axis
+    svg.append('g')
+        .attr('transform', `translate(${margin.left},0)`)
+        .call(d3.axisLeft(y).ticks(style.yCount || 4))
+        .call(g => g.select(".domain").remove())
+        .call(g => g.selectAll(".tick line").attr("stroke-opacity", 0.1));
+
+    // X Axis
+    svg.append('g')
+        .attr('transform', `translate(0,${height - margin.bottom})`)
+        .call(d3.axisBottom(x0).tickFormat(i => i + 1))
+        .call(g => g.select(".domain").attr("stroke", "#E0E0E0"));
+}
+
+// 4. D3 코드 생성 (기존 유지)
+function generateD3CodeString(style) {
+    // ... 기존 코드와 동일 ...
+    // (이 부분은 에러가 잘 안나므로 생략하거나 기존 코드 사용)
+    const colorsJson = JSON.stringify(style.colors && style.colors.length > 0 ? style.colors : ['#18A0FB']);
+    const paddingVal = (1 - (style.markRatio || 0.8)).toFixed(2);
+    const yTicksVal = style.yCount || 4;
+    return `// D3.js Config \nconst config = { colors: ${colorsJson}, padding: ${paddingVal}, yTicks: ${yTicksVal} };`;
+}
+
+// 5. 복사 기능 (기존 유지)
+window.copyToClipboard = function() {
+    const copyText = document.getElementById("d3-code-output");
+    copyText.select();
+    document.execCommand("copy");
+    
+    // 복사 완료 피드백
+    const btn = document.querySelector('button[onclick="copyToClipboard()"]');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `<span class="text-primary font-bold">Copied!</span>`;
+    setTimeout(() => {
+        btn.innerHTML = originalHTML;
+    }, 1500);
+};
+   
+   </script>
 </body>
 </html>
