@@ -1676,34 +1676,29 @@ window.onmessage = (event) => {
     }
 };
 
-// 3. D3.js 프리뷰 렌더링 함수
-// [UI.html] D3.js 프리뷰 렌더링 함수 (고도화)
+// 3. D3.js 프리뷰 렌더링 함수 (Radius & Stroke 적용)
 function renderD3Preview(style) {
     const container = document.getElementById('d3-preview-container');
     if (!container) return;
     container.innerHTML = '';
 
-    // 1. 데이터 생성 로직 (다중 시리즈 지원)
-    // markNum이 배열(Stacked)인 경우 단순화를 위해 첫 번째 그룹 크기나 1로 취급
+    // 1. Data Gen
     let seriesCount = 1;
     if (Array.isArray(style.markNum)) {
         seriesCount = style.markNum.length > 0 ? style.markNum[0] : 1; 
     } else {
         seriesCount = Number(style.markNum) || 1;
     }
-
     const colCount = style.colCount || 5;
-    
-    // 데이터 구조: [{ col: 0, v0: 10, v1: 20 }, { col: 1, ... }]
     const data = Array.from({ length: colCount }, (_, i) => {
         const item = { col: i };
         for (let s = 0; s < seriesCount; s++) {
-            item[`v${s}`] = Math.floor(Math.random() * 80) + 10; // 10~90 랜덤값
+            item[`v${s}`] = Math.floor(Math.random() * 80) + 10;
         }
         return item;
     });
 
-    // 2. SVG 설정
+    // 2. Setup
     const width = container.clientWidth || 300;
     const height = container.clientHeight || 200;
     const margin = { top: 20, right: 20, bottom: 30, left: 40 };
@@ -1713,53 +1708,51 @@ function renderD3Preview(style) {
         .attr('width', width)
         .attr('height', height);
 
-    // X축 스케일 (컬럼용)
     const x0 = d3.scaleBand()
         .domain(d3.range(colCount))
         .range([margin.left, width - margin.right])
-        .padding(1 - (style.markRatio || 0.8));
+        .padding(1 - (style.markRatio || 0.8)); // [Bar Width 적용]
 
-    // Y축 스케일
     const y = d3.scaleLinear()
         .domain([0, 100])
         .nice()
         .range([height - margin.bottom, margin.top]);
 
-    // 3. 차트 타입별 그리기
-    const colors = style.colors && style.colors.length > 0 ? style.colors : ['#18A0FB', '#9CA3AF', '#FCD34D'];
+    const colors = style.colors && style.colors.length > 0 ? style.colors : ['#18A0FB', '#9CA3AF'];
 
-    // === CASE A: LINE CHART ===
+    // 3. Render
     if (style.chartType === 'line') {
-        // 시리즈별로 Line 그리기
+        // [Line Chart] Stroke Width 적용
+        const strokeWidth = style.strokeWidth || 2; // Figma 값 적용
+        
         for (let s = 0; s < seriesCount; s++) {
             const line = d3.line()
-                .x((d) => x0(d.col) + x0.bandwidth() / 2) // 밴드 중앙에 점 찍기
+                .x((d) => x0(d.col) + x0.bandwidth() / 2)
                 .y((d) => y(d[`v${s}`]))
-                .curve(d3.curveMonotoneX); // 부드러운 곡선
+                .curve(d3.curveMonotoneX);
 
-            // Path 추가
             svg.append("path")
                 .datum(data)
                 .attr("fill", "none")
                 .attr("stroke", colors[s % colors.length])
-                .attr("stroke-width", 2)
+                .attr("stroke-width", strokeWidth) // <-- 여기 적용됨
                 .attr("d", line);
 
-            // 점(Circle) 추가
             svg.selectAll(`.dot-s${s}`)
                 .data(data)
                 .enter().append("circle")
                 .attr("cx", (d) => x0(d.col) + x0.bandwidth() / 2)
                 .attr("cy", (d) => y(d[`v${s}`]))
-                .attr("r", 3)
+                .attr("r", strokeWidth + 1) // 점 크기도 선 두께에 비례
                 .attr("fill", "#fff")
                 .attr("stroke", colors[s % colors.length])
                 .attr("stroke-width", 2);
         }
 
-    // === CASE B: BAR CHART (Grouped or Simple) ===
     } else {
-        // Grouped Bar를 위한 서브 스케일 (x1)
+        // [Bar Chart] Corner Radius 적용
+        const radius = style.cornerRadius || 0; // Figma 값 적용
+
         const x1 = d3.scaleBand()
             .domain(d3.range(seriesCount))
             .range([0, x0.bandwidth()])
@@ -1779,18 +1772,16 @@ function renderD3Preview(style) {
             .attr("width", x1.bandwidth())
             .attr("height", d => y(0) - y(d.value))
             .attr("fill", d => colors[d.key % colors.length])
-            .attr("rx", 2);
+            .attr("rx", radius); // <-- 여기 적용됨 (Rounded Corner)
     }
 
-    // 4. 축 그리기 (공통)
-    // Y Axis
+    // Axes
     svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
         .call(d3.axisLeft(y).ticks(style.yCount || 4))
         .call(g => g.select(".domain").remove())
         .call(g => g.selectAll(".tick line").attr("stroke-opacity", 0.1));
 
-    // X Axis
     svg.append('g')
         .attr('transform', `translate(0,${height - margin.bottom})`)
         .call(d3.axisBottom(x0).tickFormat(i => i + 1))
@@ -1799,8 +1790,6 @@ function renderD3Preview(style) {
 
 // 4. D3 코드 생성 (기존 유지)
 function generateD3CodeString(style) {
-    // ... 기존 코드와 동일 ...
-    // (이 부분은 에러가 잘 안나므로 생략하거나 기존 코드 사용)
     const colorsJson = JSON.stringify(style.colors && style.colors.length > 0 ? style.colors : ['#18A0FB']);
     const paddingVal = (1 - (style.markRatio || 0.8)).toFixed(2);
     const yTicksVal = style.yCount || 4;
@@ -1811,8 +1800,7 @@ function generateD3CodeString(style) {
 window.copyToClipboard = function() {
     const copyText = document.getElementById("d3-code-output");
     copyText.select();
-    document.execCommand("copy");
-    
+    document.execCommand("copy");    
     // 복사 완료 피드백
     const btn = document.querySelector('button[onclick="copyToClipboard()"]');
     const originalHTML = btn.innerHTML;
