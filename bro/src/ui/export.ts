@@ -1,4 +1,5 @@
 import { ui } from './dom';
+import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 
 // ==========================================
 // EXPORT TAB — D3 Preview & Code
@@ -7,6 +8,102 @@ import { ui } from './dom';
 declare const d3: any;
 
 let lastStylePayload: any = null;
+let dataTabRenderer: (() => void) | null = null;
+
+function strokeColor(stroke: StrokeStyleSnapshot | null, fallback = '#E5E7EB') {
+    return stroke?.color || fallback;
+}
+
+function strokeWeight(stroke: StrokeStyleSnapshot | null, fallback = 1) {
+    if (!stroke) return fallback;
+    if (typeof stroke.weight === 'number') return stroke.weight;
+    const sideWeights = [stroke.weightTop, stroke.weightRight, stroke.weightBottom, stroke.weightLeft]
+        .filter((v): v is number => typeof v === 'number');
+    if (sideWeights.length > 0) {
+        return sideWeights.reduce((a, b) => a + b, 0) / sideWeights.length;
+    }
+    return fallback;
+}
+
+function applyStroke(selection: any, stroke: StrokeStyleSnapshot | null, fallbackColor: string, fallbackWidth: number) {
+    selection.attr('stroke', strokeColor(stroke, fallbackColor)).attr('stroke-width', strokeWeight(stroke, fallbackWidth));
+    if (stroke?.dashPattern && stroke.dashPattern.length > 0) {
+        selection.attr('stroke-dasharray', stroke.dashPattern.join(','));
+    }
+    if (typeof stroke?.opacity === 'number') {
+        selection.attr('stroke-opacity', stroke.opacity);
+    }
+}
+
+function getRowStroke(row: number, styles: RowStrokeStyle[]): StrokeStyleSnapshot | null {
+    const found = styles.find(item => item.row === row);
+    return found ? found.stroke : null;
+}
+
+function buildXAxisLabels(totalCols: number): string[] {
+    return Array.from({ length: totalCols }, (_, i) => `C${i + 1}`);
+}
+
+function buildYTickValues(yMin: number, yMax: number, cellCount: number): number[] {
+    const n = Math.max(1, cellCount);
+    const step = (yMax - yMin) / n;
+    return Array.from({ length: n + 1 }, (_, i) => yMin + (step * i));
+}
+
+function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number) {
+    const yAxis = d3.axisLeft(yScale)
+        .tickValues(yTickValues)
+        .tickFormat((d: number) => Number.isInteger(d) ? String(d) : d.toFixed(1).replace(/\.0$/, ''))
+        .tickPadding(6);
+
+    g.append('g')
+        .call(yAxis)
+        .selectAll('text')
+        .attr('font-size', 9);
+
+    const xAxis = d3.axisBottom(xScale)
+        .tickSizeOuter(0)
+        .tickFormat((d: number) => `C${d + 1}`);
+
+    g.append('g')
+        .attr('transform', `translate(0,${h})`)
+        .call(xAxis)
+        .selectAll('text')
+        .attr('font-size', 9);
+}
+
+function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: number, rowCount: number, colStroke: StrokeStyleSnapshot | null, rowStrokes: RowStrokeStyle[]) {
+    if (colStroke && colCount > 0) {
+        const step = w / colCount;
+        for (let c = 0; c <= colCount; c++) {
+            const line = g.append('line')
+                .attr('x1', c * step)
+                .attr('x2', c * step)
+                .attr('y1', 0)
+                .attr('y2', h);
+            applyStroke(line, colStroke, '#E5E7EB', 1);
+            line.attr('opacity', 0.35);
+        }
+    }
+
+    if (yCellCount > 0) {
+        const step = h / yCellCount;
+        for (let r = 0; r <= yCellCount; r++) {
+            const stroke = getRowStroke(r, rowStrokes);
+            const line = g.append('line')
+                .attr('x1', 0)
+                .attr('x2', w)
+                .attr('y1', r * step)
+                .attr('y2', r * step);
+            applyStroke(line, stroke || null, '#E5E7EB', 1);
+            line.attr('opacity', stroke ? 0.35 : 0.2);
+        }
+    }
+}
+
+export function setDataTabRenderer(renderer: () => void) {
+    dataTabRenderer = renderer;
+}
 
 export function switchTab(tab: 'data' | 'export') {
     const tabDataBtn = document.getElementById('tab-data')!;
@@ -19,6 +116,7 @@ export function switchTab(tab: 'data' | 'export') {
         tabExportBtn.className = 'px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer';
         step2.classList.add('active');
         stepExport.classList.remove('active');
+        if (dataTabRenderer) dataTabRenderer();
     } else {
         tabExportBtn.className = 'px-3 py-0.5 text-xs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer';
         tabDataBtn.className = 'px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer';
@@ -53,7 +151,7 @@ function renderD3Preview(style: any) {
         .attr('width', width)
         .attr('height', height);
 
-    const margin = { top: 10, right: 10, bottom: 20, left: 30 };
+    const margin = { top: 12, right: 14, bottom: 30, left: 44 };
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
@@ -65,6 +163,8 @@ function renderD3Preview(style: any) {
     const chartType = style.chartType || 'bar';
     const cornerRadius = style.cornerRadius || 0;
     const strokeWidth = style.strokeWidth || 2;
+    const colStrokeStyle: StrokeStyleSnapshot | null = style.colStrokeStyle || null;
+    const rowStrokeStyles: RowStrokeStyle[] = style.rowStrokeStyles || [];
 
     // Generate sample data
     const sampleData: number[][] = [];
@@ -80,30 +180,37 @@ function renderD3Preview(style: any) {
     }
 
     const yScale = d3.scaleLinear().domain([0, 100]).range([h, 0]);
+    const xAxisScale = d3.scaleBand().domain(d3.range(numCols)).range([0, w]).padding(0);
+    const yTickValues = buildYTickValues(0, 100, yCount);
 
-    // Y axis
-    g.append('g')
-        .call(d3.axisLeft(yScale).ticks(yCount).tickSize(-w))
-        .selectAll('line').attr('stroke', '#E5E7EB');
+    renderAxes(g, xAxisScale, yScale, yTickValues, h);
+    drawGuides(g, w, h, numCols, yCount, numRows, colStrokeStyle, rowStrokeStyles);
 
     if (chartType === 'bar') {
-        const xScale = d3.scaleBand().domain(d3.range(colCount)).range([0, w]).padding(1 - (style.markRatio || 0.8));
-        const innerScale = d3.scaleBand().domain(d3.range(numRows)).range([0, xScale.bandwidth()]).padding(0.05);
+        const xScale = d3.scaleBand().domain(d3.range(colCount)).range([0, w]).padding(0);
 
         for (let r = 0; r < numRows; r++) {
             for (let c = 0; c < colCount; c++) {
                 const val = sampleData[r][c];
-                g.append('rect')
-                    .attr('x', xScale(c)! + innerScale(r)!)
+
+                const colX = xScale(c)!;
+                const colW = xScale.bandwidth();
+                const clusterW = colW * 0.86;
+                const clusterOffset = (colW - clusterW) / 2;
+                const innerScale = d3.scaleBand().domain(d3.range(numRows)).range([0, clusterW]).padding(0.12);
+
+                const rect = g.append('rect')
+                    .attr('x', colX + clusterOffset + innerScale(r)!)
                     .attr('y', yScale(val))
                     .attr('width', innerScale.bandwidth())
                     .attr('height', h - yScale(val))
                     .attr('fill', colors[r % colors.length])
                     .attr('rx', cornerRadius);
+                applyStroke(rect, getRowStroke(r, rowStrokeStyles) || colStrokeStyle, 'none', 0);
             }
         }
     } else if (chartType === 'line') {
-        const xScale = d3.scalePoint().domain(d3.range(colCount)).range([0, w]).padding(0.5);
+        const xScale = d3.scaleBand().domain(d3.range(colCount)).range([0, w]).padding(0);
 
         for (let r = 0; r < numRows; r++) {
             const lineData = sampleData[r].slice(0, colCount);
@@ -112,19 +219,23 @@ function renderD3Preview(style: any) {
                 .y((d: number) => yScale(d))
                 .curve(d3.curveMonotoneX);
 
-            g.append('path')
+            const rowStroke = getRowStroke(r, rowStrokeStyles) || colStrokeStyle;
+            const baseColor = colors[r % colors.length];
+            const path = g.append('path')
                 .datum(lineData)
                 .attr('fill', 'none')
-                .attr('stroke', colors[r % colors.length])
+                .attr('stroke', baseColor)
                 .attr('stroke-width', strokeWidth)
                 .attr('d', line);
+            applyStroke(path, rowStroke, baseColor, strokeWidth);
 
             lineData.forEach((val: number, i: number) => {
-                g.append('circle')
+                const dot = g.append('circle')
                     .attr('cx', xScale(i)!)
                     .attr('cy', yScale(val))
                     .attr('r', 3)
-                    .attr('fill', colors[r % colors.length]);
+                    .attr('fill', baseColor);
+                applyStroke(dot, rowStroke, 'none', 0);
             });
         }
     } else if (chartType === 'stackedBar') {
@@ -141,13 +252,14 @@ function renderD3Preview(style: any) {
                     const val = sampleData[r][flatIdx] || (20 + Math.random() * 30);
                     const barH = (val / 100) * h;
 
-                    g.append('rect')
+                    const rect = g.append('rect')
                         .attr('x', xScale(gIdx)! + innerScale(b)!)
                         .attr('y', yOffset - barH)
                         .attr('width', innerScale.bandwidth())
                         .attr('height', barH)
                         .attr('fill', colors[r % colors.length])
                         .attr('rx', cornerRadius);
+                    applyStroke(rect, getRowStroke(r, rowStrokeStyles) || colStrokeStyle, 'none', 0);
                     yOffset -= barH;
                 }
                 flatIdx++;
@@ -166,6 +278,8 @@ export function generateD3CodeString(style: any): string {
     const paddingVal = (1 - (style.markRatio || 0.8)).toFixed(2);
     const strokeVal = style.strokeWidth || 2;
     const radiusVal = style.cornerRadius || 0;
+    const colStroke = JSON.stringify(style.colStrokeStyle || null);
+    const rowStrokes = JSON.stringify(style.rowStrokeStyles || []);
 
     return `// D3.js Config Export
 // Generated from Figma Plugin
@@ -176,13 +290,16 @@ const config = {
   cornerRadius: ${radiusVal},
   chartType: "${style.chartType || 'bar'}",
   colCount: ${style.colCount || 5},
-  yCount: ${style.yCount || 4}
+  yCount: ${style.yCount || 4},
+  colStroke: ${colStroke},
+  rowStrokes: ${rowStrokes}
 };
 
 // Example: Apply to D3 bars
 // d3.selectAll('rect')
 //   .attr('fill', (d, i) => config.colors[i % config.colors.length])
-//   .attr('rx', config.cornerRadius);
+//   .attr('rx', config.cornerRadius)
+//   .attr('stroke', config.colStroke?.color || 'none');
 //
 // d3.scaleBand().padding(config.padding);`;
 }

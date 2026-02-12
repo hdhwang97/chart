@@ -2,6 +2,8 @@
 // STATE & CONSTANTS
 // ==========================================
 
+import type { CellStrokeStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
+
 export const MAX_SIZE = 25;
 
 export const state = {
@@ -18,7 +20,10 @@ export const state = {
     uiMode: 'create' as 'create' | 'edit',
     cachedRawData: null as string[][] | null,
     conversionMax: 100,
-    strokeWidth: 2
+    strokeWidth: 2,
+    colStrokeStyle: null as StrokeStyleSnapshot | null,
+    cellStrokeStyles: [] as CellStrokeStyle[],
+    rowStrokeStyles: [] as RowStrokeStyle[]
 };
 
 export const CHART_ICONS: { [key: string]: string } = {

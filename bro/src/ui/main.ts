@@ -7,64 +7,25 @@ import { setMode, toggleMode, updateModeButtonState, checkCtaValidation } from '
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize } from './data-ops';
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
-import { switchTab, handleStyleExtracted } from './export';
+import { switchTab, handleStyleExtracted, setDataTabRenderer } from './export';
 
 // ==========================================
 // UI ENTRY POINT
 // ==========================================
 
-// --- Event listeners ---
+let uiInitialized = false;
+const pendingMessages: any[] = [];
 
-// Header buttons
-ui.backBtn.addEventListener('click', () => goToStep(1));
-ui.mainCta.addEventListener('click', () => submitData());
-ui.editModeBtn.addEventListener('click', () => toggleMode());
-
-// Settings inputs
-ui.settingColInput.addEventListener('change', handleDimensionInput);
-ui.settingCellInput.addEventListener('change', handleDimensionInput);
-ui.settingStrokeInput.addEventListener('change', handleDimensionInput);
-ui.settingMarkSelect.addEventListener('change', () => {
-    renderGrid();
-    renderPreview();
-});
-
-// Y axis inputs
-ui.settingYMin.addEventListener('change', () => renderPreview());
-ui.settingYMax.addEventListener('change', () => renderPreview());
-
-// CSV
-ui.csvInput.addEventListener('change', handleCsvUpload);
-ui.csvExportBtn.addEventListener('click', downloadCsv);
-ui.csvDeleteBtn.addEventListener('click', removeCsv);
-
-// Reset
-ui.resetBtn.addEventListener('click', resetData);
-
-// Column & Row add buttons
-ui.addColFixedBtn.addEventListener('click', () => addColumn());
-ui.addRowFixedBtn.addEventListener('click', () => addRow());
-
-// Restore toast
-ui.toastCloseBtn.addEventListener('click', () => {
-    ui.toast.classList.add('hidden');
-});
-
-// Resize message
-function sendResize(width: number, height: number) {
-    parent.postMessage({ pluginMessage: { type: 'resize', width, height } }, '*');
-}
-
-// --- Message handler from Figma plugin ---
-window.onmessage = (event) => {
-    const msg = event.data?.pluginMessage;
-    if (!msg) return;
-
+function handlePluginMessage(msg: any) {
     if (msg.type === 'init') {
         if (!msg.chartType) {
             // No selection
             state.uiMode = 'create';
+            state.colStrokeStyle = null;
+            state.cellStrokeStyles = [];
+            state.rowStrokeStyles = [];
             goToStep(1);
+            switchTab('data');
             ui.editModeBtn.classList.add('hidden');
             return;
         }
@@ -117,6 +78,9 @@ window.onmessage = (event) => {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
         }
+        state.colStrokeStyle = msg.colStrokeStyle || null;
+        state.cellStrokeStyles = msg.cellStrokeStyles || [];
+        state.rowStrokeStyles = msg.rowStrokeStyles || [];
 
         // Line-specific UI
         if (msg.chartType === 'line') {
@@ -142,9 +106,85 @@ window.onmessage = (event) => {
         ui.backBtn.classList.add('hidden');
         updateModeButtonState();
         goToStep(2);
+        switchTab('data');
     }
 
     if (msg.type === 'style_extracted') {
+        state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
+        state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
+        state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
+        renderPreview();
         handleStyleExtracted(msg.payload);
     }
+}
+
+function bindUiEvents() {
+    // Header buttons
+    ui.backBtn.addEventListener('click', () => goToStep(1));
+    ui.mainCta.addEventListener('click', () => submitData());
+    ui.editModeBtn.addEventListener('click', () => toggleMode());
+
+    // Settings inputs
+    ui.settingColInput.addEventListener('change', handleDimensionInput);
+    ui.settingCellInput.addEventListener('change', handleDimensionInput);
+    ui.settingStrokeInput.addEventListener('change', handleDimensionInput);
+    ui.settingMarkSelect.addEventListener('change', () => {
+        renderGrid();
+        renderPreview();
+    });
+
+    // Y axis inputs
+    ui.settingYMin.addEventListener('change', () => renderPreview());
+    ui.settingYMax.addEventListener('change', () => renderPreview());
+
+    // CSV
+    ui.csvInput.addEventListener('change', handleCsvUpload);
+    ui.csvExportBtn.addEventListener('click', downloadCsv);
+    ui.csvDeleteBtn.addEventListener('click', removeCsv);
+
+    // Reset
+    ui.resetBtn.addEventListener('click', resetData);
+
+    // Column & Row add buttons
+    ui.addColFixedBtn.addEventListener('click', () => addColumn());
+    ui.addRowFixedBtn.addEventListener('click', () => addRow());
+
+    // Restore toast
+    ui.toastCloseBtn.addEventListener('click', () => {
+        ui.toast.classList.add('hidden');
+    });
+}
+
+function initializeUi() {
+    if (uiInitialized) return;
+    bindUiEvents();
+    setDataTabRenderer(() => {
+        renderGrid();
+        renderPreview();
+    });
+    uiInitialized = true;
+
+    while (pendingMessages.length > 0) {
+        const msg = pendingMessages.shift();
+        if (msg) handlePluginMessage(msg);
+    }
+}
+
+// --- Message handler from Figma plugin ---
+window.onmessage = (event) => {
+    const msg = event.data?.pluginMessage;
+    if (!msg) return;
+
+    if (!uiInitialized) {
+        pendingMessages.push(msg);
+        return;
+    }
+
+    handlePluginMessage(msg);
 };
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeUi, { once: true });
+} else {
+    initializeUi();
+}

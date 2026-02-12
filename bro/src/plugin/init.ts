@@ -3,9 +3,9 @@ import {
     VARIANT_PROPERTY_TYPE, PLUGIN_DATA_KEYS, MARK_NAME_PATTERNS,
     VARIANT_MAPPING
 } from './constants';
-import { traverse } from './utils';
+import { traverse, findActualPropKey } from './utils';
 import { loadChartData } from './data-layer';
-import { extractChartColors } from './style';
+import { extractChartColors, extractStyleFromNode } from './style';
 import { collectColumns } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
@@ -97,6 +97,7 @@ export async function initPluginUI(node: SceneNode, autoApply = false) {
     const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
     const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
     const extractedColors = extractChartColors(node, chartType);
+    const styleInfo = extractStyleFromNode(node, chartType);
 
     figma.ui.postMessage({
         type: 'init',
@@ -112,7 +113,11 @@ export async function initPluginUI(node: SceneNode, autoApply = false) {
         lastYMax: lastYMax ? Number(lastYMax) : undefined,
 
         markColors: extractedColors,
-        lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2
+        lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
+
+        colStrokeStyle: styleInfo.colStrokeStyle || null,
+        cellStrokeStyles: styleInfo.cellStrokeStyles || [],
+        rowStrokeStyles: styleInfo.rowStrokeStyles || []
     });
 }
 
@@ -201,7 +206,8 @@ export function inferStructureFromGraph(chartType: string, graph: SceneNode) {
 export function inferChartType(node: SceneNode): string {
     if (node.type === "INSTANCE") {
         const props = node.componentProperties;
-        if (props[VARIANT_PROPERTY_TYPE]) return props[VARIANT_PROPERTY_TYPE].value as string;
+        const typePropKey = findActualPropKey(props, VARIANT_PROPERTY_TYPE);
+        if (typePropKey && props[typePropKey]) return props[typePropKey].value as string;
     }
     let found = 'bar';
     traverse(node, n => {

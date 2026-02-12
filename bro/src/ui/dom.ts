@@ -1,60 +1,67 @@
 // ==========================================
-// DOM ELEMENT CACHE
+// DOM ELEMENT ACCESS (lazy)
 // ==========================================
 
+function byId<T extends HTMLElement>(id: string): T {
+    const el = document.getElementById(id);
+    if (!el) {
+        throw new Error(`[UI] Missing required element: #${id}`);
+    }
+    return el as T;
+}
+
 export const ui = {
-    step1: document.getElementById('step-1')!,
-    step2: document.getElementById('step-2')!,
-    backBtn: document.getElementById('back-btn')!,
-    mainCta: document.getElementById('main-cta') as HTMLButtonElement,
-    editModeBtn: document.getElementById('edit-mode-btn') as HTMLButtonElement,
+    get step1() { return byId<HTMLElement>('step-1'); },
+    get step2() { return byId<HTMLElement>('step-2'); },
+    get backBtn() { return byId<HTMLButtonElement>('back-btn'); },
+    get mainCta() { return byId<HTMLButtonElement>('main-cta'); },
+    get editModeBtn() { return byId<HTMLButtonElement>('edit-mode-btn'); },
 
-    chartTypeWrapper: document.getElementById('chart-type-wrapper')!,
-    chartTypeIcon: document.getElementById('chart-type-icon')!,
-    chartTypeDisplay: document.getElementById('chart-type-display')!,
+    get chartTypeWrapper() { return byId<HTMLElement>('chart-type-wrapper'); },
+    get chartTypeIcon() { return byId<HTMLElement>('chart-type-icon'); },
+    get chartTypeDisplay() { return byId<HTMLElement>('chart-type-display'); },
 
-    settingColInput: document.getElementById('setting-col-input') as HTMLInputElement,
-    settingCellInput: document.getElementById('setting-cell-input') as HTMLInputElement,
-    settingMarkSelect: document.getElementById('setting-mark-select') as HTMLSelectElement,
+    get settingColInput() { return byId<HTMLInputElement>('setting-col-input'); },
+    get settingCellInput() { return byId<HTMLInputElement>('setting-cell-input'); },
+    get settingMarkSelect() { return byId<HTMLSelectElement>('setting-mark-select'); },
 
-    containerMarkWrapper: document.getElementById('container-mark-wrapper')!,
-    containerMarkNormal: document.getElementById('container-mark-normal')!,
+    get containerMarkWrapper() { return byId<HTMLElement>('container-mark-wrapper'); },
+    get containerMarkNormal() { return byId<HTMLElement>('container-mark-normal'); },
 
-    labelColInput: document.getElementById('label-col-input')!,
-    labelMarkPosition: document.getElementById('label-mark-position')!,
+    get labelColInput() { return byId<HTMLElement>('label-col-input'); },
+    get labelMarkPosition() { return byId<HTMLElement>('label-mark-position'); },
 
-    settingYMin: document.getElementById('setting-y-min') as HTMLInputElement,
-    settingYMax: document.getElementById('setting-y-max') as HTMLInputElement,
+    get settingYMin() { return byId<HTMLInputElement>('setting-y-min'); },
+    get settingYMax() { return byId<HTMLInputElement>('setting-y-max'); },
 
-    // Stroke Width UI Elements
-    settingStrokeInput: document.getElementById('setting-stroke-input') as HTMLInputElement,
-    containerStrokeWidth: document.getElementById('container-stroke-width')!,
-    spacerStroke: document.getElementById('spacer-stroke')!,
+    get settingStrokeInput() { return byId<HTMLInputElement>('setting-stroke-input'); },
+    get containerStrokeWidth() { return byId<HTMLElement>('container-stroke-width'); },
+    get spacerStroke() { return byId<HTMLElement>('spacer-stroke'); },
 
-    csvInput: document.getElementById('csv-upload') as HTMLInputElement,
-    csvStatusText: document.getElementById('csv-status-text')!,
-    csvDeleteBtn: document.getElementById('csv-delete-btn')!,
+    get csvInput() { return byId<HTMLInputElement>('csv-upload'); },
+    get csvStatusText() { return byId<HTMLElement>('csv-status-text'); },
+    get csvDeleteBtn() { return byId<HTMLButtonElement>('csv-delete-btn'); },
 
-    gridScrollArea: document.getElementById('grid-scroll-area')!,
-    gridContainer: document.getElementById('data-grid')!,
-    rowHeaderContainer: document.getElementById('row-header-container')!,
+    get gridScrollArea() { return byId<HTMLElement>('grid-scroll-area'); },
+    get gridContainer() { return byId<HTMLElement>('data-grid'); },
+    get rowHeaderContainer() { return byId<HTMLElement>('row-header-container'); },
 
-    addColFixedBtn: document.getElementById('add-col-fixed-btn')!,
-    addRowFixedBtn: document.getElementById('add-row-fixed-btn')!,
-    resetBtn: document.getElementById('reset-btn')!,
+    get addColFixedBtn() { return byId<HTMLButtonElement>('add-col-fixed-btn'); },
+    get addRowFixedBtn() { return byId<HTMLButtonElement>('add-row-fixed-btn'); },
+    get resetBtn() { return byId<HTMLButtonElement>('reset-btn'); },
 
-    modeToggleContainer: document.getElementById('mode-toggle-container')!,
-    modeRawBtn: document.getElementById('mode-raw')!,
-    modePercentBtn: document.getElementById('mode-percent')!,
+    get modeToggleContainer() { return byId<HTMLElement>('mode-toggle-container'); },
+    get modeRawBtn() { return byId<HTMLButtonElement>('mode-raw'); },
+    get modePercentBtn() { return byId<HTMLButtonElement>('mode-percent'); },
 
-    tooltipNormal: document.getElementById('tooltip-normal')!,
-    tooltipWarning: document.getElementById('tooltip-warning')!,
-    mainTooltip: document.getElementById('main-tooltip')!,
-    tooltipStackedHint: document.getElementById('tooltip-stacked-hint')!,
+    get tooltipNormal() { return byId<HTMLElement>('tooltip-normal'); },
+    get tooltipWarning() { return byId<HTMLElement>('tooltip-warning'); },
+    get mainTooltip() { return byId<HTMLElement>('main-tooltip'); },
+    get tooltipStackedHint() { return byId<HTMLElement>('tooltip-stacked-hint'); },
 
-    csvExportBtn: document.getElementById('csv-export-btn')!,
-    toast: document.getElementById('restore-toast')!,
-    toastYesBtn: document.getElementById('toast-yes-btn')!,
-    toastCloseBtn: document.getElementById('toast-close-btn')!,
-    errorToast: document.getElementById('error-toast')!
+    get csvExportBtn() { return byId<HTMLButtonElement>('csv-export-btn'); },
+    get toast() { return byId<HTMLElement>('restore-toast'); },
+    get toastYesBtn() { return byId<HTMLButtonElement>('toast-yes-btn'); },
+    get toastCloseBtn() { return byId<HTMLButtonElement>('toast-close-btn'); },
+    get errorToast() { return byId<HTMLElement>('error-toast'); }
 };

@@ -26,13 +26,12 @@ export function renderGrid() {
     if (isStacked) {
         // Group headers row
         const groupRow = document.createElement('div');
-        groupRow.className = 'flex';
-        groupRow.style.height = '24px';
+        groupRow.style.display = 'contents';
         state.groupStructure.forEach((barCount, gIdx) => {
             const gCell = document.createElement('div');
             gCell.className = 'flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group';
-            gCell.style.width = `${barCount * 64}px`;
-            gCell.style.minWidth = `${barCount * 64}px`;
+            gCell.style.gridColumn = `span ${barCount}`;
+            gCell.style.height = '24px';
             gCell.innerHTML = `
                 <span>G${gIdx + 1}</span>
                 <div class="hidden group-hover:flex items-center gap-0.5 ml-1">
@@ -54,8 +53,7 @@ export function renderGrid() {
 
         // Sub-column headers
         const subRow = document.createElement('div');
-        subRow.className = 'flex';
-        subRow.style.height = '24px';
+        subRow.style.display = 'contents';
         let flatIdx = 0;
         state.groupStructure.forEach((barCount, gIdx) => {
             for (let b = 0; b < barCount; b++) {
@@ -72,8 +70,7 @@ export function renderGrid() {
     } else {
         // Normal column headers
         const headerRow = document.createElement('div');
-        headerRow.className = 'flex';
-        headerRow.style.height = '24px';
+        headerRow.style.display = 'contents';
         for (let c = 0; c < state.cols; c++) {
             const hCell = document.createElement('div');
             hCell.className = 'w-16 h-6 flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group col-header';
@@ -119,8 +116,7 @@ export function renderGrid() {
     // ===== DATA CELLS =====
     for (let r = 0; r < state.rows; r++) {
         const rowDiv = document.createElement('div');
-        rowDiv.className = 'flex';
-        rowDiv.style.height = '24px';
+        rowDiv.style.display = 'contents';
 
         for (let c = 0; c < totalCols; c++) {
             const cell = document.createElement('input');

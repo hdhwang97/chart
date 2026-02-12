@@ -45,13 +45,34 @@ export async function loadChartData(node: SceneNode, chartType: string) {
     const savedMarkNumStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM);
 
     if (savedValuesStr) {
-        return {
-            values: JSON.parse(savedValuesStr),
-            markNum: savedMarkNumStr ? JSON.parse(savedMarkNumStr) : 1,
-            cellCount: Number(savedCell) || 4,
-            isSaved: true
-        };
+        try {
+            const values = JSON.parse(savedValuesStr);
+            const markNum = savedMarkNumStr ? JSON.parse(savedMarkNumStr) : 1;
+            const cellCount = Number(savedCell) || 4;
+            console.log('[chart-plugin][data] saved LAST_VALUES found', {
+                nodeId: node.id,
+                valuesRows: Array.isArray(values) ? values.length : 0,
+                cellCount,
+                hasSavedMarkNum: Boolean(savedMarkNumStr)
+            });
+            return {
+                values,
+                markNum,
+                cellCount,
+                isSaved: true
+            };
+        } catch (e) {
+            console.warn('[chart-plugin][data] failed to parse saved LAST_VALUES, fallback to inference', {
+                nodeId: node.id,
+                error: e instanceof Error ? e.message : String(e)
+            });
+        }
     }
+
+    console.log('[chart-plugin][data] no saved LAST_VALUES, infer from structure', {
+        nodeId: node.id,
+        chartType
+    });
 
     const structure = inferStructureFromGraph(chartType, node);
     return {

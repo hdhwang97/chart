@@ -17,6 +17,46 @@ let currentSelectionId: string | null = null;
 let prevWidth = 0;
 let prevHeight = 0;
 
+function isRecognizedChartSelection(node: SceneNode) {
+    const savedChartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE);
+    const columnCount = collectColumns(node).length;
+    return Boolean(savedChartType) || columnCount > 0;
+}
+
+function resolveChartTargetFromSelection(node: SceneNode): SceneNode {
+    let current: BaseNode | null = node;
+    let resolved: SceneNode = node;
+
+    while (current && current.type !== 'PAGE') {
+        if ('getPluginData' in current) {
+            const candidate = current as SceneNode;
+            if (isRecognizedChartSelection(candidate)) {
+                resolved = candidate;
+            }
+        }
+        current = current.parent;
+    }
+
+    return resolved;
+}
+
+function logSelectionRecognition(node: SceneNode) {
+    const savedChartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE);
+    const inferredChartType = inferChartType(node);
+    const columnCount = collectColumns(node).length;
+    const recognized = isRecognizedChartSelection(node);
+
+    console.log('[chart-plugin][selection]', {
+        recognized,
+        nodeId: node.id,
+        nodeName: node.name,
+        nodeType: node.type,
+        savedChartType: savedChartType || null,
+        inferredChartType,
+        columnCount
+    });
+}
+
 // Message Handler
 figma.ui.onmessage = async (msg) => {
     if (msg.type === 'resize') {
@@ -29,7 +69,18 @@ figma.ui.onmessage = async (msg) => {
         let targetNode: FrameNode | ComponentNode | InstanceNode;
 
         if (msg.type === 'apply' && nodes.length > 0) {
-            targetNode = nodes[0] as FrameNode;
+            const resolvedNode = resolveChartTargetFromSelection(nodes[0]);
+            if (!isRecognizedChartSelection(resolvedNode)) {
+                figma.notify("Please select a chart component instance.");
+                return;
+            }
+            targetNode = resolvedNode as FrameNode;
+            console.log('[chart-plugin][apply]', {
+                selectedNodeId: nodes[0].id,
+                targetNodeId: resolvedNode.id,
+                selectedNodeName: nodes[0].name,
+                targetNodeName: resolvedNode.name
+            });
         } else {
             // Generate new
             const component = await getOrImportComponent();
@@ -97,7 +148,10 @@ figma.ui.onmessage = async (msg) => {
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: styleInfo.markRatio,
             cornerRadius: styleInfo.cornerRadius,
-            strokeWidth: styleInfo.strokeWidth
+            strokeWidth: styleInfo.strokeWidth,
+            colStrokeStyle: styleInfo.colStrokeStyle || null,
+            cellStrokeStyles: styleInfo.cellStrokeStyles || [],
+            rowStrokeStyles: styleInfo.rowStrokeStyles || []
         };
 
         figma.ui.postMessage({ type: 'style_extracted', payload: stylePayload });
@@ -116,7 +170,11 @@ figma.ui.onmessage = async (msg) => {
             figma.notify("Please select exactly one chart component.");
             return;
         }
-        const node = nodes[0];
+        const node = resolveChartTargetFromSelection(nodes[0]);
+        if (!isRecognizedChartSelection(node)) {
+            figma.notify("Please select a chart component instance.");
+            return;
+        }
         const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
 
         // 주입된 payload가 없으므로 역산(Inference) 수행
@@ -138,7 +196,10 @@ figma.ui.onmessage = async (msg) => {
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: styleInfo.markRatio,
             cornerRadius: styleInfo.cornerRadius,
-            strokeWidth: styleInfo.strokeWidth
+            strokeWidth: styleInfo.strokeWidth,
+            colStrokeStyle: styleInfo.colStrokeStyle || null,
+            cellStrokeStyles: styleInfo.cellStrokeStyles || [],
+            rowStrokeStyles: styleInfo.rowStrokeStyles || []
         };
 
         figma.ui.postMessage({ type: 'style_extracted', payload: payload });
@@ -152,15 +213,33 @@ figma.on("selectionchange", () => {
     const selection = figma.currentPage.selection;
     if (selection.length === 1) {
         const node = selection[0];
-        initPluginUI(node);
+        const resolvedNode = resolveChartTargetFromSelection(node);
+        logSelectionRecognition(resolvedNode);
+        console.log('[chart-plugin][selection-resolve]', {
+            selectedNodeId: node.id,
+            resolvedNodeId: resolvedNode.id,
+            selectedNodeName: node.name,
+            resolvedNodeName: resolvedNode.name
+        });
+        if (!isRecognizedChartSelection(resolvedNode)) {
+            currentSelectionId = null;
+            figma.ui.postMessage({ type: 'init', chartType: null });
+            return;
+        }
+        initPluginUI(resolvedNode);
 
-        if (node.id !== currentSelectionId) {
-            currentSelectionId = node.id;
-            prevWidth = node.width;
-            prevHeight = node.height;
+        if (resolvedNode.id !== currentSelectionId) {
+            currentSelectionId = resolvedNode.id;
+            prevWidth = resolvedNode.width;
+            prevHeight = resolvedNode.height;
         }
     } else {
         currentSelectionId = null;
+        console.log('[chart-plugin][selection]', {
+            recognized: false,
+            reason: selection.length === 0 ? 'empty-selection' : 'multi-selection',
+            selectionCount: selection.length
+        });
         figma.ui.postMessage({ type: 'init', chartType: null });
     }
 });
