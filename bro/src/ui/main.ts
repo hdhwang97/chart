@@ -24,8 +24,8 @@ function handlePluginMessage(msg: any) {
             state.colStrokeStyle = null;
             state.cellStrokeStyles = [];
             state.rowStrokeStyles = [];
-            goToStep(1);
             switchTab('data');
+            goToStep(1);
             ui.editModeBtn.classList.add('hidden');
             return;
         }

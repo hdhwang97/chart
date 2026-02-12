@@ -50,7 +50,7 @@ function buildYTickValues(yMin: number, yMax: number, cellCount: number): number
     return Array.from({ length: n + 1 }, (_, i) => yMin + (step * i));
 }
 
-function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number) {
+function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
         .tickFormat((d: number) => Number.isInteger(d) ? String(d) : d.toFixed(1).replace(/\.0$/, ''))
@@ -64,6 +64,9 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
     const xAxis = d3.axisBottom(xScale)
         .tickSizeOuter(0)
         .tickFormat((d: number) => `C${d + 1}`);
+    if (xTickValues && xTickValues.length > 0) {
+        xAxis.tickValues(xTickValues);
+    }
 
     g.append('g')
         .attr('transform', `translate(0,${h})`)
@@ -72,17 +75,29 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
         .attr('font-size', 9);
 }
 
-function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: number, rowCount: number, colStroke: StrokeStyleSnapshot | null, rowStrokes: RowStrokeStyle[]) {
+function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: number, colStroke: StrokeStyleSnapshot | null, rowStrokes: RowStrokeStyle[], xGuidePositions?: number[]) {
     if (colStroke && colCount > 0) {
-        const step = w / colCount;
-        for (let c = 0; c <= colCount; c++) {
-            const line = g.append('line')
-                .attr('x1', c * step)
-                .attr('x2', c * step)
-                .attr('y1', 0)
-                .attr('y2', h);
-            applyStroke(line, colStroke, '#E5E7EB', 1);
-            line.attr('opacity', 0.35);
+        if (xGuidePositions && xGuidePositions.length > 0) {
+            xGuidePositions.forEach((x) => {
+                const line = g.append('line')
+                    .attr('x1', x)
+                    .attr('x2', x)
+                    .attr('y1', 0)
+                    .attr('y2', h);
+                applyStroke(line, colStroke, '#E5E7EB', 1);
+                line.attr('opacity', 0.35);
+            });
+        } else {
+            const step = w / colCount;
+            for (let c = 0; c <= colCount; c++) {
+                const line = g.append('line')
+                    .attr('x1', c * step)
+                    .attr('x2', c * step)
+                    .attr('y1', 0)
+                    .attr('y2', h);
+                applyStroke(line, colStroke, '#E5E7EB', 1);
+                line.attr('opacity', 0.35);
+            }
         }
     }
 
@@ -180,11 +195,20 @@ function renderD3Preview(style: any) {
     }
 
     const yScale = d3.scaleLinear().domain([0, 100]).range([h, 0]);
-    const xAxisScale = d3.scaleBand().domain(d3.range(numCols)).range([0, w]).padding(0);
+    const isLine = chartType === 'line';
+    const lineTickValues = isLine
+        ? Array.from({ length: numCols }, (_, i) => i)
+        : undefined;
+    const xAxisScale = isLine
+        ? d3.scaleLinear().domain([0, Math.max(1, numCols - 1)]).range([0, w])
+        : d3.scaleBand().domain(d3.range(numCols)).range([0, w]).padding(0);
     const yTickValues = buildYTickValues(0, 100, yCount);
 
-    renderAxes(g, xAxisScale, yScale, yTickValues, h);
-    drawGuides(g, w, h, numCols, yCount, numRows, colStrokeStyle, rowStrokeStyles);
+    renderAxes(g, xAxisScale, yScale, yTickValues, h, lineTickValues);
+    const lineGuidePositions = isLine && lineTickValues
+        ? lineTickValues.map(idx => xAxisScale(idx))
+        : undefined;
+    drawGuides(g, w, h, numCols, yCount, colStrokeStyle, rowStrokeStyles, lineGuidePositions);
 
     if (chartType === 'bar') {
         const xScale = d3.scaleBand().domain(d3.range(colCount)).range([0, w]).padding(0);
@@ -210,7 +234,7 @@ function renderD3Preview(style: any) {
             }
         }
     } else if (chartType === 'line') {
-        const xScale = d3.scaleBand().domain(d3.range(colCount)).range([0, w]).padding(0);
+        const xScale = d3.scaleLinear().domain([0, Math.max(1, colCount - 1)]).range([0, w]);
 
         for (let r = 0; r < numRows; r++) {
             const lineData = sampleData[r].slice(0, colCount);
