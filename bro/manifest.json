@@ -1,14 +1,17 @@
 {
-  "name": "Dynamic Chart (Spreadsheet UI)",
+  "name": "Test 1.0",
   "id": "dynamic-chart-advanced",
   "api": "1.0.0",
-  "editorType": ["figma"],
-  "main": "code.js",
-  "ui": "ui.html",
+  "editorType": [
+    "figma"
+  ],
+  "main": "dist/code.js",
+  "ui": "dist/index.html",
   "networkAccess": {
     "allowedDomains": [
       "https://cdn.jsdelivr.net",
-      "https://cdn.tailwindcss.com"
+      "https://cdn.tailwindcss.com",
+      "https://d3js.org"
     ],
     "reasoning": "Handsontable UI 라이브러리를 CDN에서 로드하기 위해 jsDelivr 도메인을 허용합니다."
   },

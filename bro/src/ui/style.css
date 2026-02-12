@@ -11,10 +11,16 @@ body { font-family: 'Inter', sans-serif; }
 
 .tooltip-trigger:hover .tooltip-content { display: block; }
 
-input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button {
-  -webkit-appearance: inner-spin-button !important;
-  opacity: 1 !important;
-  cursor: pointer;
-  display: block;
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: inner-spin-button !important;
+    opacity: 1 !important;
+    cursor: pointer;
+    display: block;
 }
+
+/* Row Header Hover Effects */
+.row-header:hover .del-row-btn { display: flex; }
+
+/* Hover Header Highlight Effect */
+.header-hover { background-color: #E0F2FE !important; color: #0284C7 !important; transition: all 0.2s; }

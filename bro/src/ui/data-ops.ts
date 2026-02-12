@@ -1,0 +1,138 @@
+import { state, MAX_SIZE } from './state';
+import { ui } from './dom';
+import { renderGrid } from './grid';
+import { renderPreview } from './preview';
+import { checkCtaValidation } from './mode';
+
+// ==========================================
+// DATA OPERATIONS
+// ==========================================
+
+export function addRow() {
+    if (state.rows >= MAX_SIZE) return;
+    state.rows++;
+    state.data.push(new Array(state.chartType === 'stackedBar' ? state.groupStructure.reduce((a, b) => a + b, 0) : state.cols).fill(""));
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
+export function addColumn() {
+    if (state.chartType === 'stackedBar') {
+        state.groupStructure.push(2);
+        const totalCols = state.groupStructure.reduce((a, b) => a + b, 0);
+        for (let r = 0; r < state.data.length; r++) {
+            while (state.data[r].length < totalCols) state.data[r].push("");
+        }
+        state.cols = state.groupStructure.length;
+    } else {
+        if (state.cols >= MAX_SIZE) return;
+        state.cols++;
+        state.data.forEach(row => row.push(""));
+    }
+    ui.settingColInput.value = String(state.cols);
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
+export function deleteRow(rowIdx: number) {
+    if (state.rows <= 1) return;
+    state.rows--;
+    state.data.splice(rowIdx, 1);
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
+export function deleteColumn(colIdx: number) {
+    if (state.chartType === 'stackedBar') {
+        const groupIndex = getGroupIndexForCol(colIdx);
+        if (groupIndex === -1 || state.groupStructure.length <= 1) return;
+        const removeStart = state.groupStructure.slice(0, groupIndex).reduce((a, b) => a + b, 0);
+        const removeCount = state.groupStructure[groupIndex];
+        state.groupStructure.splice(groupIndex, 1);
+        state.data.forEach(row => row.splice(removeStart, removeCount));
+        state.cols = state.groupStructure.length;
+    } else {
+        if (state.cols <= 1) return;
+        state.cols--;
+        state.data.forEach(row => row.splice(colIdx, 1));
+    }
+    ui.settingColInput.value = String(state.cols);
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
+export function addBarToGroup(groupIndex: number) {
+    if (!state.groupStructure[groupIndex] || state.groupStructure[groupIndex] >= MAX_SIZE) return;
+    const insertPos = state.groupStructure.slice(0, groupIndex + 1).reduce((a, b) => a + b, 0);
+    state.groupStructure[groupIndex]++;
+    state.data.forEach(row => row.splice(insertPos, 0, ""));
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
+export function removeBarFromGroup(groupIndex: number) {
+    if (!state.groupStructure[groupIndex] || state.groupStructure[groupIndex] <= 1) return;
+    const removePos = state.groupStructure.slice(0, groupIndex + 1).reduce((a, b) => a + b, 0) - 1;
+    state.groupStructure[groupIndex]--;
+    state.data.forEach(row => row.splice(removePos, 1));
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
+export function handleDimensionInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    let val = parseInt(input.value) || 1;
+    val = Math.max(1, Math.min(MAX_SIZE, val));
+    input.value = String(val);
+
+    if (input === ui.settingColInput) {
+        updateGridSize(val, state.rows);
+    } else if (input === ui.settingCellInput) {
+        state.cellCount = val;
+    } else if (input === ui.settingStrokeInput) {
+        state.strokeWidth = val;
+    }
+    renderPreview();
+    checkCtaValidation();
+}
+
+export function updateGridSize(newCols: number, newRows: number) {
+    if (state.chartType === 'stackedBar') {
+        while (state.groupStructure.length < newCols) state.groupStructure.push(2);
+        state.groupStructure = state.groupStructure.slice(0, newCols);
+        const totalCols = state.groupStructure.reduce((a, b) => a + b, 0);
+        for (let r = 0; r < state.data.length; r++) {
+            while (state.data[r].length < totalCols) state.data[r].push("");
+            state.data[r] = state.data[r].slice(0, totalCols);
+        }
+        while (state.data.length < newRows) state.data.push(new Array(totalCols).fill(""));
+        state.data = state.data.slice(0, newRows);
+    } else {
+        for (let r = 0; r < state.data.length; r++) {
+            while (state.data[r].length < newCols) state.data[r].push("");
+            state.data[r] = state.data[r].slice(0, newCols);
+        }
+        while (state.data.length < newRows) state.data.push(new Array(newCols).fill(""));
+        state.data = state.data.slice(0, newRows);
+    }
+    state.cols = newCols;
+    state.rows = newRows;
+    renderGrid();
+    checkCtaValidation();
+}
+
+// helper
+function getGroupIndexForCol(flatColIdx: number) {
+    let running = 0;
+    for (let g = 0; g < state.groupStructure.length; g++) {
+        running += state.groupStructure[g];
+        if (flatColIdx < running) return g;
+    }
+    return -1;
+}

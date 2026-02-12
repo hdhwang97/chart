@@ -1,17 +1,21 @@
 {
   "compilerOptions": {
-    "target": "es6",
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": [
-      "es6"
+      "ESNext",
+      "DOM"
     ],
     "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
     "typeRoots": [
       "./node_modules/@types",
       "./node_modules/@figma"
     ]
   },
   "include": [
-    "code.ts",
-    "config.ts"
+    "src/**/*.ts"
   ]
 }
