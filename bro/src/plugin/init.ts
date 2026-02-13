@@ -54,7 +54,11 @@ export async function getOrImportComponent(): Promise<ComponentNode | ComponentS
 // PLUGIN UI INITIALIZATION
 // ==========================================
 
-export async function initPluginUI(node: SceneNode, autoApply = false) {
+export async function initPluginUI(
+    node: SceneNode,
+    autoApply = false,
+    opts?: { reason?: 'selection' | 'auto-resize' }
+) {
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
     const chartData = await loadChartData(node, chartType);
 
@@ -83,7 +87,8 @@ export async function initPluginUI(node: SceneNode, autoApply = false) {
             yMin: Number(lastYMin) || 0,
             yMax: Number(lastYMax) || 100,
             markNum: chartData.markNum,
-            strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined
+            strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
+            reason: opts?.reason || 'auto-resize'
         };
 
         const H = getGraphHeight(node as FrameNode);
@@ -114,6 +119,7 @@ export async function initPluginUI(node: SceneNode, autoApply = false) {
 
         markColors: extractedColors,
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
+        markRatio: styleInfo.markRatio,
 
         colStrokeStyle: styleInfo.colStrokeStyle || null,
         cellStrokeStyles: styleInfo.cellStrokeStyles || [],

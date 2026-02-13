@@ -7,6 +7,12 @@ import { inferStructureFromGraph } from './init';
 
 export const safeParse = (data: string | undefined) => (data ? JSON.parse(data) : null);
 
+function normalizeMarkRatio(value: unknown): number | null {
+    const ratio = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(ratio)) return null;
+    return Math.max(0.01, Math.min(1.0, ratio));
+}
+
 // styleInfo를 받아 스타일 데이터도 함께 저장
 export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
@@ -29,9 +35,17 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     }
 
     // 추출된 스타일 정보 저장
+    const requestedRatio = msg.type === 'bar' ? normalizeMarkRatio(msg.markRatio) : null;
+    if (requestedRatio !== null) {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(requestedRatio));
+    }
+
     if (styleInfo) {
-        if (styleInfo.markRatio !== undefined) {
-            node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(styleInfo.markRatio));
+        if (requestedRatio === null && styleInfo.markRatio !== undefined) {
+            const fallbackRatio = normalizeMarkRatio(styleInfo.markRatio);
+            if (fallbackRatio !== null) {
+                node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(fallbackRatio));
+            }
         }
         if (styleInfo.cornerRadius !== undefined) {
             node.setPluginData(PLUGIN_DATA_KEYS.LAST_CORNER_RADIUS, String(styleInfo.cornerRadius));

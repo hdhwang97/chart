@@ -13,8 +13,54 @@ const PREVIEW_OPTS = {
     lineStroke: 2,
     colors: ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#fb923c']
 };
+const GRID_MARK_HOVER_CLASS = 'grid-cell-mark-hover';
+const MARK_DIM_OPACITY = 0.2;
+const MARK_HOVER_OPACITY = 1;
 
 let highlightState: { type: string; index: number } | null = null;
+
+function getPreviewMarkElements(): SVGElement[] {
+    return Array.from(document.querySelectorAll<SVGElement>('#chart-preview-container .preview-mark'));
+}
+
+function dimOtherMarks(hovered: SVGElement) {
+    const marks = getPreviewMarkElements();
+    marks.forEach((mark) => {
+        mark.style.opacity = String(MARK_DIM_OPACITY);
+    });
+    hovered.style.opacity = String(MARK_HOVER_OPACITY);
+}
+
+function restoreMarkOpacityFromBase() {
+    const marks = getPreviewMarkElements();
+    marks.forEach((mark) => {
+        const base = mark.getAttribute('data-base-opacity');
+        if (base !== null) {
+            mark.style.opacity = base;
+        } else {
+            mark.style.removeProperty('opacity');
+        }
+    });
+}
+
+function clearGridHighlightFromMark() {
+    document.querySelectorAll<HTMLInputElement>(`#data-grid input.${GRID_MARK_HOVER_CLASS}`)
+        .forEach((cell) => cell.classList.remove(GRID_MARK_HOVER_CLASS));
+}
+
+function highlightGridCellFromMark(row: number, col: number) {
+    clearGridHighlightFromMark();
+    const target = document.querySelector<HTMLInputElement>(`#data-grid input[data-r="${row}"][data-c="${col}"]`);
+    if (target) {
+        target.classList.add(GRID_MARK_HOVER_CLASS);
+    }
+}
+
+function highlightGridRowFromMark(row: number) {
+    clearGridHighlightFromMark();
+    document.querySelectorAll<HTMLInputElement>(`#data-grid input[data-r="${row}"]`)
+        .forEach((cell) => cell.classList.add(GRID_MARK_HOVER_CLASS));
+}
 
 function strokeColor(stroke: StrokeStyleSnapshot | null, fallback = '#E5E7EB') {
     return stroke?.color || fallback;
@@ -54,6 +100,11 @@ function buildYTickValues(yMin: number, yMax: number, cellCount: number): number
     const n = Math.max(1, cellCount);
     const step = (yMax - yMin) / n;
     return Array.from({ length: n + 1 }, (_, i) => yMin + (step * i));
+}
+
+function normalizeMarkRatio(markRatio?: number): number {
+    const ratio = typeof markRatio === 'number' ? markRatio : 0.8;
+    return Math.max(0.01, Math.min(1, ratio));
 }
 
 function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
@@ -124,7 +175,13 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
 
 export function renderPreview() {
     const container = document.getElementById('chart-preview-container')!;
+    clearGridHighlightFromMark();
+    restoreMarkOpacityFromBase();
     container.innerHTML = '';
+    container.onmouseleave = () => {
+        clearGridHighlightFromMark();
+        restoreMarkOpacityFromBase();
+    };
 
     const width = container.clientWidth;
     const height = container.clientHeight;
@@ -195,6 +252,7 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
     const cols = state.cols;
     const rows = state.rows;
     const xScale = d3.scaleBand().domain(d3.range(cols)).range([0, w]).padding(0);
+    const ratio = normalizeMarkRatio(state.markRatio);
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -207,18 +265,28 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
 
             const colX = xScale(c)!;
             const colW = xScale.bandwidth();
-            const clusterW = colW * 0.86;
+            const clusterW = colW * ratio;
             const clusterOffset = (colW - clusterW) / 2;
             const innerScale = d3.scaleBand().domain(d3.range(rows)).range([0, clusterW]).padding(0.12);
 
             const rect = g.append('rect')
+                .attr('class', 'preview-mark')
                 .attr('x', colX + clusterOffset + innerScale(r)!)
                 .attr('y', yScale(val))
                 .attr('width', innerScale.bandwidth())
                 .attr('height', barH)
                 .attr('fill', PREVIEW_OPTS.colors[r % PREVIEW_OPTS.colors.length])
                 .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
+                .attr('data-base-opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('rx', 2);
+            rect.on('mouseenter', function () {
+                highlightGridCellFromMark(r, c);
+                dimOtherMarks(this as SVGElement);
+            });
+            rect.on('mouseleave', () => {
+                clearGridHighlightFromMark();
+                restoreMarkOpacityFromBase();
+            });
 
             applyStroke(rect, getRowStroke(r) || state.colStrokeStyle, 'none', 0);
         }
@@ -240,12 +308,22 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
         const rowStroke = getRowStroke(r) || state.colStrokeStyle;
         const baseColor = PREVIEW_OPTS.colors[r % PREVIEW_OPTS.colors.length];
         const path = g.append('path')
+            .attr('class', 'preview-mark')
             .datum(lineData)
             .attr('fill', 'none')
             .attr('stroke', baseColor)
             .attr('stroke-width', state.strokeWidth || PREVIEW_OPTS.lineStroke)
             .attr('d', line)
-            .attr('opacity', highlightState ? (isRowHighlighted || !highlightState ? 1 : 0.2) : 0.8);
+            .attr('opacity', highlightState ? (isRowHighlighted || !highlightState ? 1 : 0.2) : 0.8)
+            .attr('data-base-opacity', highlightState ? (isRowHighlighted || !highlightState ? 1 : 0.2) : 0.8);
+        path.on('mouseenter', function () {
+            highlightGridRowFromMark(r);
+            dimOtherMarks(this as SVGElement);
+        });
+        path.on('mouseleave', () => {
+            clearGridHighlightFromMark();
+            restoreMarkOpacityFromBase();
+        });
 
         applyStroke(path, rowStroke, baseColor, state.strokeWidth || PREVIEW_OPTS.lineStroke);
 
@@ -253,11 +331,21 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
         lineData.forEach((val: number, i: number) => {
             const isColHighlighted = highlightState?.type === 'col' && highlightState.index === i;
             const dot = g.append('circle')
+                .attr('class', 'preview-mark')
                 .attr('cx', xScale(i)!)
                 .attr('cy', yScale(val))
                 .attr('r', 3)
                 .attr('fill', baseColor)
-                .attr('opacity', highlightState ? (isRowHighlighted || isColHighlighted ? 1 : 0.2) : 0.8);
+                .attr('opacity', highlightState ? (isRowHighlighted || isColHighlighted ? 1 : 0.2) : 0.8)
+                .attr('data-base-opacity', highlightState ? (isRowHighlighted || isColHighlighted ? 1 : 0.2) : 0.8);
+            dot.on('mouseenter', function () {
+                highlightGridCellFromMark(r, i);
+                dimOtherMarks(this as SVGElement);
+            });
+            dot.on('mouseleave', () => {
+                clearGridHighlightFromMark();
+                restoreMarkOpacityFromBase();
+            });
             applyStroke(dot, rowStroke, 'none', 0);
         });
     }
@@ -308,13 +396,23 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
                     : false;
 
                 const rect = g.append('rect')
+                    .attr('class', 'preview-mark')
                     .attr('x', xScale(gIdx)! + groupInnerScale(b)!)
                     .attr('y', yOffset - barH)
                     .attr('width', groupInnerScale.bandwidth())
                     .attr('height', barH)
                     .attr('fill', PREVIEW_OPTS.colors[(r - startRow) % PREVIEW_OPTS.colors.length])
                     .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
+                    .attr('data-base-opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
                     .attr('rx', 1);
+                rect.on('mouseenter', function () {
+                    highlightGridCellFromMark(r, flatIdx);
+                    dimOtherMarks(this as SVGElement);
+                });
+                rect.on('mouseleave', () => {
+                    clearGridHighlightFromMark();
+                    restoreMarkOpacityFromBase();
+                });
 
                 applyStroke(rect, getRowStroke(r) || state.colStrokeStyle, 'none', 0);
                 yOffset -= barH;

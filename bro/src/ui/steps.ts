@@ -9,6 +9,12 @@ import { updateCsvUi } from './csv';
 // STEP / TYPE SELECTION / SUBMISSION
 // ==========================================
 
+function normalizeMarkRatio(value: unknown): number {
+    const ratio = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(ratio)) return 0.8;
+    return Math.max(0.01, Math.min(1.0, ratio));
+}
+
 export function goToStep(step: number) {
     state.currentStep = step;
 
@@ -95,6 +101,8 @@ export function updateSettingInputs() {
     ui.settingColInput.value = String(state.cols);
     ui.settingCellInput.value = String(state.cellCount);
     ui.settingStrokeInput.value = String(state.strokeWidth);
+    state.markRatio = normalizeMarkRatio(state.markRatio);
+    ui.settingMarkRatioInput.value = String(state.markRatio);
 
     if (state.chartType === 'stackedBar') {
         ui.containerMarkNormal.classList.add('hidden');
@@ -108,6 +116,11 @@ export function updateSettingInputs() {
     } else {
         ui.containerStrokeWidth.classList.add('hidden');
         ui.spacerStroke.classList.remove('hidden');
+    }
+    if (state.chartType === 'bar') {
+        ui.containerMarkRatio.classList.remove('hidden');
+    } else {
+        ui.containerMarkRatio.classList.add('hidden');
     }
 }
 
@@ -152,7 +165,8 @@ export function submitData() {
         yMin: Number(ui.settingYMin.value) || 0,
         yMax: Number(ui.settingYMax.value) || 100,
         markNum: markNum,
-        strokeWidth: state.strokeWidth
+        strokeWidth: state.strokeWidth,
+        markRatio: state.chartType === 'bar' ? normalizeMarkRatio(state.markRatio) : undefined
     };
 
     const msgType = state.uiMode === 'edit' ? 'apply' : 'generate';

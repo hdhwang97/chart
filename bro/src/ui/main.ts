@@ -16,11 +16,19 @@ import { switchTab, handleStyleExtracted, setDataTabRenderer } from './export';
 let uiInitialized = false;
 const pendingMessages: any[] = [];
 
+function normalizeMarkRatioInput(value: unknown): number {
+    const ratio = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(ratio)) return 0.8;
+    return Math.max(0.01, Math.min(1.0, ratio));
+}
+
 function handlePluginMessage(msg: any) {
     if (msg.type === 'init') {
         if (!msg.chartType) {
             // No selection
             state.uiMode = 'create';
+            state.markRatio = 0.8;
+            ui.settingMarkRatioInput.value = '0.8';
             state.colStrokeStyle = null;
             state.cellStrokeStyles = [];
             state.rowStrokeStyles = [];
@@ -78,6 +86,8 @@ function handlePluginMessage(msg: any) {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
         }
+        state.markRatio = normalizeMarkRatioInput(msg.markRatio);
+        ui.settingMarkRatioInput.value = String(state.markRatio);
         state.colStrokeStyle = msg.colStrokeStyle || null;
         state.cellStrokeStyles = msg.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.rowStrokeStyles || [];
@@ -89,6 +99,11 @@ function handlePluginMessage(msg: any) {
         } else {
             ui.containerStrokeWidth.classList.add('hidden');
             ui.spacerStroke.classList.remove('hidden');
+        }
+        if (msg.chartType === 'bar') {
+            ui.containerMarkRatio.classList.remove('hidden');
+        } else {
+            ui.containerMarkRatio.classList.add('hidden');
         }
 
         // Stacked-specific UI
@@ -110,6 +125,8 @@ function handlePluginMessage(msg: any) {
     }
 
     if (msg.type === 'style_extracted') {
+        state.markRatio = normalizeMarkRatioInput(msg.payload?.markRatio);
+        ui.settingMarkRatioInput.value = String(state.markRatio);
         state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
@@ -128,6 +145,11 @@ function bindUiEvents() {
     ui.settingColInput.addEventListener('change', handleDimensionInput);
     ui.settingCellInput.addEventListener('change', handleDimensionInput);
     ui.settingStrokeInput.addEventListener('change', handleDimensionInput);
+    ui.settingMarkRatioInput.addEventListener('change', () => {
+        state.markRatio = normalizeMarkRatioInput(ui.settingMarkRatioInput.value);
+        ui.settingMarkRatioInput.value = String(state.markRatio);
+        renderPreview();
+    });
     ui.settingMarkSelect.addEventListener('change', () => {
         renderGrid();
         renderPreview();

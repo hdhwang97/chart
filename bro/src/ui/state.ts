@@ -21,6 +21,7 @@ export const state = {
     cachedRawData: null as string[][] | null,
     conversionMax: 100,
     strokeWidth: 2,
+    markRatio: 0.8,
     colStrokeStyle: null as StrokeStyleSnapshot | null,
     cellStrokeStyles: [] as CellStrokeStyle[],
     rowStrokeStyles: [] as RowStrokeStyle[]

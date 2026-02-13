@@ -24,3 +24,9 @@ input[type=number]::-webkit-outer-spin-button {
 
 /* Hover Header Highlight Effect */
 .header-hover { background-color: #E0F2FE !important; color: #0284C7 !important; transition: all 0.2s; }
+
+/* Mark Hover -> Grid Cell Highlight */
+.grid-cell-mark-hover {
+    background-color: #E0F2FE !important;
+    border-color: #7DD3FC !important;
+}

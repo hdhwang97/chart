@@ -63,7 +63,7 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.resize(msg.width, msg.height);
     }
     else if (msg.type === 'generate' || msg.type === 'apply') {
-        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth } = msg.payload;
+        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth, markRatio } = msg.payload;
 
         const nodes = figma.currentPage.selection;
         let targetNode: FrameNode | ComponentNode | InstanceNode;
@@ -127,7 +127,7 @@ figma.ui.onmessage = async (msg) => {
 
         // 4. Draw Chart
         const H = getGraphHeight(targetNode as FrameNode);
-        const drawConfig = { values, mode, markNum, rows, yMin, yMax, strokeWidth };
+        const drawConfig = { values, mode, markNum, rows, yMin, yMax, strokeWidth, markRatio };
 
         if (type === "bar") applyBar(drawConfig, H, targetNode);
         else if (type === "line") applyLine(drawConfig, H, targetNode);
@@ -247,13 +247,28 @@ figma.on("selectionchange", () => {
 // Auto-Resize Loop
 setInterval(() => {
     if (!currentSelectionId) return;
-    figma.currentPage.selection.forEach(node => {
-        if (node.id === currentSelectionId) {
-            if (Math.abs(node.width - prevWidth) > 1 || Math.abs(node.height - prevHeight) > 1) {
-                initPluginUI(node, true); // true = autoApply
-                prevWidth = node.width;
-                prevHeight = node.height;
-            }
-        }
-    });
+    const tracked = figma.getNodeById(currentSelectionId);
+    if (!tracked || tracked.type === 'PAGE' || tracked.type === 'DOCUMENT') {
+        currentSelectionId = null;
+        return;
+    }
+
+    const trackedScene = tracked as SceneNode;
+    if (!isRecognizedChartSelection(trackedScene)) {
+        currentSelectionId = null;
+        return;
+    }
+
+    if (Math.abs(trackedScene.width - prevWidth) > 1 || Math.abs(trackedScene.height - prevHeight) > 1) {
+        console.log('[chart-plugin][auto-resize]', {
+            nodeId: trackedScene.id,
+            prevWidth,
+            nextWidth: trackedScene.width,
+            prevHeight,
+            nextHeight: trackedScene.height
+        });
+        initPluginUI(trackedScene, true, { reason: 'auto-resize' });
+        prevWidth = trackedScene.width;
+        prevHeight = trackedScene.height;
+    }
 }, 500);

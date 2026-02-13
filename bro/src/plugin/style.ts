@@ -312,11 +312,17 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
 
                     if (mark) {
                         // A. 너비 비율 (Bar Width Ratio)
-                        if (mark.width > 0) {
+                        // padding 기반 레이아웃을 우선으로 읽고, 없으면 width 기반으로 fallback.
+                        if ('paddingLeft' in mark && 'paddingRight' in mark) {
+                            const contentWidth = firstColNode.width - (mark as any).paddingLeft - (mark as any).paddingRight;
+                            if (contentWidth > 0) {
+                                markRatio = contentWidth / firstColNode.width;
+                            }
+                        } else if (mark.width > 0) {
                             markRatio = mark.width / firstColNode.width;
-                            if (markRatio < 0.01) markRatio = 0.01;
-                            if (markRatio > 1.0) markRatio = 1.0;
                         }
+                        if (markRatio < 0.01) markRatio = 0.01;
+                        if (markRatio > 1.0) markRatio = 1.0;
 
                         // B. 라운드 값 (Corner Radius) - Bar 차트용
                         if (chartType !== 'line' && 'cornerRadius' in mark) {

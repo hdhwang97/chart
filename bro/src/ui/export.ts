@@ -50,6 +50,20 @@ function buildYTickValues(yMin: number, yMax: number, cellCount: number): number
     return Array.from({ length: n + 1 }, (_, i) => yMin + (step * i));
 }
 
+function normalizeMarkRatio(markRatio?: number): number {
+    const ratio = typeof markRatio === 'number' ? markRatio : 0.8;
+    return Math.max(0.01, Math.min(1, ratio));
+}
+
+function applyStrokeExtras(selection: any, stroke: StrokeStyleSnapshot | null) {
+    if (stroke?.dashPattern && stroke.dashPattern.length > 0) {
+        selection.attr('stroke-dasharray', stroke.dashPattern.join(','));
+    }
+    if (typeof stroke?.opacity === 'number') {
+        selection.attr('opacity', stroke.opacity);
+    }
+}
+
 function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
@@ -212,6 +226,7 @@ function renderD3Preview(style: any) {
 
     if (chartType === 'bar') {
         const xScale = d3.scaleBand().domain(d3.range(colCount)).range([0, w]).padding(0);
+        const ratio = normalizeMarkRatio(style.markRatio);
 
         for (let r = 0; r < numRows; r++) {
             for (let c = 0; c < colCount; c++) {
@@ -219,7 +234,7 @@ function renderD3Preview(style: any) {
 
                 const colX = xScale(c)!;
                 const colW = xScale.bandwidth();
-                const clusterW = colW * 0.86;
+                const clusterW = colW * ratio;
                 const clusterOffset = (colW - clusterW) / 2;
                 const innerScale = d3.scaleBand().domain(d3.range(numRows)).range([0, clusterW]).padding(0.12);
 
@@ -251,7 +266,7 @@ function renderD3Preview(style: any) {
                 .attr('stroke', baseColor)
                 .attr('stroke-width', strokeWidth)
                 .attr('d', line);
-            applyStroke(path, rowStroke, baseColor, strokeWidth);
+            applyStrokeExtras(path, rowStroke);
 
             lineData.forEach((val: number, i: number) => {
                 const dot = g.append('circle')
@@ -259,7 +274,9 @@ function renderD3Preview(style: any) {
                     .attr('cy', yScale(val))
                     .attr('r', 3)
                     .attr('fill', baseColor);
-                applyStroke(dot, rowStroke, 'none', 0);
+                if (typeof rowStroke?.opacity === 'number') {
+                    dot.attr('opacity', rowStroke.opacity);
+                }
             });
         }
     } else if (chartType === 'stackedBar') {

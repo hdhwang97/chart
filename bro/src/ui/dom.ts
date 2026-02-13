@@ -33,8 +33,10 @@ export const ui = {
 
     get settingYMin() { return byId<HTMLInputElement>('setting-y-min'); },
     get settingYMax() { return byId<HTMLInputElement>('setting-y-max'); },
+    get settingMarkRatioInput() { return byId<HTMLInputElement>('setting-mark-ratio-input'); },
 
     get settingStrokeInput() { return byId<HTMLInputElement>('setting-stroke-input'); },
+    get containerMarkRatio() { return byId<HTMLElement>('container-mark-ratio'); },
     get containerStrokeWidth() { return byId<HTMLElement>('container-stroke-width'); },
     get spacerStroke() { return byId<HTMLElement>('spacer-stroke'); },
 
