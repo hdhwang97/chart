@@ -172,10 +172,11 @@ figma.ui.onmessage = async (msg) => {
 
         // 5. 스타일 자동 추출 및 전송
         const styleInfo = extractStyleFromNode(targetNode, type);
-        const markRatioForUi = resolveMarkRatioFromNode(targetNode, styleInfo.markRatio);
+        const requestedRatio = type === 'bar' ? normalizeMarkRatio(markRatio) : null;
 
         // 차트 생성 후 데이터 및 스타일 저장
         saveChartData(targetNode, msg.payload, styleInfo);
+        const markRatioForUi = requestedRatio ?? resolveMarkRatioFromNode(targetNode, styleInfo.markRatio);
 
         const stylePayload = {
             chartType: type,

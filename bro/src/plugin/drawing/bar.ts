@@ -100,11 +100,24 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
     const savedRatio = savedRatioStr ? parseFloat(savedRatioStr) : null;
     const inferredRatio = inferRatioFromCurrentGeometry(cols);
     const configRatio = typeof markRatio === 'number' ? markRatio : null;
+    const ratioSource =
+        configRatio !== null ? 'config.markRatio' :
+            (savedRatio !== null && Number.isFinite(savedRatio)) ? 'pluginData.LAST_BAR_PADDING' :
+                (inferredRatio !== null && Number.isFinite(inferredRatio)) ? 'inferredFromGeometry' :
+                    'fallback(0.8)';
     const targetRatio = normalizeRatio(configRatio ?? savedRatio ?? inferredRatio);
     const shouldLogResizeDebug = reason === 'auto-resize';
     let totalRatioBefore = 0;
     let totalRatioAfter = 0;
     let loggedColumns = 0;
+    const ratioAuditRows: Array<{
+        colIndex: number;
+        measuredCellWidth: number;
+        barWidth: number;
+        appliedRatio: number;
+        leftPadding: number;
+        rightPadding: number;
+    }> = [];
 
     const numMarks = Number(markNum) || 1;
     const dataCols = values[0].length;
@@ -145,9 +158,8 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                             let rightPadding = measureWidth - (('x' in barLayer ? barLayer.x : 0) + ('width' in barLayer ? barLayer.width : 0));
 
                             if (hasHorizontalPadding(barLayer)) {
-                                const totalPadding = Math.max(0, measureWidth - desiredContentWidth);
-                                const nextLeft = totalPadding / 2;
-                                const nextRight = totalPadding - nextLeft;
+                                const nextLeft = Math.max(0, desiredContentWidth / 2);
+                                const nextRight = Math.max(0, desiredContentWidth / 2);
                                 if (Math.abs(barLayer.paddingLeft - nextLeft) >= 0.1) {
                                     barLayer.paddingLeft = nextLeft;
                                 }
@@ -162,6 +174,19 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                                 }
                                 leftPadding = 'x' in barLayer ? barLayer.x : 0;
                                 rightPadding = measureWidth - (leftPadding + ('width' in barLayer ? barLayer.width : 0));
+                            }
+
+                            if (m === 0) {
+                                const barWidthAfter = getNodeContentWidth(barLayer, measureWidth);
+                                const ratioAfter = measureWidth > 0 ? barWidthAfter / measureWidth : 0;
+                                ratioAuditRows.push({
+                                    colIndex: cIdx,
+                                    measuredCellWidth: measureWidth,
+                                    barWidth: barWidthAfter,
+                                    appliedRatio: ratioAfter,
+                                    leftPadding,
+                                    rightPadding
+                                });
                             }
 
                             if (shouldLogResizeDebug && m === 0) {
@@ -206,6 +231,23 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
             appliedRatio: targetRatio,
             avgRatioBefore: totalRatioBefore / loggedColumns,
             avgRatioAfter: totalRatioAfter / loggedColumns
+        });
+    }
+
+    if (ratioAuditRows.length > 0) {
+        console.log('[chart-plugin][bar-ratio-check][summary]', {
+            reason: reason || 'apply/generate',
+            source: ratioSource,
+            inputRatio: configRatio,
+            configRatio,
+            savedRatio,
+            inferredRatio,
+            effectiveRatio: targetRatio,
+            appliedRatio: targetRatio,
+            columns: ratioAuditRows.length
+        });
+        ratioAuditRows.forEach((row) => {
+            console.log('[chart-plugin][bar-ratio-check][col]', row);
         });
     }
 }
