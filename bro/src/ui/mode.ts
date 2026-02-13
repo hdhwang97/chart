@@ -2,6 +2,7 @@ import { state } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
+import { getEffectiveYDomain } from './y-range';
 
 // ==========================================
 // MODE MANAGEMENT
@@ -15,6 +16,8 @@ export function setMode(mode: 'raw' | 'percent') {
     if (mode === 'percent') {
         checkDataRange();
     }
+    syncYMaxValidationUi();
+    applyModeLocks();
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -28,7 +31,11 @@ export function toggleMode() {
         state.mode = 'read';
         ui.editModeBtn.textContent = 'Edit';
     }
+    syncYMaxValidationUi();
+    applyModeLocks();
+    checkCtaValidation();
     renderGrid();
+    renderPreview();
 }
 
 export function updateModeButtonState() {
@@ -68,6 +75,68 @@ export function checkDataRange() {
     }
 }
 
+export function getRawYMaxValidationState() {
+    const domain = getEffectiveYDomain({
+        mode: state.dataMode,
+        yMinInput: ui.settingYMin.value,
+        yMaxInput: ui.settingYMax.value,
+        data: state.data,
+        chartType: state.chartType
+    });
+    return {
+        isInvalid: domain.isRawManualInvalid,
+        isAuto: domain.isAuto,
+        maxData: domain.maxData,
+        yMax: domain.yMax
+    };
+}
+
+export function syncYMaxValidationUi() {
+    const rawState = getRawYMaxValidationState();
+    ui.settingYMax.classList.remove('y-max-error');
+
+    if (state.dataMode === 'raw') {
+        const nextYMax = String(rawState.yMax);
+        if (ui.settingYMax.value !== nextYMax) {
+            ui.settingYMax.value = nextYMax;
+        }
+    }
+    return rawState;
+}
+
+export function applyModeLocks() {
+    const isRead = state.mode === 'read';
+    const graphInputs: Array<HTMLInputElement | HTMLSelectElement | HTMLButtonElement> = [
+        ui.settingColInput,
+        ui.settingCellInput,
+        ui.settingMarkSelect,
+        ui.settingYMin,
+        ui.settingYMax,
+        ui.settingMarkRatioInput,
+        ui.settingStrokeInput,
+        ui.modeRawBtn,
+        ui.modePercentBtn
+    ];
+    graphInputs.forEach((el) => { el.disabled = isRead; });
+
+    const dataControls: Array<HTMLInputElement | HTMLButtonElement> = [
+        ui.addColFixedBtn,
+        ui.addRowFixedBtn,
+        ui.resetBtn,
+        ui.csvInput,
+        ui.csvDeleteBtn,
+        ui.csvExportBtn
+    ];
+    dataControls.forEach((el) => { el.disabled = isRead; });
+
+    const csvUploadLabel = document.querySelector<HTMLLabelElement>('label[for="csv-upload"]');
+    if (csvUploadLabel) {
+        csvUploadLabel.classList.toggle('opacity-50', isRead);
+        csvUploadLabel.classList.toggle('pointer-events-none', isRead);
+        csvUploadLabel.classList.toggle('cursor-not-allowed', isRead);
+    }
+}
+
 export function clearRangeErrors() {
     const cells = ui.gridContainer.querySelectorAll('.grid-cell');
     cells.forEach(cell => {
@@ -95,7 +164,9 @@ export function checkCtaValidation() {
         });
     }
 
-    ui.mainCta.disabled = !hasAny || !rangeOk;
+    syncYMaxValidationUi();
+    ui.mainCta.disabled = state.mode === 'edit' || !hasAny || !rangeOk;
+    return !ui.mainCta.disabled;
 }
 
 // Validate Stacked data
@@ -121,6 +192,10 @@ export function getAutoFillValue(rowIdx: number, groupIndex: number, barInGroup:
 
 function showErrorToast() {
     const toast = ui.errorToast;
+    const msgNode = toast.querySelector('span');
+    if (msgNode) {
+        msgNode.textContent = '% 모드는 0~100 사이의 값이어야 합니다.';
+    }
     toast.classList.remove('hidden');
     requestAnimationFrame(() => {
         toast.style.opacity = '1';

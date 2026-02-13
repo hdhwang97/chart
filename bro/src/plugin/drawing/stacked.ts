@@ -14,16 +14,21 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
 
     let globalMaxSum = 100;
     if (mode === "raw") {
-        const colSums = new Array(totalDataCols).fill(0);
-        for (let c = 0; c < totalDataCols; c++) {
-            let sum = 0;
-            for (let r = 0; r < rowCount; r++) {
-                sum += (Number(values[r][c]) || 0);
+        const configuredMax = Number(config.yMax);
+        if (Number.isFinite(configuredMax) && configuredMax > 0) {
+            globalMaxSum = configuredMax;
+        } else {
+            const colSums = new Array(totalDataCols).fill(0);
+            for (let c = 0; c < totalDataCols; c++) {
+                let sum = 0;
+                for (let r = 0; r < rowCount; r++) {
+                    sum += (Number(values[r][c]) || 0);
+                }
+                colSums[c] = sum;
             }
-            colSums[c] = sum;
+            globalMaxSum = Math.max(...colSums);
+            if (globalMaxSum === 0) globalMaxSum = 1;
         }
-        globalMaxSum = Math.max(...colSums);
-        if (globalMaxSum === 0) globalMaxSum = 1;
     }
 
     const columns = collectColumns(graph);
@@ -52,13 +57,9 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
         }
 
         if (groupInstance && groupInstance.type === "INSTANCE") {
-            try {
-                const props = groupInstance.componentProperties;
-                const countPropKey = Object.keys(props).find(k => k === VARIANT_PROPERTY_MARK_NUM || k === "Count" || k === "Size");
-                if (countPropKey && props[countPropKey].value !== String(currentGroupBarCount)) {
-                    groupInstance.setProperties({ [countPropKey]: String(currentGroupBarCount) });
-                }
-            } catch (e) { }
+            let markNumChanged = setVariantProperty(groupInstance, VARIANT_PROPERTY_MARK_NUM, String(currentGroupBarCount));
+            if (!markNumChanged) markNumChanged = setVariantProperty(groupInstance, 'Count', String(currentGroupBarCount));
+            if (!markNumChanged) markNumChanged = setVariantProperty(groupInstance, 'Size', String(currentGroupBarCount));
 
             const subBars = (groupInstance as any).children.filter((n: SceneNode) => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name));
             subBars.sort((a: SceneNode, b: SceneNode) => {
@@ -66,6 +67,18 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
                 const numB = parseInt(b.name.match(/\d+/)?.[0] || "0");
                 return numA - numB;
             });
+
+            if (markNumChanged) {
+                // markNum 변경 직후에는 이전 숨김 상태를 초기화한다.
+                subBars.forEach((subBar: SceneNode) => {
+                    subBar.visible = true;
+                    if ("children" in subBar) {
+                        (subBar as SceneNode & ChildrenMixin).children.forEach((seg: SceneNode) => {
+                            if (/^bar[-_]?0*(\d+)$/.test(seg.name)) seg.visible = true;
+                        });
+                    }
+                });
+            }
 
             subBars.forEach((subBar: SceneNode, subIdx: number) => {
                 if (subIdx >= currentGroupBarCount) {

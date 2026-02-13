@@ -11,10 +11,28 @@ import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { getGraphHeight } from './drawing/shared';
+import { resolveEffectiveYRange } from './drawing/y-range';
 
 // ==========================================
 // COMPONENT DISCOVERY
 // ==========================================
+
+function normalizeMarkRatio(value: unknown): number | null {
+    const ratio = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(ratio)) return null;
+    return Math.max(0.01, Math.min(1.0, ratio));
+}
+
+function resolveMarkRatioFromNode(node: SceneNode, extractedRatio?: number): number {
+    const savedRatioStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING);
+    const savedRatio = normalizeMarkRatio(savedRatioStr);
+    if (savedRatio !== null) return savedRatio;
+
+    const extracted = normalizeMarkRatio(extractedRatio);
+    if (extracted !== null) return extracted;
+
+    return 0.8;
+}
 
 export async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode | null> {
     const { KEY, NAME } = MASTER_COMPONENT_CONFIG;
@@ -71,21 +89,35 @@ export async function initPluginUI(
         const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
         const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
         const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
+        const mode = lastMode || 'raw';
 
         let valuesToUse = chartData.values;
         if (lastDrawingVals) {
             try { valuesToUse = JSON.parse(lastDrawingVals); } catch (e) { }
         }
 
+        const yMinInput = Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : 0;
+        const yMaxInput = lastYMax === '' ? null : (Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : null);
+        const rawYMaxAuto = mode === 'raw' && lastYMax === '';
+        const effectiveY = resolveEffectiveYRange({
+            chartType,
+            mode,
+            values: valuesToUse,
+            yMin: yMinInput,
+            yMax: yMaxInput,
+            rawYMaxAuto
+        });
+
         const payload = {
             type: chartType,
-            mode: lastMode || 'raw',
+            mode,
             values: valuesToUse,
             rawValues: chartData.values,
             cols: 0,
             cellCount: chartData.cellCount,
-            yMin: Number(lastYMin) || 0,
-            yMax: Number(lastYMax) || 100,
+            yMin: effectiveY.yMin,
+            yMax: effectiveY.yMax,
+            rawYMaxAuto: effectiveY.rawYMaxAuto,
             markNum: chartData.markNum,
             strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
             reason: opts?.reason || 'auto-resize'
@@ -101,8 +133,11 @@ export async function initPluginUI(
     const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
     const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
     const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
+    const parsedLastYMin = lastYMin !== '' && Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : undefined;
+    const parsedLastYMax = lastYMax !== '' && Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : undefined;
     const extractedColors = extractChartColors(node, chartType);
     const styleInfo = extractStyleFromNode(node, chartType);
+    const markRatio = resolveMarkRatioFromNode(node, styleInfo.markRatio);
 
     figma.ui.postMessage({
         type: 'init',
@@ -114,12 +149,12 @@ export async function initPluginUI(
         lastCellCount: chartData.cellCount,
 
         lastMode: lastMode,
-        lastYMin: lastYMin ? Number(lastYMin) : undefined,
-        lastYMax: lastYMax ? Number(lastYMax) : undefined,
+        lastYMin: parsedLastYMin,
+        lastYMax: parsedLastYMax,
 
         markColors: extractedColors,
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
-        markRatio: styleInfo.markRatio,
+        markRatio,
 
         colStrokeStyle: styleInfo.colStrokeStyle || null,
         cellStrokeStyles: styleInfo.cellStrokeStyles || [],

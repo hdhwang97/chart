@@ -5,6 +5,7 @@ import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, app
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
+import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
 
 // ==========================================
@@ -16,6 +17,23 @@ figma.showUI(__html__, { width: 600, height: 800 });
 let currentSelectionId: string | null = null;
 let prevWidth = 0;
 let prevHeight = 0;
+
+function normalizeMarkRatio(value: unknown): number | null {
+    const ratio = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(ratio)) return null;
+    return Math.max(0.01, Math.min(1.0, ratio));
+}
+
+function resolveMarkRatioFromNode(node: SceneNode, extractedRatio?: number): number {
+    const savedRatioStr = node.getPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING);
+    const savedRatio = normalizeMarkRatio(savedRatioStr);
+    if (savedRatio !== null) return savedRatio;
+
+    const extracted = normalizeMarkRatio(extractedRatio);
+    if (extracted !== null) return extracted;
+
+    return 0.8;
+}
 
 function isRecognizedChartSelection(node: SceneNode) {
     const savedChartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE);
@@ -63,7 +81,7 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.resize(msg.width, msg.height);
     }
     else if (msg.type === 'generate' || msg.type === 'apply') {
-        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth, markRatio } = msg.payload;
+        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth, markRatio, rawYMaxAuto } = msg.payload;
 
         const nodes = figma.currentPage.selection;
         let targetNode: FrameNode | ComponentNode | InstanceNode;
@@ -122,12 +140,31 @@ figma.ui.onmessage = async (msg) => {
         const graphColCount = cols;
         setLayerVisibility(targetNode, "col-", graphColCount);
 
+        const effectiveY = resolveEffectiveYRange({
+            chartType: type,
+            mode,
+            values,
+            yMin,
+            yMax,
+            rawYMaxAuto
+        });
+
         applyCells(targetNode, cellCount);
-        applyYAxis(targetNode, cellCount, { yMin, yMax });
+        applyYAxis(targetNode, cellCount, { yMin: effectiveY.yMin, yMax: effectiveY.yMax });
 
         // 4. Draw Chart
         const H = getGraphHeight(targetNode as FrameNode);
-        const drawConfig = { values, mode, markNum, rows, yMin, yMax, strokeWidth, markRatio };
+        const drawConfig = {
+            values,
+            mode,
+            markNum,
+            rows,
+            yMin: effectiveY.yMin,
+            yMax: effectiveY.yMax,
+            rawYMaxAuto: effectiveY.rawYMaxAuto,
+            strokeWidth,
+            markRatio
+        };
 
         if (type === "bar") applyBar(drawConfig, H, targetNode);
         else if (type === "line") applyLine(drawConfig, H, targetNode);
@@ -135,6 +172,7 @@ figma.ui.onmessage = async (msg) => {
 
         // 5. 스타일 자동 추출 및 전송
         const styleInfo = extractStyleFromNode(targetNode, type);
+        const markRatioForUi = resolveMarkRatioFromNode(targetNode, styleInfo.markRatio);
 
         // 차트 생성 후 데이터 및 스타일 저장
         saveChartData(targetNode, msg.payload, styleInfo);
@@ -146,7 +184,7 @@ figma.ui.onmessage = async (msg) => {
             colCount: cols,
 
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
-            markRatio: styleInfo.markRatio,
+            markRatio: markRatioForUi,
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: styleInfo.strokeWidth,
             colStrokeStyle: styleInfo.colStrokeStyle || null,
@@ -186,6 +224,7 @@ figma.ui.onmessage = async (msg) => {
         const colCount = visibleCols.length > 0 ? visibleCols.length : 5;
 
         const styleInfo = extractStyleFromNode(node, chartType);
+        const markRatioForUi = resolveMarkRatioFromNode(node, styleInfo.markRatio);
 
         const payload = {
             chartType: chartType,
@@ -194,7 +233,7 @@ figma.ui.onmessage = async (msg) => {
             colCount: colCount,
 
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
-            markRatio: styleInfo.markRatio,
+            markRatio: markRatioForUi,
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: styleInfo.strokeWidth,
             colStrokeStyle: styleInfo.colStrokeStyle || null,

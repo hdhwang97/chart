@@ -1,7 +1,7 @@
 import { state, getTotalStackedCols } from './state';
 import { ui } from './dom';
 import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroup } from './data-ops';
-import { checkCtaValidation, getAutoFillValue } from './mode';
+import { checkCtaValidation, getAutoFillValue, syncYMaxValidationUi } from './mode';
 import { renderPreview, highlightPreview, resetPreviewHighlight } from './preview';
 
 // ==========================================
@@ -32,21 +32,26 @@ export function renderGrid() {
             gCell.className = 'flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group';
             gCell.style.gridColumn = `span ${barCount}`;
             gCell.style.height = '24px';
-            gCell.innerHTML = `
-                <span>G${gIdx + 1}</span>
-                <div class="hidden group-hover:flex items-center gap-0.5 ml-1">
+            const groupControls = state.mode !== 'read'
+                ? `<div class="hidden group-hover:flex items-center gap-0.5 ml-1">
                     <button class="w-3.5 h-3.5 flex items-center justify-center rounded-full bg-primary text-white text-[8px] hover:bg-primary-hover cursor-pointer stacked-add-bar" data-g="${gIdx}">+</button>
                     ${barCount > 1 ? `<button class="w-3.5 h-3.5 flex items-center justify-center rounded-full bg-gray-300 text-white text-[8px] hover:bg-danger cursor-pointer stacked-remove-bar" data-g="${gIdx}">−</button>` : ''}
-                </div>
+                </div>`
+                : '';
+            gCell.innerHTML = `
+                <span>G${gIdx + 1}</span>
+                ${groupControls}
             `;
             gCell.addEventListener('mouseenter', () => highlightPreview('group', gIdx));
             gCell.addEventListener('mouseleave', () => resetPreviewHighlight());
 
-            const delBtn = document.createElement('button');
-            delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer';
-            delBtn.innerHTML = '✕';
-            delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(state.groupStructure.slice(0, gIdx).reduce((a, b) => a + b, 0)); };
-            gCell.appendChild(delBtn);
+            if (state.mode !== 'read') {
+                const delBtn = document.createElement('button');
+                delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer';
+                delBtn.innerHTML = '✕';
+                delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(state.groupStructure.slice(0, gIdx).reduce((a, b) => a + b, 0)); };
+                gCell.appendChild(delBtn);
+            }
             groupRow.appendChild(gCell);
         });
         grid.appendChild(groupRow);
@@ -78,7 +83,7 @@ export function renderGrid() {
             hCell.addEventListener('mouseenter', () => highlightPreview('col', c));
             hCell.addEventListener('mouseleave', () => resetPreviewHighlight());
 
-            if (state.cols > 1) {
+            if (state.mode !== 'read' && state.cols > 1) {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer';
                 delBtn.innerHTML = '✕';
@@ -103,7 +108,7 @@ export function renderGrid() {
         rowH.addEventListener('mouseenter', () => highlightPreview('row', r));
         rowH.addEventListener('mouseleave', () => resetPreviewHighlight());
 
-        if (state.rows > 1) {
+        if (state.mode !== 'read' && state.rows > 1) {
             const delBtn = document.createElement('button');
             delBtn.className = 'del-row-btn hidden absolute right-1 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer group-hover:flex';
             delBtn.innerHTML = '✕';
@@ -152,6 +157,7 @@ export function renderGrid() {
                 const val = (e.target as HTMLInputElement).value;
                 if (!state.data[r]) state.data[r] = [];
                 state.data[r][c] = val;
+                syncYMaxValidationUi();
                 renderPreview();
                 checkCtaValidation();
 
@@ -190,7 +196,7 @@ export function renderGrid() {
     };
 
     // Wire stacked add/remove buttons
-    if (isStacked) {
+    if (isStacked && state.mode !== 'read') {
         grid.querySelectorAll('.stacked-add-bar').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const g = parseInt((e.currentTarget as HTMLElement).dataset.g!);

@@ -3,7 +3,7 @@ import { state, CHART_ICONS, initData, getTotalStackedCols } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
-import { setMode, toggleMode, updateModeButtonState, checkCtaValidation } from './mode';
+import { setMode, toggleMode, updateModeButtonState, checkCtaValidation, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize } from './data-ops';
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
@@ -27,8 +27,11 @@ function handlePluginMessage(msg: any) {
         if (!msg.chartType) {
             // No selection
             state.uiMode = 'create';
+            state.mode = 'edit';
             state.markRatio = 0.8;
             ui.settingMarkRatioInput.value = '0.8';
+            ui.settingYMin.value = '0';
+            ui.settingYMax.value = '';
             state.colStrokeStyle = null;
             state.cellStrokeStyles = [];
             state.rowStrokeStyles = [];
@@ -80,8 +83,8 @@ function handlePluginMessage(msg: any) {
         // Apply saved settings
         if (msg.lastCellCount) state.cellCount = Number(msg.lastCellCount);
         if (msg.lastMode) state.dataMode = msg.lastMode as 'raw' | 'percent';
-        if (msg.lastYMin !== undefined) ui.settingYMin.value = String(msg.lastYMin);
-        if (msg.lastYMax !== undefined) ui.settingYMax.value = String(msg.lastYMax);
+        ui.settingYMin.value = msg.lastYMin !== undefined ? String(msg.lastYMin) : '0';
+        ui.settingYMax.value = msg.lastYMax !== undefined ? String(msg.lastYMax) : ((msg.lastMode || 'raw') === 'raw' ? '' : '100');
         if (msg.lastStrokeWidth !== undefined) {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
@@ -120,8 +123,11 @@ function handlePluginMessage(msg: any) {
 
         ui.backBtn.classList.add('hidden');
         updateModeButtonState();
+        syncYMaxValidationUi();
+        applyModeLocks();
         goToStep(2);
         switchTab('data');
+        checkCtaValidation();
     }
 
     if (msg.type === 'style_extracted') {
@@ -131,6 +137,9 @@ function handlePluginMessage(msg: any) {
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
         renderPreview();
+        syncYMaxValidationUi();
+        applyModeLocks();
+        checkCtaValidation();
         handleStyleExtracted(msg.payload);
     }
 }
@@ -156,8 +165,18 @@ function bindUiEvents() {
     });
 
     // Y axis inputs
-    ui.settingYMin.addEventListener('change', () => renderPreview());
-    ui.settingYMax.addEventListener('change', () => renderPreview());
+    ui.settingYMin.addEventListener('change', () => {
+        syncYMaxValidationUi();
+        renderPreview();
+        applyModeLocks();
+        checkCtaValidation();
+    });
+    ui.settingYMax.addEventListener('change', () => {
+        syncYMaxValidationUi();
+        renderPreview();
+        applyModeLocks();
+        checkCtaValidation();
+    });
 
     // CSV
     ui.csvInput.addEventListener('change', handleCsvUpload);

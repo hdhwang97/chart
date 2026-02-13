@@ -13,10 +13,14 @@ export function applyLine(config: any, H: number, graph: SceneNode) {
     let min = 0, max = 100;
 
     if (mode === "raw") {
-        const flat = values.flat().map((v: any) => Number(v) || 0);
-        min = Math.min(...flat);
-        max = Math.max(...flat);
-        if (min === max) { min = 0; max = Math.max(max, 100); }
+        min = 0;
+        const configuredMax = Number(config.yMax);
+        if (Number.isFinite(configuredMax) && configuredMax > 0) {
+            max = configuredMax;
+        } else {
+            const flat = values.flat().map((v: any) => Number(v) || 0);
+            max = Math.max(...flat, 1);
+        }
     } else {
         min = config.yMin !== undefined ? config.yMin : 0;
         max = config.yMax !== undefined ? config.yMax : 100;

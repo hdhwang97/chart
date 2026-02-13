@@ -20,7 +20,11 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(msg.values));
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_MODE, msg.mode);
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN, String(msg.yMin));
-    node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, String(msg.yMax));
+    if (msg.mode === 'raw' && msg.rawYMaxAuto) {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, '');
+    } else {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, String(msg.yMax));
+    }
 
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(msg.cellCount));
     if (msg.markNum) {

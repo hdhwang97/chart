@@ -25,14 +25,16 @@ export function getGraphHeight(node: FrameNode) {
     return node.height - xh;
 }
 
-export function setVariantProperty(instance: InstanceNode, key: string, value: string) {
+export function setVariantProperty(instance: InstanceNode, key: string, value: string): boolean {
     try {
         const props = instance.componentProperties;
         const propKey = Object.keys(props).find(k => k === key || k.startsWith(key + "#"));
         if (propKey && props[propKey].value !== value) {
             instance.setProperties({ [propKey]: value });
+            return true;
         }
     } catch (e) { }
+    return false;
 }
 
 export function setLayerVisibility(parent: SceneNode, namePrefix: string, count: number) {

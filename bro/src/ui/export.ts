@@ -1,5 +1,7 @@
 import { ui } from './dom';
+import { state, getTotalStackedCols } from './state';
 import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
+import { getEffectiveYDomain } from './y-range';
 
 // ==========================================
 // EXPORT TAB — D3 Preview & Code
@@ -53,6 +55,23 @@ function buildYTickValues(yMin: number, yMax: number, cellCount: number): number
 function normalizeMarkRatio(markRatio?: number): number {
     const ratio = typeof markRatio === 'number' ? markRatio : 0.8;
     return Math.max(0.01, Math.min(1, ratio));
+}
+
+function buildStateNumericData(chartType: string, totalCols: number): number[][] {
+    const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
+    const cols = isStacked ? getTotalStackedCols() : totalCols;
+    const rows = Math.max(0, state.rows);
+    const data: number[][] = [];
+
+    for (let r = 0; r < rows; r++) {
+        const row: number[] = [];
+        for (let c = 0; c < cols; c++) {
+            row.push(Number(state.data[r]?.[c]) || 0);
+        }
+        data.push(row);
+    }
+
+    return data;
 }
 
 function applyStrokeExtras(selection: any, stroke: StrokeStyleSnapshot | null) {
@@ -195,20 +214,33 @@ function renderD3Preview(style: any) {
     const colStrokeStyle: StrokeStyleSnapshot | null = style.colStrokeStyle || null;
     const rowStrokeStyles: RowStrokeStyle[] = style.rowStrokeStyles || [];
 
-    // Generate sample data
-    const sampleData: number[][] = [];
-    const numRows = Array.isArray(markNum) ? Math.max(2, ...markNum.map(() => 2)) : (typeof markNum === 'number' ? markNum : 1);
     const numCols = Array.isArray(markNum) ? markNum.reduce((a: number, b: number) => a + b, 0) : colCount;
+    const stateData = buildStateNumericData(chartType, numCols);
+    const hasStateData = stateData.length > 0 && stateData.some(row => row.some(v => Number.isFinite(v)));
 
-    for (let r = 0; r < numRows; r++) {
-        const row = [];
-        for (let c = 0; c < numCols; c++) {
-            row.push(20 + Math.random() * 60);
+    // fallback data when UI state is empty
+    let sampleData: number[][] = stateData;
+    if (!hasStateData) {
+        const fallbackRows = Array.isArray(markNum) ? Math.max(2, markNum.length + 1) : (typeof markNum === 'number' ? markNum : 1);
+        sampleData = [];
+        for (let r = 0; r < fallbackRows; r++) {
+            const row = [];
+            for (let c = 0; c < numCols; c++) {
+                row.push(20 + Math.random() * 60);
+            }
+            sampleData.push(row);
         }
-        sampleData.push(row);
     }
+    const numRows = sampleData.length;
 
-    const yScale = d3.scaleLinear().domain([0, 100]).range([h, 0]);
+    const yDomain = getEffectiveYDomain({
+        mode: state.dataMode,
+        yMinInput: ui.settingYMin.value,
+        yMaxInput: ui.settingYMax.value,
+        data: sampleData,
+        chartType
+    });
+    const yScale = d3.scaleLinear().domain([yDomain.yMin, yDomain.yMax]).range([h, 0]);
     const isLine = chartType === 'line';
     const lineTickValues = isLine
         ? Array.from({ length: numCols }, (_, i) => i)
@@ -216,7 +248,7 @@ function renderD3Preview(style: any) {
     const xAxisScale = isLine
         ? d3.scaleLinear().domain([0, Math.max(1, numCols - 1)]).range([0, w])
         : d3.scaleBand().domain(d3.range(numCols)).range([0, w]).padding(0);
-    const yTickValues = buildYTickValues(0, 100, yCount);
+    const yTickValues = buildYTickValues(yDomain.yMin, yDomain.yMax, yCount);
 
     renderAxes(g, xAxisScale, yScale, yTickValues, h, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
@@ -230,7 +262,7 @@ function renderD3Preview(style: any) {
 
         for (let r = 0; r < numRows; r++) {
             for (let c = 0; c < colCount; c++) {
-                const val = sampleData[r][c];
+                const val = sampleData[r]?.[c] || 0;
 
                 const colX = xScale(c)!;
                 const colW = xScale.bandwidth();
@@ -252,7 +284,7 @@ function renderD3Preview(style: any) {
         const xScale = d3.scaleLinear().domain([0, Math.max(1, colCount - 1)]).range([0, w]);
 
         for (let r = 0; r < numRows; r++) {
-            const lineData = sampleData[r].slice(0, colCount);
+            const lineData = (sampleData[r] || []).slice(0, colCount);
             const line = d3.line()
                 .x((_: any, i: number) => xScale(i)!)
                 .y((d: number) => yScale(d))
@@ -290,8 +322,8 @@ function renderD3Preview(style: any) {
             for (let b = 0; b < barCount; b++) {
                 let yOffset = h;
                 for (let r = 0; r < numRows; r++) {
-                    const val = sampleData[r][flatIdx] || (20 + Math.random() * 30);
-                    const barH = (val / 100) * h;
+                    const val = sampleData[r]?.[flatIdx] || 0;
+                    const barH = Math.max(0, h - yScale(val));
 
                     const rect = g.append('rect')
                         .attr('x', xScale(gIdx)! + innerScale(b)!)

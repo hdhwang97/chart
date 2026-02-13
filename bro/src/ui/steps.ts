@@ -2,8 +2,9 @@ import { state, CHART_ICONS, initData, getTotalStackedCols } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
-import { updateModeButtonState, checkCtaValidation, setMode } from './mode';
+import { updateModeButtonState, checkCtaValidation, setMode, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { updateCsvUi } from './csv';
+import { getEffectiveYDomain } from './y-range';
 
 // ==========================================
 // STEP / TYPE SELECTION / SUBMISSION
@@ -13,6 +14,12 @@ function normalizeMarkRatio(value: unknown): number {
     const ratio = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(ratio)) return 0.8;
     return Math.max(0.01, Math.min(1.0, ratio));
+}
+
+function parseOptionalNumber(value: string): number | null {
+    if (value.trim() === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
 }
 
 export function goToStep(step: number) {
@@ -39,6 +46,7 @@ export function goToStep(step: number) {
         updateSettingInputs();
         renderGrid();
         setTimeout(() => renderPreview(), 50);
+        applyModeLocks();
         checkCtaValidation();
     }
 }
@@ -81,6 +89,13 @@ export function selectType(type: string) {
 
     const totalCols = type === 'stackedBar' ? getTotalStackedCols() : state.cols;
     state.data = initData(state.rows, totalCols);
+    if (state.dataMode === 'raw') {
+        ui.settingYMin.value = '0';
+        ui.settingYMax.value = '';
+    } else {
+        ui.settingYMin.value = '0';
+        ui.settingYMax.value = '100';
+    }
 
     updateModeButtonState();
     goToStep(2);
@@ -125,6 +140,9 @@ export function updateSettingInputs() {
 }
 
 export function submitData() {
+    const isAllowed = checkCtaValidation();
+    if (!isAllowed) return;
+
     const isStacked = state.chartType === 'stackedBar';
 
     let drawingValues: number[][];
@@ -154,6 +172,19 @@ export function submitData() {
         ? state.groupStructure
         : Number(ui.settingMarkSelect.value) || 1;
 
+    const yDomain = getEffectiveYDomain({
+        mode: state.dataMode,
+        yMinInput: ui.settingYMin.value,
+        yMaxInput: ui.settingYMax.value,
+        data: state.data,
+        chartType: state.chartType
+    });
+    const effectiveYMax = yDomain.yMax;
+    const rawYMaxAuto = state.dataMode === 'raw' ? yDomain.isAuto : false;
+    if (state.dataMode === 'raw') {
+        ui.settingYMax.value = String(effectiveYMax);
+    }
+
     const payload = {
         type: state.chartType,
         mode: state.dataMode,
@@ -163,7 +194,8 @@ export function submitData() {
         rows: state.rows,
         cellCount: state.cellCount,
         yMin: Number(ui.settingYMin.value) || 0,
-        yMax: Number(ui.settingYMax.value) || 100,
+        yMax: state.dataMode === 'raw' ? effectiveYMax : (parseOptionalNumber(ui.settingYMax.value) ?? 100),
+        rawYMaxAuto,
         markNum: markNum,
         strokeWidth: state.strokeWidth,
         markRatio: state.chartType === 'bar' ? normalizeMarkRatio(state.markRatio) : undefined

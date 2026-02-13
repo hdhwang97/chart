@@ -1,5 +1,7 @@
 import { state, getTotalStackedCols } from './state';
+import { ui } from './dom';
 import type { StrokeStyleSnapshot } from '../shared/style-types';
+import { getEffectiveYDomain } from './y-range';
 
 // ==========================================
 // PREVIEW RENDERING (D3-based)
@@ -210,18 +212,15 @@ export function renderPreview() {
         numData.push(row);
     }
 
-    // Y domain
-    let yMin = Number(document.getElementById('setting-y-min')?.getAttribute('value')) || 0;
-    let yMax = 100;
-
-    if (state.dataMode === 'raw') {
-        const flat = numData.flat();
-        yMax = Math.max(...flat, 1);
-        yMin = 0;
-    } else {
-        yMax = 100;
-        yMin = 0;
-    }
+    const yDomain = getEffectiveYDomain({
+        mode: state.dataMode,
+        yMinInput: ui.settingYMin.value,
+        yMaxInput: ui.settingYMax.value,
+        data: numData,
+        chartType
+    });
+    const yMin = yDomain.yMin;
+    const yMax = yDomain.yMax;
 
     const yScale = d3.scaleLinear().domain([yMin, yMax]).range([h, 0]);
     const isLine = chartType === 'line';
@@ -359,25 +358,7 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
     const rowCount = state.rows - startRow;
     if (rowCount <= 0) return;
 
-    // Calculate max sum for scale
-    let maxSum = yMax;
-    if (state.dataMode === 'raw') {
-        let calcMax = 0;
-        let flatIdx = 0;
-        groups.forEach(barCount => {
-            for (let b = 0; b < barCount; b++) {
-                let colSum = 0;
-                for (let r = startRow; r < state.rows; r++) {
-                    colSum += data[r][flatIdx] || 0;
-                }
-                calcMax = Math.max(calcMax, colSum);
-                flatIdx++;
-            }
-        });
-        maxSum = calcMax || 1;
-    }
-
-    const innerYScale = d3.scaleLinear().domain([yMin, maxSum]).range([h, 0]);
+    const innerYScale = d3.scaleLinear().domain([yMin, yMax]).range([h, 0]);
 
     let flatIdx = 0;
     groups.forEach((barCount, gIdx) => {

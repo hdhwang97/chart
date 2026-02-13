@@ -60,6 +60,22 @@ function inferRatioFromCurrentGeometry(cols: { node: SceneNode, index: number }[
     return null;
 }
 
+function setMarkNumVariantWithFallback(instance: InstanceNode, value: number): boolean {
+    const next = String(value);
+    if (setVariantProperty(instance, VARIANT_PROPERTY_MARK_NUM, next)) return true;
+    if (setVariantProperty(instance, 'Count', next)) return true;
+    if (setVariantProperty(instance, 'Size', next)) return true;
+    return false;
+}
+
+function parseBarLayerIndex(name: string): number | null {
+    if (name === 'bar') return 1;
+    const match = /^bar[-_]?0*(\d+)$/.exec(name);
+    if (!match) return null;
+    const idx = Number(match[1]);
+    return Number.isFinite(idx) && idx > 0 ? idx : null;
+}
+
 export function applyBar(config: any, H: number, graph: SceneNode) {
     const { values, mode, markNum, reason, markRatio } = config;
     const cols = collectColumns(graph);
@@ -68,10 +84,15 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
     // 1. Max Value 계산
     let maxVal = 100;
     if (mode === "raw") {
-        let allValues: number[] = [];
-        values.forEach((row: any[]) => row.forEach((v: any) => allValues.push(Number(v) || 0)));
-        maxVal = Math.max(...allValues);
-        if (maxVal === 0) maxVal = 1;
+        const configuredMax = Number(config.yMax);
+        if (Number.isFinite(configuredMax) && configuredMax > 0) {
+            maxVal = configuredMax;
+        } else {
+            const allValues: number[] = [];
+            values.forEach((row: any[]) => row.forEach((v: any) => allValues.push(Number(v) || 0)));
+            maxVal = Math.max(...allValues);
+            if (maxVal === 0) maxVal = 1;
+        }
     }
 
     // 저장된 Mark Ratio(너비 비율) 불러오기
@@ -96,7 +117,13 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
 
         if (barInst) {
             // Figma 컴포넌트의 'markNum' Variant 속성 변경
-            setVariantProperty(barInst, VARIANT_PROPERTY_MARK_NUM, String(numMarks));
+            setMarkNumVariantWithFallback(barInst, numMarks);
+            // markNum 기준으로 활성 범위 레이어는 항상 visible=true로 강제한다.
+            barInst.children.forEach((child: SceneNode) => {
+                const layerIndex = parseBarLayerIndex(child.name);
+                if (layerIndex === null) return;
+                child.visible = layerIndex <= numMarks;
+            });
 
             for (let m = 0; m < numMarks; m++) {
                 let val = 0;
@@ -160,16 +187,13 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                         }
                     }
 
-                    if (val === 0) {
-                        barLayer.visible = false;
-                    } else {
-                        barLayer.visible = true;
-                        let ratio = (mode === "raw") ? (val / maxVal) : (val / 100);
-                        const finalH = Math.round((H * ratio) * 10) / 10;
+                    barLayer.visible = true;
+                    let ratio = (mode === "raw") ? (val / maxVal) : (val / 100);
+                    if (!Number.isFinite(ratio) || ratio < 0) ratio = 0;
+                    const finalH = Math.round((H * ratio) * 10) / 10;
 
-                        if ('paddingBottom' in barLayer) {
-                            (barLayer as any).paddingBottom = finalH;
-                        }
+                    if ('paddingBottom' in barLayer) {
+                        (barLayer as any).paddingBottom = finalH;
                     }
                 }
             }
