@@ -57,6 +57,15 @@ function normalizeMarkRatio(markRatio?: number): number {
     return Math.max(0.01, Math.min(1, ratio));
 }
 
+function computeClusterLayout(cellWidth: number, markRatio: number, markNum: number) {
+    const safeCellWidth = Math.max(1, cellWidth);
+    const safeMarkNum = Math.max(1, Math.floor(markNum));
+    const clusterW = safeCellWidth * markRatio;
+    const clusterOffset = (safeCellWidth - clusterW) / 2;
+    const subBarW = Math.max(1, clusterW / safeMarkNum);
+    return { clusterW, clusterOffset, subBarW };
+}
+
 function buildStateNumericData(chartType: string, totalCols: number): number[][] {
     const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
     const cols = isStacked ? getTotalStackedCols() : totalCols;
@@ -266,14 +275,12 @@ function renderD3Preview(style: any) {
 
                 const colX = xScale(c)!;
                 const colW = xScale.bandwidth();
-                const clusterW = colW * ratio;
-                const clusterOffset = (colW - clusterW) / 2;
-                const innerScale = d3.scaleBand().domain(d3.range(numRows)).range([0, clusterW]).padding(0.12);
+                const clusterLayout = computeClusterLayout(colW, ratio, numRows);
 
                 const rect = g.append('rect')
-                    .attr('x', colX + clusterOffset + innerScale(r)!)
+                    .attr('x', colX + clusterLayout.clusterOffset + (r * clusterLayout.subBarW))
                     .attr('y', yScale(val))
-                    .attr('width', innerScale.bandwidth())
+                    .attr('width', clusterLayout.subBarW)
                     .attr('height', h - yScale(val))
                     .attr('fill', colors[r % colors.length])
                     .attr('rx', cornerRadius);
@@ -361,6 +368,7 @@ const config = {
   padding: ${paddingVal},
   strokeWidth: ${strokeVal},
   cornerRadius: ${radiusVal},
+  derivedGapRatio: 0,
   chartType: "${style.chartType || 'bar'}",
   colCount: ${style.colCount || 5},
   yCount: ${style.yCount || 4},

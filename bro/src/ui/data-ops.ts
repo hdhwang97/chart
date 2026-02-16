@@ -8,10 +8,40 @@ import { checkCtaValidation } from './mode';
 // DATA OPERATIONS
 // ==========================================
 
+function rebuildMarkCountOptions() {
+    if (state.chartType === 'stackedBar') return;
+    const select = ui.settingMarkSelect;
+    select.innerHTML = '';
+    for (let i = 1; i <= MAX_SIZE; i++) {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = String(i);
+        select.appendChild(opt);
+    }
+}
+
+export function syncMarkCountFromRows() {
+    if (state.chartType === 'stackedBar') return;
+    rebuildMarkCountOptions();
+    const next = Math.max(1, Math.min(MAX_SIZE, state.rows));
+    ui.settingMarkSelect.value = String(next);
+}
+
+export function syncRowsFromMarkCount() {
+    if (state.chartType === 'stackedBar') return;
+    const parsed = Number(ui.settingMarkSelect.value);
+    const nextRows = Math.max(1, Math.min(MAX_SIZE, Number.isFinite(parsed) ? parsed : 1));
+    ui.settingMarkSelect.value = String(nextRows);
+    if (state.rows !== nextRows) {
+        updateGridSize(state.cols, nextRows);
+    }
+}
+
 export function addRow() {
     if (state.rows >= MAX_SIZE) return;
     state.rows++;
     state.data.push(new Array(state.chartType === 'stackedBar' ? state.groupStructure.reduce((a, b) => a + b, 0) : state.cols).fill(""));
+    syncMarkCountFromRows();
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -40,6 +70,7 @@ export function deleteRow(rowIdx: number) {
     if (state.rows <= 1) return;
     state.rows--;
     state.data.splice(rowIdx, 1);
+    syncMarkCountFromRows();
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -123,6 +154,7 @@ export function updateGridSize(newCols: number, newRows: number) {
     }
     state.cols = newCols;
     state.rows = newRows;
+    syncMarkCountFromRows();
     renderGrid();
     checkCtaValidation();
 }

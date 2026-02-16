@@ -3,6 +3,7 @@ import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
 import { checkCtaValidation } from './mode';
+import { syncMarkCountFromRows } from './data-ops';
 
 // ==========================================
 // CSV OPERATIONS
@@ -57,6 +58,7 @@ export function parseAndApplyCsv(text: string) {
     }
 
     updateCsvUi();
+    syncMarkCountFromRows();
     renderGrid();
     renderPreview();
     checkCtaValidation();

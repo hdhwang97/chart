@@ -10,17 +10,29 @@ function normalizeRatio(value: number | null | undefined): number {
     return Math.max(0.01, Math.min(1, ratio));
 }
 
+function computeClusterLayout(cellWidth: number, markRatio: number, markNum: number) {
+    const safeCellWidth = Math.max(1, cellWidth);
+    const safeMarkNum = Math.max(1, Math.floor(markNum));
+    const clusterW = safeCellWidth * markRatio;
+    const subBarW = Math.max(1, clusterW / safeMarkNum);
+    return { clusterW, subBarW };
+}
+
 function hasHorizontalPadding(node: SceneNode): node is SceneNode & { paddingLeft: number; paddingRight: number } {
     return 'paddingLeft' in node && 'paddingRight' in node;
 }
 
-function getNodeContentWidth(node: SceneNode, measureWidth: number): number {
-    if (measureWidth <= 0) return 'width' in node ? node.width : 0;
+function hasItemSpacing(node: SceneNode): node is SceneNode & { itemSpacing: number } {
+    return 'itemSpacing' in node && typeof (node as any).itemSpacing === 'number';
+}
+
+function getNodeContentWidth(node: SceneNode): number {
+    if (!('width' in node)) return 0;
     if (hasHorizontalPadding(node)) {
-        const content = measureWidth - node.paddingLeft - node.paddingRight;
+        const content = node.width - node.paddingLeft - node.paddingRight;
         return content > 0 ? content : 0;
     }
-    return 'width' in node ? node.width : 0;
+    return node.width;
 }
 
 function findTabInColumn(colNode: SceneNode): SceneNode {
@@ -50,9 +62,10 @@ function inferRatioFromCurrentGeometry(cols: { node: SceneNode, index: number }[
     for (const col of cols) {
         const { barInst, measureWidth } = resolveBarMeasureContext(col.node);
         if (!barInst || measureWidth <= 0) continue;
-        const firstBar = barInst.children.find((n: SceneNode) => /^bar($|[-_]?0*\d+$)/.test(n.name));
+        const layerPool = resolveBarMarkLayerPool(barInst);
+        const firstBar = layerPool.find((n: SceneNode) => /^bar($|[-_]?0*\d+$)/.test(n.name));
         if (!firstBar) continue;
-        const inferred = getNodeContentWidth(firstBar, measureWidth) / measureWidth;
+        const inferred = getNodeContentWidth(firstBar) / measureWidth;
         if (Number.isFinite(inferred) && inferred > 0) {
             return inferred;
         }
@@ -74,6 +87,27 @@ function parseBarLayerIndex(name: string): number | null {
     if (!match) return null;
     const idx = Number(match[1]);
     return Number.isFinite(idx) && idx > 0 ? idx : null;
+}
+
+function findBarClusterNode(barInst: InstanceNode): (SceneNode & ChildrenMixin) | null {
+    const directCluster = barInst.children.find((n) => n.name === 'bar' && 'children' in n);
+    if (directCluster && 'children' in directCluster) {
+        return directCluster as SceneNode & ChildrenMixin;
+    }
+    return null;
+}
+
+function resolveBarMarkLayerPool(barInst: InstanceNode): ReadonlyArray<SceneNode> {
+    const clusterNode = findBarClusterNode(barInst);
+    if (clusterNode) {
+        return clusterNode.children;
+    }
+    return barInst.children;
+}
+
+function findBarLayerByIndex(layerPool: ReadonlyArray<SceneNode>, index: number): (SceneNode & LayoutMixin) | null {
+    const found = layerPool.find((n) => parseBarLayerIndex(n.name) === index);
+    return found ? (found as SceneNode & LayoutMixin) : null;
 }
 
 export function applyBar(config: any, H: number, graph: SceneNode) {
@@ -113,8 +147,10 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
     const ratioAuditRows: Array<{
         colIndex: number;
         measuredCellWidth: number;
+        clusterWidth: number;
         barWidth: number;
         appliedRatio: number;
+        subBarWidth: number;
         leftPadding: number;
         rightPadding: number;
     }> = [];
@@ -129,68 +165,89 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
         const { barInst, measureWidth } = resolveBarMeasureContext(colObj.node);
 
         if (barInst) {
+            const clusterLayout = computeClusterLayout(measureWidth, targetRatio, numMarks);
             // Figma 컴포넌트의 'markNum' Variant 속성 변경
             setMarkNumVariantWithFallback(barInst, numMarks);
+            // Variant 변경 직후 인스턴스 내부 레이어가 재구성될 수 있으므로 반드시 재조회한다.
+            const barLayerPool = resolveBarMarkLayerPool(barInst);
             // markNum 기준으로 활성 범위 레이어는 항상 visible=true로 강제한다.
-            barInst.children.forEach((child: SceneNode) => {
+            barLayerPool.forEach((child: SceneNode) => {
                 const layerIndex = parseBarLayerIndex(child.name);
                 if (layerIndex === null) return;
                 child.visible = layerIndex <= numMarks;
             });
+            if (hasItemSpacing(barInst)) {
+                barInst.itemSpacing = 0;
+            }
+            if (hasHorizontalPadding(barInst)) {
+                // cluster(bar)에는 좌우 padding을 주입하지 않는다.
+                barInst.paddingLeft = 0;
+                barInst.paddingRight = 0;
+            }
+            if ('layoutSizingHorizontal' in barInst) {
+                (barInst as SceneNode & { layoutSizingHorizontal: 'FIXED' | 'HUG' | 'FILL' }).layoutSizingHorizontal = 'HUG';
+            }
 
             for (let m = 0; m < numMarks; m++) {
                 let val = 0;
                 if (values.length > m) val = Number(values[m][cIdx]) || 0;
 
                 const targetNum = m + 1;
-                const pattern = new RegExp(`^bar[-_]?0*(${targetNum})$`);
-
-                const barLayer = barInst.children.find((n: SceneNode) => pattern.test(n.name)) as (SceneNode & LayoutMixin);
+                const barLayer = findBarLayerByIndex(barLayerPool, targetNum);
 
                 if (barLayer) {
                     if (measureWidth > 0) {
                         try {
-                            const barWidthBefore = getNodeContentWidth(barLayer, measureWidth);
+                            const barWidthBefore = getNodeContentWidth(barLayer);
                             const ratioBefore = barWidthBefore / measureWidth;
-                            const desiredContentWidth = Math.max(1, measureWidth * targetRatio);
+                            const desiredContentWidth = clusterLayout.subBarW;
 
                             let leftPadding = 'x' in barLayer ? barLayer.x : 0;
                             let rightPadding = measureWidth - (('x' in barLayer ? barLayer.x : 0) + ('width' in barLayer ? barLayer.width : 0));
 
+                            if ('layoutSizingHorizontal' in barLayer) {
+                                (barLayer as SceneNode & { layoutSizingHorizontal: 'FIXED' | 'HUG' | 'FILL' }).layoutSizingHorizontal = 'HUG';
+                            }
+
                             if (hasHorizontalPadding(barLayer)) {
-                                const nextLeft = Math.max(0, desiredContentWidth / 2);
-                                const nextRight = Math.max(0, desiredContentWidth / 2);
+                                // bar-N 레이어가 padding을 지원하면 항상 padding으로 폭을 주입한다.
+                                const nextLeft = desiredContentWidth / 2;
+                                const nextRight = desiredContentWidth / 2;
                                 if (Math.abs(barLayer.paddingLeft - nextLeft) >= 0.1) {
                                     barLayer.paddingLeft = nextLeft;
                                 }
                                 if (Math.abs(barLayer.paddingRight - nextRight) >= 0.1) {
                                     barLayer.paddingRight = nextRight;
                                 }
-                                leftPadding = barLayer.paddingLeft;
-                                rightPadding = barLayer.paddingRight;
                             } else if ('resize' in barLayer && typeof barLayer.resize === 'function' && 'width' in barLayer && 'height' in barLayer) {
+                                // padding을 지원하지 않는 경우에만 resize fallback
                                 if (Math.abs(desiredContentWidth - barLayer.width) >= 0.1) {
                                     barLayer.resize(desiredContentWidth, barLayer.height);
                                 }
-                                leftPadding = 'x' in barLayer ? barLayer.x : 0;
-                                rightPadding = measureWidth - (leftPadding + ('width' in barLayer ? barLayer.width : 0));
                             }
 
+                            leftPadding = hasHorizontalPadding(barLayer) ? barLayer.paddingLeft : ('x' in barLayer ? barLayer.x : 0);
+                            rightPadding = hasHorizontalPadding(barLayer)
+                                ? barLayer.paddingRight
+                                : measureWidth - (leftPadding + ('width' in barLayer ? barLayer.width : 0));
+
                             if (m === 0) {
-                                const barWidthAfter = getNodeContentWidth(barLayer, measureWidth);
+                                const barWidthAfter = getNodeContentWidth(barLayer);
                                 const ratioAfter = measureWidth > 0 ? barWidthAfter / measureWidth : 0;
                                 ratioAuditRows.push({
                                     colIndex: cIdx,
                                     measuredCellWidth: measureWidth,
+                                    clusterWidth: clusterLayout.clusterW,
                                     barWidth: barWidthAfter,
                                     appliedRatio: ratioAfter,
+                                    subBarWidth: clusterLayout.subBarW,
                                     leftPadding,
                                     rightPadding
                                 });
                             }
 
                             if (shouldLogResizeDebug && m === 0) {
-                                const barWidthAfter = getNodeContentWidth(barLayer, measureWidth);
+                                const barWidthAfter = getNodeContentWidth(barLayer);
                                 const ratioAfter = barWidthAfter / measureWidth;
                                 totalRatioBefore += ratioBefore;
                                 totalRatioAfter += ratioAfter;
@@ -242,6 +299,8 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
             configRatio,
             savedRatio,
             inferredRatio,
+            markNum: numMarks,
+            gapRatio: 0,
             effectiveRatio: targetRatio,
             appliedRatio: targetRatio,
             columns: ratioAuditRows.length

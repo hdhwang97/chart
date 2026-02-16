@@ -120,6 +120,7 @@ export async function initPluginUI(
             rawYMaxAuto: effectiveY.rawYMaxAuto,
             markNum: chartData.markNum,
             strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
+            markRatio: chartType === 'bar' ? resolveMarkRatioFromNode(node) : undefined,
             reason: opts?.reason || 'auto-resize'
         };
 

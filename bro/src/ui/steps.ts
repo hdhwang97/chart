@@ -5,6 +5,7 @@ import { renderPreview } from './preview';
 import { updateModeButtonState, checkCtaValidation, setMode, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { updateCsvUi } from './csv';
 import { getEffectiveYDomain } from './y-range';
+import { syncMarkCountFromRows } from './data-ops';
 
 // ==========================================
 // STEP / TYPE SELECTION / SUBMISSION
@@ -89,6 +90,7 @@ export function selectType(type: string) {
 
     const totalCols = type === 'stackedBar' ? getTotalStackedCols() : state.cols;
     state.data = initData(state.rows, totalCols);
+    syncMarkCountFromRows();
     if (state.dataMode === 'raw') {
         ui.settingYMin.value = '0';
         ui.settingYMax.value = '';

@@ -109,6 +109,15 @@ function normalizeMarkRatio(markRatio?: number): number {
     return Math.max(0.01, Math.min(1, ratio));
 }
 
+function computeClusterLayout(cellWidth: number, markRatio: number, markNum: number) {
+    const safeCellWidth = Math.max(1, cellWidth);
+    const safeMarkNum = Math.max(1, Math.floor(markNum));
+    const clusterW = safeCellWidth * markRatio;
+    const clusterOffset = (safeCellWidth - clusterW) / 2;
+    const subBarW = Math.max(1, clusterW / safeMarkNum);
+    return { clusterW, clusterOffset, subBarW };
+}
+
 function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
@@ -264,15 +273,13 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
 
             const colX = xScale(c)!;
             const colW = xScale.bandwidth();
-            const clusterW = colW * ratio;
-            const clusterOffset = (colW - clusterW) / 2;
-            const innerScale = d3.scaleBand().domain(d3.range(rows)).range([0, clusterW]).padding(0.12);
+            const clusterLayout = computeClusterLayout(colW, ratio, rows);
 
             const rect = g.append('rect')
                 .attr('class', 'preview-mark')
-                .attr('x', colX + clusterOffset + innerScale(r)!)
+                .attr('x', colX + clusterLayout.clusterOffset + (r * clusterLayout.subBarW))
                 .attr('y', yScale(val))
-                .attr('width', innerScale.bandwidth())
+                .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
                 .attr('fill', PREVIEW_OPTS.colors[r % PREVIEW_OPTS.colors.length])
                 .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)

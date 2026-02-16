@@ -5,7 +5,7 @@ import { renderGrid } from './grid';
 import { renderPreview } from './preview';
 import { setMode, toggleMode, updateModeButtonState, checkCtaValidation, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
-import { addRow, addColumn, handleDimensionInput, updateGridSize } from './data-ops';
+import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount } from './data-ops';
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer } from './export';
 
@@ -79,6 +79,7 @@ function handlePluginMessage(msg: any) {
             const totalCols = msg.chartType === 'stackedBar' ? getTotalStackedCols() : state.cols;
             state.data = initData(state.rows, totalCols);
         }
+        syncMarkCountFromRows();
 
         // Apply saved settings
         if (msg.lastCellCount) state.cellCount = Number(msg.lastCellCount);
@@ -160,6 +161,7 @@ function bindUiEvents() {
         renderPreview();
     });
     ui.settingMarkSelect.addEventListener('change', () => {
+        syncRowsFromMarkCount();
         renderGrid();
         renderPreview();
     });
