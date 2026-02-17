@@ -5,6 +5,7 @@ import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, app
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
+import { applyAssistLines } from './drawing/assist-line';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
 
@@ -81,7 +82,7 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.resize(msg.width, msg.height);
     }
     else if (msg.type === 'generate' || msg.type === 'apply') {
-        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth, markRatio, rawYMaxAuto } = msg.payload;
+        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth, markRatio, rawYMaxAuto, assistLineVisible, assistLineEnabled } = msg.payload;
 
         const nodes = figma.currentPage.selection;
         let targetNode: FrameNode | ComponentNode | InstanceNode;
@@ -163,12 +164,15 @@ figma.ui.onmessage = async (msg) => {
             yMax: effectiveY.yMax,
             rawYMaxAuto: effectiveY.rawYMaxAuto,
             strokeWidth,
-            markRatio
+            markRatio,
+            assistLineVisible,
+            assistLineEnabled
         };
 
         if (type === "bar") applyBar(drawConfig, H, targetNode);
         else if (type === "line") applyLine(drawConfig, H, targetNode);
         else if (type === "stackedBar" || type === "stacked") applyStackedBar(drawConfig, H, targetNode);
+        applyAssistLines(drawConfig, targetNode, H);
 
         // 5. 스타일 자동 추출 및 전송
         const styleInfo = extractStyleFromNode(targetNode, type);
@@ -186,6 +190,8 @@ figma.ui.onmessage = async (msg) => {
 
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
+            assistLineVisible: Boolean(assistLineVisible),
+            assistLineEnabled: assistLineEnabled || { min: false, max: false, avg: false },
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: styleInfo.strokeWidth,
             colStrokeStyle: styleInfo.colStrokeStyle || null,
@@ -226,6 +232,19 @@ figma.ui.onmessage = async (msg) => {
 
         const styleInfo = extractStyleFromNode(node, chartType);
         const markRatioForUi = resolveMarkRatioFromNode(node, styleInfo.markRatio);
+        const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
+        const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
+        let assistLineEnabled = { min: false, max: false, avg: false };
+        if (assistLineEnabledRaw) {
+            try {
+                const parsed = JSON.parse(assistLineEnabledRaw);
+                assistLineEnabled = {
+                    min: Boolean(parsed?.min),
+                    max: Boolean(parsed?.max),
+                    avg: Boolean(parsed?.avg)
+                };
+            } catch { }
+        }
 
         const payload = {
             chartType: chartType,
@@ -235,6 +254,8 @@ figma.ui.onmessage = async (msg) => {
 
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
+            assistLineVisible,
+            assistLineEnabled,
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: styleInfo.strokeWidth,
             colStrokeStyle: styleInfo.colStrokeStyle || null,

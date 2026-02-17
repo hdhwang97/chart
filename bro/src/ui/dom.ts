@@ -55,6 +55,13 @@ export const ui = {
     get modeToggleContainer() { return byId<HTMLElement>('mode-toggle-container'); },
     get modeRawBtn() { return byId<HTMLButtonElement>('mode-raw'); },
     get modePercentBtn() { return byId<HTMLButtonElement>('mode-percent'); },
+    get assistLineControl() { return byId<HTMLElement>('assist-line-control'); },
+    get assistLineLabelBtn() { return byId<HTMLButtonElement>('assist-line-label-btn'); },
+    get assistLineToggleBtn() { return byId<HTMLButtonElement>('assist-line-toggle'); },
+    get assistLinePopover() { return byId<HTMLElement>('assist-line-popover'); },
+    get assistLineMinCheck() { return byId<HTMLInputElement>('assist-line-min-check'); },
+    get assistLineMaxCheck() { return byId<HTMLInputElement>('assist-line-max-check'); },
+    get assistLineAvgCheck() { return byId<HTMLInputElement>('assist-line-avg-check'); },
 
     get tooltipNormal() { return byId<HTMLElement>('tooltip-normal'); },
     get tooltipWarning() { return byId<HTMLElement>('tooltip-warning'); },

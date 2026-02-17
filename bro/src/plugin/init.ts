@@ -10,6 +10,7 @@ import { collectColumns } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
+import { applyAssistLines } from './drawing/assist-line';
 import { getGraphHeight } from './drawing/shared';
 import { resolveEffectiveYRange } from './drawing/y-range';
 
@@ -32,6 +33,27 @@ function resolveMarkRatioFromNode(node: SceneNode, extractedRatio?: number): num
     if (extracted !== null) return extracted;
 
     return 0.8;
+}
+
+function resolveAssistLineEnabledFromNode(node: SceneNode) {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
+    if (!raw) {
+        return { min: false, max: false, avg: false };
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        return {
+            min: Boolean(parsed?.min),
+            max: Boolean(parsed?.max),
+            avg: Boolean(parsed?.avg)
+        };
+    } catch {
+        return { min: false, max: false, avg: false };
+    }
+}
+
+function resolveAssistLineVisibleFromNode(node: SceneNode) {
+    return node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
 }
 
 export async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode | null> {
@@ -108,6 +130,8 @@ export async function initPluginUI(
             rawYMaxAuto
         });
 
+        const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
+        const assistLineVisible = resolveAssistLineVisibleFromNode(node);
         const payload = {
             type: chartType,
             mode,
@@ -121,6 +145,8 @@ export async function initPluginUI(
             markNum: chartData.markNum,
             strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
             markRatio: chartType === 'bar' ? resolveMarkRatioFromNode(node) : undefined,
+            assistLineVisible,
+            assistLineEnabled,
             reason: opts?.reason || 'auto-resize'
         };
 
@@ -128,6 +154,7 @@ export async function initPluginUI(
         if (chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
         else if (chartType === 'bar') applyBar(payload, H, node);
         else if (chartType === 'line') applyLine(payload, H, node);
+        applyAssistLines(payload, node, H);
         return;
     }
 
@@ -139,6 +166,8 @@ export async function initPluginUI(
     const extractedColors = extractChartColors(node, chartType);
     const styleInfo = extractStyleFromNode(node, chartType);
     const markRatio = resolveMarkRatioFromNode(node, styleInfo.markRatio);
+    const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
+    const assistLineVisible = resolveAssistLineVisibleFromNode(node);
 
     figma.ui.postMessage({
         type: 'init',
@@ -156,6 +185,8 @@ export async function initPluginUI(
         markColors: extractedColors,
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
         markRatio,
+        assistLineVisible,
+        assistLineEnabled,
 
         colStrokeStyle: styleInfo.colStrokeStyle || null,
         cellStrokeStyles: styleInfo.cellStrokeStyles || [],

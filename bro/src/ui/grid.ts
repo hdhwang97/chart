@@ -2,7 +2,7 @@ import { state, getTotalStackedCols } from './state';
 import { ui } from './dom';
 import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroup } from './data-ops';
 import { checkCtaValidation, getAutoFillValue, syncYMaxValidationUi } from './mode';
-import { renderPreview, highlightPreview, resetPreviewHighlight } from './preview';
+import { renderPreview, highlightPreview, highlightPreviewCell, resetPreviewHighlight } from './preview';
 
 // ==========================================
 // GRID RENDERING
@@ -181,6 +181,14 @@ export function renderGrid() {
                         next?.focus();
                     }
                 }
+            });
+            cell.addEventListener('mouseenter', () => {
+                cell.classList.add('grid-cell-self-hover');
+                highlightPreviewCell(r, c);
+            });
+            cell.addEventListener('mouseleave', () => {
+                cell.classList.remove('grid-cell-self-hover');
+                resetPreviewHighlight();
             });
 
             cell.dataset.r = String(r);

@@ -229,6 +229,29 @@
                             초기화
                         </button>
                         <div class="flex items-center gap-1.5">
+                            <div id="assist-line-control" class="relative flex items-center gap-1.5">
+                                <button id="assist-line-label-btn"
+                                    class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer"
+                                    type="button">보조선</button>
+                                <button id="assist-line-toggle"
+                                    class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
+                                    type="button">OFF</button>
+                                <div id="assist-line-popover"
+                                    class="hidden absolute top-6 left-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="assist-line-min-check" type="checkbox" class="cursor-pointer">
+                                        <span>min</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="assist-line-max-check" type="checkbox" class="cursor-pointer">
+                                        <span>max</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="assist-line-avg-check" type="checkbox" class="cursor-pointer">
+                                        <span>avg</span>
+                                    </label>
+                                </div>
+                            </div>
                             <div id="mode-toggle-container"
                                 class="flex bg-surface rounded p-0.5 border border-border relative transition-colors duration-200">
                                 <button id="mode-raw"

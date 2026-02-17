@@ -13,6 +13,17 @@ function normalizeMarkRatio(value: unknown): number | null {
     return Math.max(0.01, Math.min(1.0, ratio));
 }
 
+function normalizeAssistLineEnabled(value: any) {
+    if (!value || typeof value !== 'object') {
+        return { min: false, max: false, avg: false };
+    }
+    return {
+        min: Boolean(value.min),
+        max: Boolean(value.max),
+        avg: Boolean(value.avg)
+    };
+}
+
 // styleInfo를 받아 스타일 데이터도 함께 저장
 export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
@@ -30,6 +41,14 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     if (msg.markNum) {
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(msg.markNum));
     }
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED,
+        JSON.stringify(normalizeAssistLineEnabled(msg.assistLineEnabled))
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE,
+        String(Boolean(msg.assistLineVisible))
+    );
 
     // UI에서 직접 넘어온 Stroke Width가 있다면 우선 저장
     if (msg.strokeWidth) {

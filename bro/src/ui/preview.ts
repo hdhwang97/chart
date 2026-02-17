@@ -18,8 +18,8 @@ const PREVIEW_OPTS = {
 const GRID_MARK_HOVER_CLASS = 'grid-cell-mark-hover';
 const MARK_DIM_OPACITY = 0.2;
 const MARK_HOVER_OPACITY = 1;
-
-let highlightState: { type: string; index: number } | null = null;
+type HighlightState = { type: string; index: number; row?: number; col?: number };
+let highlightState: HighlightState | null = null;
 
 function getPreviewMarkElements(): SVGElement[] {
     return Array.from(document.querySelectorAll<SVGElement>('#chart-preview-container .preview-mark'));
@@ -269,6 +269,7 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
             const isHighlighted = highlightState
                 ? (highlightState.type === 'col' && highlightState.index === c) ||
                 (highlightState.type === 'row' && highlightState.index === r)
+                    || (highlightState.type === 'cell' && highlightState.row === r && highlightState.col === c)
                 : false;
 
             const colX = xScale(c)!;
@@ -305,6 +306,7 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
     for (let r = 0; r < state.rows; r++) {
         const lineData = data[r].slice(0, cols);
         const isRowHighlighted = highlightState?.type === 'row' && highlightState.index === r;
+        const isCellMode = highlightState?.type === 'cell';
 
         const line = d3.line()
             .x((_: any, i: number) => xScale(i)!)
@@ -320,8 +322,8 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
             .attr('stroke', baseColor)
             .attr('stroke-width', state.strokeWidth || PREVIEW_OPTS.lineStroke)
             .attr('d', line)
-            .attr('opacity', highlightState ? (isRowHighlighted || !highlightState ? 1 : 0.2) : 0.8)
-            .attr('data-base-opacity', highlightState ? (isRowHighlighted || !highlightState ? 1 : 0.2) : 0.8);
+            .attr('opacity', highlightState ? (isRowHighlighted && !isCellMode ? 1 : 0.2) : 0.8)
+            .attr('data-base-opacity', highlightState ? (isRowHighlighted && !isCellMode ? 1 : 0.2) : 0.8);
         path.on('mouseenter', function () {
             highlightGridRowFromMark(r);
             dimOtherMarks(this as SVGElement);
@@ -336,14 +338,15 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
         // Dots
         lineData.forEach((val: number, i: number) => {
             const isColHighlighted = highlightState?.type === 'col' && highlightState.index === i;
+            const isCellHighlighted = highlightState?.type === 'cell' && highlightState.row === r && highlightState.col === i;
             const dot = g.append('circle')
                 .attr('class', 'preview-mark')
                 .attr('cx', xScale(i)!)
                 .attr('cy', yScale(val))
                 .attr('r', 3)
                 .attr('fill', baseColor)
-                .attr('opacity', highlightState ? (isRowHighlighted || isColHighlighted ? 1 : 0.2) : 0.8)
-                .attr('data-base-opacity', highlightState ? (isRowHighlighted || isColHighlighted ? 1 : 0.2) : 0.8);
+                .attr('opacity', highlightState ? (isCellMode ? (isCellHighlighted ? 1 : 0.2) : (isRowHighlighted || isColHighlighted ? 1 : 0.2)) : 0.8)
+                .attr('data-base-opacity', highlightState ? (isCellMode ? (isCellHighlighted ? 1 : 0.2) : (isRowHighlighted || isColHighlighted ? 1 : 0.2)) : 0.8);
             dot.on('mouseenter', function () {
                 highlightGridCellFromMark(r, i);
                 dimOtherMarks(this as SVGElement);
@@ -380,7 +383,8 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
                 const isHighlighted = highlightState
                     ? (highlightState.type === 'group' && highlightState.index === gIdx) ||
                     (highlightState.type === 'col' && highlightState.index === flatIdx) ||
-                    (highlightState.type === 'row' && highlightState.index === r)
+                    (highlightState.type === 'row' && highlightState.index === r) ||
+                    (highlightState.type === 'cell' && highlightState.row === r && highlightState.col === flatIdx)
                     : false;
 
                 const rect = g.append('rect')
@@ -412,6 +416,11 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
 
 export function highlightPreview(type: string, index: number) {
     highlightState = { type, index };
+    renderPreview();
+}
+
+export function highlightPreviewCell(row: number, col: number) {
+    highlightState = { type: 'cell', index: -1, row, col };
     renderPreview();
 }
 

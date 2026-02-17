@@ -7,14 +7,32 @@ import { traverse, findActualPropKey } from '../utils';
 
 export function collectColumns(node: SceneNode) {
     const cols: { node: SceneNode, index: number }[] = [];
-    if ("children" in node) {
-        for (const child of (node as any).children) {
-            const match = MARK_NAME_PATTERNS.COL_ALL.exec(child.name);
-            if (match) {
-                cols.push({ node: child, index: parseInt(match[1], 10) });
-            }
+    const seen = new Set<number>();
+    if (!("children" in node)) return cols;
+
+    const rootChildren = (node as SceneNode & ChildrenMixin).children;
+    const pushIfColumn = (child: SceneNode) => {
+        const match = MARK_NAME_PATTERNS.COL_ALL.exec(child.name);
+        if (!match) return;
+        const index = parseInt(match[1], 10);
+        if (seen.has(index)) return;
+        seen.add(index);
+        cols.push({ node: child, index });
+    };
+
+    // 1) 기존 구조: Graph -> col-N (직계)
+    for (const child of rootChildren) {
+        pushIfColumn(child);
+    }
+
+    // 2) 신규 구조: Graph -> col(container) -> col-N
+    for (const child of rootChildren) {
+        if (child.name !== 'col' || !("children" in child)) continue;
+        for (const nested of (child as SceneNode & ChildrenMixin).children) {
+            pushIfColumn(nested);
         }
     }
+
     return cols.sort((a, b) => a.index - b.index);
 }
 
@@ -39,11 +57,32 @@ export function setVariantProperty(instance: InstanceNode, key: string, value: s
 
 export function setLayerVisibility(parent: SceneNode, namePrefix: string, count: number) {
     if (!("children" in parent)) return;
-    (parent as any).children.forEach((child: SceneNode) => {
+    const rootChildren = (parent as SceneNode & ChildrenMixin).children;
+    const targets: SceneNode[] = [];
+
+    // 기본: 직계에서 prefix 매칭
+    rootChildren.forEach((child: SceneNode) => {
         if (child.name.startsWith(namePrefix)) {
-            const num = parseInt(child.name.replace(namePrefix, ""));
-            child.visible = num <= count;
+            targets.push(child);
         }
+    });
+
+    // 컬럼 전용: Graph -> col(container) -> col-N 지원
+    if (namePrefix === 'col-') {
+        rootChildren.forEach((child: SceneNode) => {
+            if (child.name !== 'col' || !("children" in child)) return;
+            (child as SceneNode & ChildrenMixin).children.forEach((nested: SceneNode) => {
+                if (nested.name.startsWith(namePrefix)) {
+                    targets.push(nested);
+                }
+            });
+        });
+    }
+
+    targets.forEach((child: SceneNode) => {
+        const num = parseInt(child.name.replace(namePrefix, ""), 10);
+        if (!Number.isFinite(num)) return;
+        child.visible = num <= count;
     });
 }
 

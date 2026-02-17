@@ -115,7 +115,12 @@ export function applyModeLocks() {
         ui.settingMarkRatioInput,
         ui.settingStrokeInput,
         ui.modeRawBtn,
-        ui.modePercentBtn
+        ui.modePercentBtn,
+        ui.assistLineLabelBtn,
+        ui.assistLineToggleBtn,
+        ui.assistLineMinCheck,
+        ui.assistLineMaxCheck,
+        ui.assistLineAvgCheck
     ];
     graphInputs.forEach((el) => { el.disabled = isRead; });
 

@@ -22,6 +22,8 @@ export const state = {
     conversionMax: 100,
     strokeWidth: 2,
     markRatio: 0.8,
+    assistLineVisible: false,
+    assistLineEnabled: { min: false, max: false, avg: false },
     colStrokeStyle: null as StrokeStyleSnapshot | null,
     cellStrokeStyles: [] as CellStrokeStyle[],
     rowStrokeStyles: [] as RowStrokeStyle[]

@@ -15,11 +15,47 @@ import { switchTab, handleStyleExtracted, setDataTabRenderer } from './export';
 
 let uiInitialized = false;
 const pendingMessages: any[] = [];
+let assistLinePopoverOpen = false;
 
 function normalizeMarkRatioInput(value: unknown): number {
     const ratio = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(ratio)) return 0.8;
     return Math.max(0.01, Math.min(1.0, ratio));
+}
+
+function normalizeAssistLineEnabledInput(value: any) {
+    if (!value || typeof value !== 'object') {
+        return { min: false, max: false, avg: false };
+    }
+    return {
+        min: Boolean(value.min),
+        max: Boolean(value.max),
+        avg: Boolean(value.avg)
+    };
+}
+
+function normalizeAssistLineVisibleInput(value: any) {
+    return Boolean(value);
+}
+
+function closeAssistLinePopover() {
+    assistLinePopoverOpen = false;
+    ui.assistLinePopover.classList.add('hidden');
+}
+
+function openAssistLinePopover() {
+    assistLinePopoverOpen = true;
+    ui.assistLinePopover.classList.remove('hidden');
+}
+
+function updateAssistLineToggleUi() {
+    ui.assistLineToggleBtn.textContent = state.assistLineVisible ? 'ON' : 'OFF';
+    ui.assistLineToggleBtn.className = state.assistLineVisible
+        ? 'px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
+        : 'px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+    ui.assistLineMinCheck.checked = state.assistLineEnabled.min;
+    ui.assistLineMaxCheck.checked = state.assistLineEnabled.max;
+    ui.assistLineAvgCheck.checked = state.assistLineEnabled.avg;
 }
 
 function handlePluginMessage(msg: any) {
@@ -29,9 +65,13 @@ function handlePluginMessage(msg: any) {
             state.uiMode = 'create';
             state.mode = 'edit';
             state.markRatio = 0.8;
+            state.assistLineVisible = false;
+            state.assistLineEnabled = { min: false, max: false, avg: false };
             ui.settingMarkRatioInput.value = '0.8';
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
+            closeAssistLinePopover();
+            updateAssistLineToggleUi();
             state.colStrokeStyle = null;
             state.cellStrokeStyles = [];
             state.rowStrokeStyles = [];
@@ -91,7 +131,11 @@ function handlePluginMessage(msg: any) {
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
         }
         state.markRatio = normalizeMarkRatioInput(msg.markRatio);
+        state.assistLineVisible = normalizeAssistLineVisibleInput(msg.assistLineVisible);
+        state.assistLineEnabled = normalizeAssistLineEnabledInput(msg.assistLineEnabled);
         ui.settingMarkRatioInput.value = String(state.markRatio);
+        closeAssistLinePopover();
+        updateAssistLineToggleUi();
         state.colStrokeStyle = msg.colStrokeStyle || null;
         state.cellStrokeStyles = msg.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.rowStrokeStyles || [];
@@ -133,6 +177,13 @@ function handlePluginMessage(msg: any) {
 
     if (msg.type === 'style_extracted') {
         state.markRatio = normalizeMarkRatioInput(msg.payload?.markRatio);
+        if (msg.payload?.assistLineVisible !== undefined) {
+            state.assistLineVisible = normalizeAssistLineVisibleInput(msg.payload.assistLineVisible);
+        }
+        if (msg.payload?.assistLineEnabled) {
+            state.assistLineEnabled = normalizeAssistLineEnabledInput(msg.payload.assistLineEnabled);
+        }
+        updateAssistLineToggleUi();
         ui.settingMarkRatioInput.value = String(state.markRatio);
         state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
@@ -164,6 +215,33 @@ function bindUiEvents() {
         syncRowsFromMarkCount();
         renderGrid();
         renderPreview();
+    });
+    ui.assistLineLabelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (assistLinePopoverOpen) closeAssistLinePopover();
+        else openAssistLinePopover();
+    });
+    ui.assistLineToggleBtn.addEventListener('click', () => {
+        state.assistLineVisible = !state.assistLineVisible;
+        updateAssistLineToggleUi();
+        checkCtaValidation();
+    });
+    ui.assistLineMinCheck.addEventListener('change', () => {
+        state.assistLineEnabled.min = ui.assistLineMinCheck.checked;
+        checkCtaValidation();
+    });
+    ui.assistLineMaxCheck.addEventListener('change', () => {
+        state.assistLineEnabled.max = ui.assistLineMaxCheck.checked;
+        checkCtaValidation();
+    });
+    ui.assistLineAvgCheck.addEventListener('change', () => {
+        state.assistLineEnabled.avg = ui.assistLineAvgCheck.checked;
+        checkCtaValidation();
+    });
+    ui.assistLinePopover.addEventListener('click', (e) => e.stopPropagation());
+    ui.assistLineControl.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => {
+        if (assistLinePopoverOpen) closeAssistLinePopover();
     });
 
     // Y axis inputs
@@ -201,6 +279,7 @@ function bindUiEvents() {
 function initializeUi() {
     if (uiInitialized) return;
     bindUiEvents();
+    updateAssistLineToggleUi();
     setDataTabRenderer(() => {
         renderGrid();
         renderPreview();

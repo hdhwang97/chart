@@ -28,5 +28,9 @@ input[type=number]::-webkit-outer-spin-button {
 /* Mark Hover -> Grid Cell Highlight */
 .grid-cell-mark-hover {
     background-color: #E0F2FE !important;
-    border-color: #7DD3FC !important;
+}
+
+/* Cell Hover -> Self Highlight (background only) */
+.grid-cell-self-hover {
+    background-color: #E0F2FE !important;
 }

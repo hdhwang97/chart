@@ -200,7 +200,13 @@ export function submitData() {
         rawYMaxAuto,
         markNum: markNum,
         strokeWidth: state.strokeWidth,
-        markRatio: state.chartType === 'bar' ? normalizeMarkRatio(state.markRatio) : undefined
+        markRatio: state.chartType === 'bar' ? normalizeMarkRatio(state.markRatio) : undefined,
+        assistLineVisible: state.assistLineVisible,
+        assistLineEnabled: {
+            min: state.assistLineEnabled.min,
+            max: state.assistLineEnabled.max,
+            avg: state.assistLineEnabled.avg
+        }
     };
 
     const msgType = state.uiMode === 'edit' ? 'apply' : 'generate';
