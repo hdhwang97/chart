@@ -120,7 +120,7 @@
     <div id="step-2" class="step flex-col w-full h-full overflow-hidden bg-surface">
         <div class="px-3 pt-3 pb-1 shrink-0 flex flex-col gap-1.5">
             <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Graph Setting</h2>
-            <div class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
+            <div id="graph-setting-panel" class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
                 <div class="flex items-center gap-3">
                     <div class="flex flex-col gap-1 flex-1">
                         <label id="label-col-input" class="text-xxs font-medium text-text-sub">Graph Col</label>
@@ -194,7 +194,7 @@
                         <span class="text-text-sub text-xs">Generating Preview...</span>
                     </div>
                 </div>
-                <div
+                <div id="csv-panel"
                     class="bg-white border border-border rounded-md px-3 py-2 shadow-sm shrink-0 flex items-center justify-between">
                     <div class="flex items-center gap-2 overflow-hidden">
                         <span class="text-xs font-semibold text-text-sub shrink-0">CSV</span>
@@ -317,7 +317,7 @@
         </div>
     </div>
     <div id="step-export" class="step flex-col gap-3 w-full p-3 h-full overflow-hidden bg-surface">
-        <div class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm h-1/2 shrink-0">
+        <div id="export-preview-panel" class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm h-1/2 shrink-0">
             <div class="flex justify-between items-center">
                 <h2 class="text-xs font-semibold text-text-sub m-0">D3.js Preview</h2>
                 <span class="text-[10px] text-gray-400">*Based on Figma Styles</span>
@@ -328,7 +328,7 @@
             </div>
         </div>
 
-        <div class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm flex-1 overflow-hidden">
+        <div id="export-code-panel" class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm flex-1 overflow-hidden">
             <div class="flex justify-between items-center shrink-0">
                 <h2 class="text-xs font-semibold text-text-sub m-0">Export Code</h2>
                 <button onclick="copyToClipboard()"

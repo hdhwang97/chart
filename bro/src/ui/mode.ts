@@ -140,6 +140,18 @@ export function applyModeLocks() {
         csvUploadLabel.classList.toggle('pointer-events-none', isRead);
         csvUploadLabel.classList.toggle('cursor-not-allowed', isRead);
     }
+
+    const panelIds = [
+        'graph-setting-panel',
+        'csv-panel',
+        'editor-card',
+        'export-code-panel'
+    ];
+    panelIds.forEach((id) => {
+        const panel = document.getElementById(id);
+        if (!panel) return;
+        panel.classList.toggle('read-panel-disabled', isRead);
+    });
 }
 
 export function clearRangeErrors() {

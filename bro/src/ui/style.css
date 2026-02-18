@@ -49,3 +49,9 @@ input[type=number]::-webkit-outer-spin-button {
     display: flex;
     justify-content: center;
 }
+
+.read-panel-disabled {
+    opacity: 0.75;
+    pointer-events: none;
+    user-select: none;
+}

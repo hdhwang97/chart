@@ -1,5 +1,5 @@
 import { ui } from './dom';
-import { state, getTotalStackedCols, getRowColor, normalizeHexColorInput } from './state';
+import { state, getTotalStackedCols, getRowColor, normalizeHexColorInput, getGridColsForChart } from './state';
 import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 import { getEffectiveYDomain } from './y-range';
 
@@ -254,11 +254,13 @@ function renderD3Preview(style: any) {
     const yCount = style.yCount || 4;
     const chartType = style.chartType || 'bar';
     const cornerRadius = style.cornerRadius || 0;
-    const strokeWidth = style.strokeWidth || 2;
+    const strokeWidth = style.strokeWidth || state.strokeWidth || 2;
     const colStrokeStyle: StrokeStyleSnapshot | null = style.colStrokeStyle || null;
     const rowStrokeStyles: RowStrokeStyle[] = style.rowStrokeStyles || [];
 
-    const numCols = Array.isArray(markNum) ? markNum.reduce((a: number, b: number) => a + b, 0) : colCount;
+    const numCols = Array.isArray(markNum)
+        ? markNum.reduce((a: number, b: number) => a + b, 0)
+        : (chartType === 'line' ? getGridColsForChart('line', colCount) : colCount);
     const stateData = buildStateNumericData(chartType, numCols);
     const hasStateData = stateData.length > 0 && stateData.some(row => row.some(v => Number.isFinite(v)));
 
@@ -324,14 +326,14 @@ function renderD3Preview(style: any) {
             }
         }
     } else if (chartType === 'line') {
-        const xScale = d3.scaleLinear().domain([0, Math.max(1, colCount - 1)]).range([0, w]);
+        const pointCols = getGridColsForChart('line', colCount);
+        const xScale = d3.scaleLinear().domain([0, Math.max(1, pointCols - 1)]).range([0, w]);
 
         for (let r = 0; r < numRows; r++) {
-            const lineData = (sampleData[r] || []).slice(0, colCount);
+            const lineData = (sampleData[r] || []).slice(0, pointCols);
             const line = d3.line()
                 .x((_: any, i: number) => xScale(i)!)
-                .y((d: number) => yScale(d))
-                .curve(d3.curveMonotoneX);
+                .y((d: number) => yScale(d));
 
             const rowStroke = getRowStroke(r, rowStrokeStyles) || colStrokeStyle;
             const baseColor = getSeriesColor(rowColors, r, 'line');

@@ -124,6 +124,52 @@ function parseDashPattern(serialized?: string): number[] | undefined {
     return undefined;
 }
 
+function pickDominantStrokeWeight(weights: number[]): number | null {
+    if (weights.length === 0) return null;
+    const counts = new Map<number, number>();
+    for (const raw of weights) {
+        if (!Number.isFinite(raw) || raw <= 0) continue;
+        const rounded = Math.round(raw * 100) / 100;
+        counts.set(rounded, (counts.get(rounded) || 0) + 1);
+    }
+    if (counts.size === 0) return null;
+    let winner = 0;
+    let winnerCount = -1;
+    counts.forEach((count, weight) => {
+        if (count > winnerCount) {
+            winner = weight;
+            winnerCount = count;
+        }
+    });
+    return winner > 0 ? winner : null;
+}
+
+function collectLineStrokeWeights(layer: SceneNode): number[] {
+    const upDownRoots: SceneNode[] = [];
+    if ('children' in layer) {
+        for (const child of (layer as SceneNode & ChildrenMixin).children) {
+            const lower = child.name.toLowerCase();
+            if (lower === 'up' || lower === 'down') {
+                upDownRoots.push(child);
+            }
+        }
+    }
+
+    const roots = upDownRoots.length > 0 ? upDownRoots : [layer];
+    const weights: number[] = [];
+    roots.forEach((root) => {
+        traverse(root, (n) => {
+            if (!n.visible) return;
+            if (!('strokeWeight' in n)) return;
+            const target = n as SceneNode & GeometryMixin;
+            if (typeof target.strokeWeight === 'number' && target.strokeWeight > 0) {
+                weights.push(target.strokeWeight);
+            }
+        });
+    });
+    return weights;
+}
+
 export function extractColStrokeStyle(graph: SceneNode): StrokeStyleSnapshot | null {
     const columns = collectColumns(graph);
     for (const col of columns) {
@@ -335,13 +381,14 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
 
                         // C. 선 두께 (Stroke Weight) - Line 차트용
                         if (chartType === 'line') {
-                            if ('strokeWeight' in mark && typeof mark.strokeWeight === 'number') {
-                                strokeWidth = mark.strokeWeight;
-                            } else if ('children' in mark) {
-                                const vector = (mark as any).children.find((c: SceneNode) => c.type === 'VECTOR' || c.type === 'LINE');
-                                if (vector && 'strokeWeight' in vector) {
-                                    strokeWidth = vector.strokeWeight;
-                                }
+                            const lineLayers = findAllLineLayers(container);
+                            const candidateWeights: number[] = [];
+                            lineLayers.forEach((lineLayer) => {
+                                candidateWeights.push(...collectLineStrokeWeights(lineLayer));
+                            });
+                            const dominant = pickDominantStrokeWeight(candidateWeights);
+                            if (dominant !== null) {
+                                strokeWidth = dominant;
                             }
                         }
                     }
@@ -350,6 +397,10 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
         }
     } catch (e) {
         console.error('Style Extract Error', e);
+    }
+
+    if (!Number.isFinite(strokeWidth) || strokeWidth <= 0) {
+        strokeWidth = 2;
     }
 
     const colStrokeStyle = extractColStrokeStyle(node);

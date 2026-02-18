@@ -314,7 +314,8 @@ export function inferStructureFromGraph(chartType: string, graph: SceneNode) {
         rowCount = maxRows;
     }
 
-    const emptyValues = Array.from({ length: rowCount }, () => Array(colCount).fill(0));
+    const valueCols = chartType === 'line' ? Math.max(2, colCount + 1) : colCount;
+    const emptyValues = Array.from({ length: rowCount }, () => Array(valueCols).fill(0));
 
     return {
         values: emptyValues,

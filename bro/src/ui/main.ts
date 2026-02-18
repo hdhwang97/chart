@@ -4,6 +4,7 @@ import {
     CHART_ICONS,
     initData,
     getTotalStackedCols,
+    getGridColsForChart,
     applyIncomingRowColors,
     ensureRowColorsLength,
     getDefaultRowColor,
@@ -256,12 +257,17 @@ function handlePluginMessage(msg: any) {
                     state.cols = 1;
                 }
             } else {
-                state.cols = vals[0]?.length || 3;
+                const savedCols = vals[0]?.length || 3;
+                state.cols = msg.chartType === 'line'
+                    ? Math.max(1, savedCols - 1)
+                    : savedCols;
             }
 
             state.data = vals.map((row: any[]) => row.map((v: any) => String(v)));
         } else {
-            const totalCols = msg.chartType === 'stackedBar' ? getTotalStackedCols() : state.cols;
+            const totalCols = msg.chartType === 'stackedBar'
+                ? getTotalStackedCols()
+                : getGridColsForChart(msg.chartType, state.cols);
             state.data = initData(state.rows, totalCols);
         }
         syncMarkCountFromRows();
@@ -324,6 +330,10 @@ function handlePluginMessage(msg: any) {
 
     if (msg.type === 'style_extracted') {
         state.markRatio = normalizeMarkRatioInput(msg.payload?.markRatio);
+        if (msg.payload?.strokeWidth !== undefined && Number.isFinite(Number(msg.payload.strokeWidth))) {
+            state.strokeWidth = Number(msg.payload.strokeWidth);
+            ui.settingStrokeInput.value = String(state.strokeWidth);
+        }
         applyRowColorsFromPayload(state.chartType, state.rows, msg.payload?.rowColors, msg.payload?.colors);
         ensureRowColorsLength(state.rows);
         if (msg.payload?.assistLineVisible !== undefined) {

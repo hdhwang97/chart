@@ -1,4 +1,4 @@
-import { state, MAX_SIZE, ensureRowColorsLength } from './state';
+import { state, MAX_SIZE, ensureRowColorsLength, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -40,7 +40,10 @@ export function syncRowsFromMarkCount() {
 export function addRow() {
     if (state.rows >= MAX_SIZE) return;
     state.rows++;
-    state.data.push(new Array(state.chartType === 'stackedBar' ? state.groupStructure.reduce((a, b) => a + b, 0) : state.cols).fill(""));
+    const newCols = state.chartType === 'stackedBar'
+        ? state.groupStructure.reduce((a, b) => a + b, 0)
+        : getGridColsForChart(state.chartType, state.cols);
+    state.data.push(new Array(newCols).fill(""));
     ensureRowColorsLength(state.rows);
     syncMarkCountFromRows();
     renderGrid();
@@ -147,11 +150,12 @@ export function updateGridSize(newCols: number, newRows: number) {
         while (state.data.length < newRows) state.data.push(new Array(totalCols).fill(""));
         state.data = state.data.slice(0, newRows);
     } else {
+        const dataCols = getGridColsForChart(state.chartType, newCols);
         for (let r = 0; r < state.data.length; r++) {
-            while (state.data[r].length < newCols) state.data[r].push("");
-            state.data[r] = state.data[r].slice(0, newCols);
+            while (state.data[r].length < dataCols) state.data[r].push("");
+            state.data[r] = state.data[r].slice(0, dataCols);
         }
-        while (state.data.length < newRows) state.data.push(new Array(newCols).fill(""));
+        while (state.data.length < newRows) state.data.push(new Array(dataCols).fill(""));
         state.data = state.data.slice(0, newRows);
     }
     state.cols = newCols;

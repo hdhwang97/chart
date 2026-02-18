@@ -44,6 +44,11 @@ export function getTotalStackedCols(): number {
     return state.groupStructure.reduce((a, b) => a + b, 0);
 }
 
+export function getGridColsForChart(chartType: string, cols: number): number {
+    if (chartType === 'line') return Math.max(2, cols + 1);
+    return cols;
+}
+
 export function initData(rows: number, cols: number): string[][] {
     const newData: string[][] = [];
     for (let i = 0; i < rows; i++) {

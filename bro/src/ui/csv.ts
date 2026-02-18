@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols, ensureRowColorsLength } from './state';
+import { state, getTotalStackedCols, ensureRowColorsLength, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -53,8 +53,19 @@ export function parseAndApplyCsv(text: string) {
         state.cols = newGroups.length;
     } else {
         state.rows = lines.length;
-        state.cols = lines[0].length;
-        state.data = lines;
+        if (state.chartType === 'line') {
+            const pointCols = Math.max(2, lines[0].length);
+            state.cols = Math.max(1, pointCols - 1);
+            const normalizedCols = getGridColsForChart('line', state.cols);
+            state.data = lines.map(row => {
+                const next = [...row];
+                while (next.length < normalizedCols) next.push('');
+                return next.slice(0, normalizedCols);
+            });
+        } else {
+            state.cols = lines[0].length;
+            state.data = lines;
+        }
     }
 
     ensureRowColorsLength(state.rows);
@@ -69,7 +80,7 @@ export function parseAndApplyCsv(text: string) {
 
 export function downloadCsv() {
     const isStacked = state.chartType === 'stackedBar';
-    const totalCols = isStacked ? getTotalStackedCols() : state.cols;
+    const totalCols = isStacked ? getTotalStackedCols() : getGridColsForChart(state.chartType, state.cols);
 
     let csvContent = '';
     for (let r = 0; r < state.rows; r++) {

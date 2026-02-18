@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols, getRowColor } from './state';
+import { state, getTotalStackedCols, getRowColor, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroup } from './data-ops';
 import { checkCtaValidation, getAutoFillValue, syncYMaxValidationUi } from './mode';
@@ -13,7 +13,7 @@ export function renderGrid() {
     grid.innerHTML = '';
 
     const isStacked = state.chartType === 'stackedBar';
-    const totalCols = isStacked ? getTotalStackedCols() : state.cols;
+    const totalCols = isStacked ? getTotalStackedCols() : getGridColsForChart(state.chartType, state.cols);
 
     // Grid template
     grid.style.gridTemplateColumns = `repeat(${totalCols}, 64px)`;
@@ -76,14 +76,14 @@ export function renderGrid() {
         // Normal column headers
         const headerRow = document.createElement('div');
         headerRow.style.display = 'contents';
-        for (let c = 0; c < state.cols; c++) {
+        for (let c = 0; c < totalCols; c++) {
             const hCell = document.createElement('div');
             hCell.className = 'w-16 h-6 flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group col-header';
             hCell.textContent = `C${c + 1}`;
             hCell.addEventListener('mouseenter', () => highlightPreview('col', c));
             hCell.addEventListener('mouseleave', () => resetPreviewHighlight());
 
-            if (state.mode !== 'read' && state.cols > 1) {
+            if (state.mode !== 'read' && totalCols > 1) {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer';
                 delBtn.innerHTML = '✕';

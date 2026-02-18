@@ -1,4 +1,4 @@
-import { state, CHART_ICONS, initData, getTotalStackedCols, ensureRowColorsLength } from './state';
+import { state, CHART_ICONS, initData, getTotalStackedCols, ensureRowColorsLength, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -88,7 +88,7 @@ export function selectType(type: string) {
         ui.spacerStroke.classList.remove('hidden');
     }
 
-    const totalCols = type === 'stackedBar' ? getTotalStackedCols() : state.cols;
+    const totalCols = type === 'stackedBar' ? getTotalStackedCols() : getGridColsForChart(type, state.cols);
     state.data = initData(state.rows, totalCols);
     ensureRowColorsLength(state.rows);
     syncMarkCountFromRows();
@@ -105,7 +105,9 @@ export function selectType(type: string) {
 }
 
 export function resetData() {
-    const totalCols = state.chartType === 'stackedBar' ? getTotalStackedCols() : state.cols;
+    const totalCols = state.chartType === 'stackedBar'
+        ? getTotalStackedCols()
+        : getGridColsForChart(state.chartType, state.cols);
     state.data = initData(state.rows, totalCols);
     ensureRowColorsLength(state.rows);
     state.csvFileName = null;

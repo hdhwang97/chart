@@ -82,6 +82,25 @@ function resolveMarkRatioFromNode(node: SceneNode, extractedRatio?: number): num
     return 0.8;
 }
 
+function normalizeStrokeWidth(value: unknown): number | null {
+    const n = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+}
+
+function resolveStrokeWidthForUi(node: SceneNode, requestedStrokeWidth?: unknown, extractedStrokeWidth?: unknown): number {
+    const requested = normalizeStrokeWidth(requestedStrokeWidth);
+    if (requested !== null) return requested;
+
+    const saved = normalizeStrokeWidth(node.getPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH));
+    if (saved !== null) return saved;
+
+    const extracted = normalizeStrokeWidth(extractedStrokeWidth);
+    if (extracted !== null) return extracted;
+
+    return 2;
+}
+
 function isRecognizedChartSelection(node: SceneNode) {
     const savedChartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE);
     const columnCount = collectColumns(node).length;
@@ -245,7 +264,7 @@ figma.ui.onmessage = async (msg) => {
             assistLineVisible: Boolean(assistLineVisible),
             assistLineEnabled: assistLineEnabled || { min: false, max: false, avg: false },
             cornerRadius: styleInfo.cornerRadius,
-            strokeWidth: styleInfo.strokeWidth,
+            strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
             colStrokeStyle: styleInfo.colStrokeStyle || null,
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
             rowStrokeStyles: styleInfo.rowStrokeStyles || []
@@ -326,7 +345,7 @@ figma.ui.onmessage = async (msg) => {
             assistLineVisible,
             assistLineEnabled,
             cornerRadius: styleInfo.cornerRadius,
-            strokeWidth: styleInfo.strokeWidth,
+            strokeWidth: resolveStrokeWidthForUi(node, undefined, styleInfo.strokeWidth),
             colStrokeStyle: styleInfo.colStrokeStyle || null,
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
             rowStrokeStyles: styleInfo.rowStrokeStyles || []
