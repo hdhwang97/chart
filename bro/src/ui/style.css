@@ -34,3 +34,18 @@ input[type=number]::-webkit-outer-spin-button {
 .grid-cell-self-hover {
     background-color: #E0F2FE !important;
 }
+
+.row-color-swatch:hover {
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+}
+
+.row-color-hex-error {
+    border-color: #EF4444 !important;
+    background-color: #FEF2F2 !important;
+}
+
+.row-color-wheel {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}

@@ -1,5 +1,6 @@
 import { PLUGIN_DATA_KEYS } from './constants';
 import { inferStructureFromGraph } from './init';
+import { normalizeHexColor } from './utils';
 
 // ==========================================
 // DATA LAYER (저장/로드 핵심 로직)
@@ -22,6 +23,16 @@ function normalizeAssistLineEnabled(value: any) {
         max: Boolean(value.max),
         avg: Boolean(value.avg)
     };
+}
+
+function normalizeRowColors(value: any): string[] {
+    if (!Array.isArray(value)) return [];
+    const next: string[] = [];
+    value.forEach((item) => {
+        const normalized = normalizeHexColor(item);
+        if (normalized) next.push(normalized);
+    });
+    return next;
 }
 
 // styleInfo를 받아 스타일 데이터도 함께 저장
@@ -48,6 +59,10 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE,
         String(Boolean(msg.assistLineVisible))
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_ROW_COLORS,
+        JSON.stringify(normalizeRowColors(msg.rowColors))
     );
 
     // UI에서 직접 넘어온 Stroke Width가 있다면 우선 저장

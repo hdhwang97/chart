@@ -5,6 +5,10 @@
 import type { CellStrokeStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 
 export const MAX_SIZE = 25;
+export const DEFAULT_ROW_COLORS = [
+    '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE',
+    '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#FB923C'
+];
 
 export const state = {
     rows: 3,
@@ -22,6 +26,7 @@ export const state = {
     conversionMax: 100,
     strokeWidth: 2,
     markRatio: 0.8,
+    rowColors: DEFAULT_ROW_COLORS.slice(0, 3),
     assistLineVisible: false,
     assistLineEnabled: { min: false, max: false, avg: false },
     colStrokeStyle: null as StrokeStyleSnapshot | null,
@@ -46,4 +51,49 @@ export function initData(rows: number, cols: number): string[][] {
         newData.push(row);
     }
     return newData;
+}
+
+export function normalizeHexColorInput(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const m = value.trim().toUpperCase().match(/^#?([0-9A-F]{6})$/);
+    if (!m) return null;
+    return `#${m[1]}`;
+}
+
+export function getDefaultRowColor(index: number): string {
+    return DEFAULT_ROW_COLORS[index % DEFAULT_ROW_COLORS.length];
+}
+
+export function ensureRowColorsLength(rowCount: number) {
+    const next: string[] = [];
+    for (let i = 0; i < rowCount; i++) {
+        next.push(normalizeHexColorInput(state.rowColors[i]) || getDefaultRowColor(i));
+    }
+    state.rowColors = next;
+    return state.rowColors;
+}
+
+export function applyIncomingRowColors(
+    incoming: unknown,
+    rowCount: number,
+    fallback?: unknown
+) {
+    const source = Array.isArray(incoming) ? incoming : [];
+    const fallbackSource = Array.isArray(fallback) ? fallback : [];
+    const next: string[] = [];
+
+    for (let i = 0; i < rowCount; i++) {
+        const color =
+            normalizeHexColorInput(source[i]) ||
+            normalizeHexColorInput(fallbackSource[i]) ||
+            getDefaultRowColor(i);
+        next.push(color);
+    }
+
+    state.rowColors = next;
+    return state.rowColors;
+}
+
+export function getRowColor(index: number): string {
+    return normalizeHexColorInput(state.rowColors[index]) || getDefaultRowColor(index);
 }

@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols } from './state';
+import { state, getTotalStackedCols, getRowColor } from './state';
 import { ui } from './dom';
 import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroup } from './data-ops';
 import { checkCtaValidation, getAutoFillValue, syncYMaxValidationUi } from './mode';
@@ -98,12 +98,53 @@ export function renderGrid() {
     // ===== ROW HEADERS =====
     for (let r = 0; r < state.rows; r++) {
         const rowH = document.createElement('div');
-        rowH.className = 'row-header flex items-center justify-between h-6 px-2 border-b border-r border-border text-xxs font-medium text-text-sub relative group';
+        rowH.className = 'row-header flex items-center h-6 px-2 border-b border-r border-border text-xxs font-medium text-text-sub relative group';
 
         const label = isStacked && r === 0 ? 'All' : `R${isStacked ? r : r + 1}`;
+        const leftWrap = document.createElement('div');
+        leftWrap.className = 'flex items-center gap-1.5 min-w-0';
+
+        if (!(isStacked && r === 0)) {
+            const rowColor = getRowColor(r);
+            const swatch = document.createElement('button');
+            swatch.type = 'button';
+            swatch.className = 'row-color-swatch w-3.5 h-3.5 rounded-[2px] border border-border shrink-0';
+            swatch.style.backgroundColor = rowColor;
+            swatch.title = rowColor;
+            swatch.dataset.row = String(r);
+            if (state.mode === 'read') {
+                swatch.disabled = true;
+                swatch.classList.add('opacity-60', 'cursor-not-allowed');
+            } else {
+                swatch.classList.add('cursor-pointer');
+            }
+            swatch.addEventListener('click', (evt) => {
+                evt.stopPropagation();
+                if (state.mode === 'read') return;
+                const anchor = evt.currentTarget as HTMLElement;
+                const rect = anchor.getBoundingClientRect();
+                document.dispatchEvent(new CustomEvent('row-color-swatch-click', {
+                    detail: {
+                        row: r,
+                        anchorRect: {
+                            left: rect.left,
+                            top: rect.top,
+                            right: rect.right,
+                            bottom: rect.bottom,
+                            width: rect.width,
+                            height: rect.height
+                        }
+                    }
+                }));
+            });
+            leftWrap.appendChild(swatch);
+        }
+
         const labelSpan = document.createElement('span');
+        labelSpan.className = 'truncate';
         labelSpan.textContent = label;
-        rowH.appendChild(labelSpan);
+        leftWrap.appendChild(labelSpan);
+        rowH.appendChild(leftWrap);
 
         rowH.addEventListener('mouseenter', () => highlightPreview('row', r));
         rowH.addEventListener('mouseleave', () => resetPreviewHighlight());

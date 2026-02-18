@@ -1,5 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM } from '../constants';
 import { collectColumns, setVariantProperty } from './shared';
+import { normalizeHexColor, tryApplyFill } from '../utils';
 
 // ==========================================
 // STACKED BAR CHART DRAWING
@@ -87,7 +88,7 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
                 }
                 if (globalDataIdx < totalDataCols) {
                     subBar.visible = true;
-                    applySegmentsToBar(subBar, values, globalDataIdx, rowCount, H, globalMaxSum, mode);
+                    applySegmentsToBar(subBar, values, globalDataIdx, rowCount, H, globalMaxSum, mode, config.rowColors);
                     globalDataIdx++;
                 } else {
                     subBar.visible = false;
@@ -104,7 +105,8 @@ export function applySegmentsToBar(
     rowCount: number,
     H: number,
     maxSum: number,
-    mode: string
+    mode: string,
+    rowColors?: string[]
 ) {
     if (!("children" in barInstance)) return;
 
@@ -116,10 +118,14 @@ export function applySegmentsToBar(
         const targetLayer = (barInstance as any).children.find((n: SceneNode) => segmentPattern.test(n.name)) as (SceneNode & LayoutMixin);
 
         if (targetLayer) {
+            const rowColor = Array.isArray(rowColors) ? normalizeHexColor(rowColors[r + 1]) : null;
             if (val === 0) {
                 targetLayer.visible = false;
             } else {
                 targetLayer.visible = true;
+                if (rowColor) {
+                    tryApplyFill(targetLayer as SceneNode, rowColor);
+                }
                 let ratio = 0;
                 if (mode === "raw") {
                     ratio = maxSum === 0 ? 0 : val / maxSum;

@@ -8,6 +8,7 @@ import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
+import { normalizeHexColor } from './utils';
 
 // ==========================================
 // PLUGIN ENTRY POINT
@@ -23,6 +24,51 @@ function normalizeMarkRatio(value: unknown): number | null {
     const ratio = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(ratio)) return null;
     return Math.max(0.01, Math.min(1.0, ratio));
+}
+
+const DEFAULT_ROW_COLORS = [
+    '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE',
+    '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#FB923C'
+];
+
+function getDefaultRowColor(index: number) {
+    return DEFAULT_ROW_COLORS[index % DEFAULT_ROW_COLORS.length];
+}
+
+function normalizeRowColors(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((item) => normalizeHexColor(item))
+        .filter((item): item is string => Boolean(item));
+}
+
+function resolveRowColorsFromNode(
+    node: SceneNode,
+    chartType: string,
+    rowCount: number,
+    fallbackColors?: string[]
+) {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ROW_COLORS);
+    let saved: any[] = [];
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const fallback = Array.isArray(fallbackColors) ? fallbackColors : [];
+    const fallbackRowColors = (chartType === 'stackedBar' || chartType === 'stacked')
+        ? [getDefaultRowColor(0), ...fallback]
+        : fallback;
+    const next: string[] = [];
+    for (let i = 0; i < Math.max(1, rowCount); i++) {
+        const color =
+            normalizeHexColor(saved[i]) ||
+            normalizeHexColor(fallbackRowColors[i]) ||
+            getDefaultRowColor(i);
+        next.push(color);
+    }
+    return next;
 }
 
 function resolveMarkRatioFromNode(node: SceneNode, extractedRatio?: number): number {
@@ -82,7 +128,7 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.resize(msg.width, msg.height);
     }
     else if (msg.type === 'generate' || msg.type === 'apply') {
-        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth, markRatio, rawYMaxAuto, assistLineVisible, assistLineEnabled } = msg.payload;
+        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth, markRatio, rowColors, rawYMaxAuto, assistLineVisible, assistLineEnabled } = msg.payload;
 
         const nodes = figma.currentPage.selection;
         let targetNode: FrameNode | ComponentNode | InstanceNode;
@@ -165,6 +211,7 @@ figma.ui.onmessage = async (msg) => {
             rawYMaxAuto: effectiveY.rawYMaxAuto,
             strokeWidth,
             markRatio,
+            rowColors: normalizeRowColors(rowColors),
             assistLineVisible,
             assistLineEnabled
         };
@@ -177,6 +224,10 @@ figma.ui.onmessage = async (msg) => {
         // 5. 스타일 자동 추출 및 전송
         const styleInfo = extractStyleFromNode(targetNode, type);
         const requestedRatio = type === 'bar' ? normalizeMarkRatio(markRatio) : null;
+        const requestedRowColors = normalizeRowColors(rowColors);
+        const rowColorsForUi = requestedRowColors.length > 0
+            ? requestedRowColors
+            : resolveRowColorsFromNode(targetNode, type, rows, styleInfo.colors);
 
         // 차트 생성 후 데이터 및 스타일 저장
         saveChartData(targetNode, msg.payload, styleInfo);
@@ -190,6 +241,7 @@ figma.ui.onmessage = async (msg) => {
 
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
+            rowColors: rowColorsForUi,
             assistLineVisible: Boolean(assistLineVisible),
             assistLineEnabled: assistLineEnabled || { min: false, max: false, avg: false },
             cornerRadius: styleInfo.cornerRadius,
@@ -232,6 +284,22 @@ figma.ui.onmessage = async (msg) => {
 
         const styleInfo = extractStyleFromNode(node, chartType);
         const markRatioForUi = resolveMarkRatioFromNode(node, styleInfo.markRatio);
+        let rowCount = 1;
+        const savedValuesRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
+        if (savedValuesRaw) {
+            try {
+                const parsed = JSON.parse(savedValuesRaw);
+                if (Array.isArray(parsed)) rowCount = parsed.length;
+            } catch { }
+        }
+        if (!savedValuesRaw) {
+            if (chartType === 'stackedBar' || chartType === 'stacked') {
+                rowCount = Array.isArray(structure.markNum) ? Math.max(1, Math.max(...structure.markNum) + 1) : 1;
+            } else {
+                rowCount = typeof structure.markNum === 'number' ? Math.max(1, structure.markNum) : 1;
+            }
+        }
+        const rowColorsForUi = resolveRowColorsFromNode(node, chartType, rowCount, styleInfo.colors);
         const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
         const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
         let assistLineEnabled = { min: false, max: false, avg: false };
@@ -254,6 +322,7 @@ figma.ui.onmessage = async (msg) => {
 
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
+            rowColors: rowColorsForUi,
             assistLineVisible,
             assistLineEnabled,
             cornerRadius: styleInfo.cornerRadius,

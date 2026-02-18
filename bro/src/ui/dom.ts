@@ -72,5 +72,11 @@ export const ui = {
     get toast() { return byId<HTMLElement>('restore-toast'); },
     get toastYesBtn() { return byId<HTMLButtonElement>('toast-yes-btn'); },
     get toastCloseBtn() { return byId<HTMLButtonElement>('toast-close-btn'); },
-    get errorToast() { return byId<HTMLElement>('error-toast'); }
+    get errorToast() { return byId<HTMLElement>('error-toast'); },
+
+    get rowColorPopover() { return byId<HTMLElement>('row-color-popover'); },
+    get rowColorPopoverTitle() { return byId<HTMLElement>('row-color-popover-title'); },
+    get rowColorPreview() { return byId<HTMLElement>('row-color-preview'); },
+    get rowColorWheel() { return byId<HTMLElement>('row-color-wheel'); },
+    get rowColorHexInput() { return byId<HTMLInputElement>('row-color-hex-input'); }
 };

@@ -1,5 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM, PLUGIN_DATA_KEYS } from '../constants';
 import { collectColumns, setVariantProperty } from './shared';
+import { normalizeHexColor, tryApplyFill } from '../utils';
 
 // ==========================================
 // BAR CHART DRAWING
@@ -110,6 +111,11 @@ function findBarLayerByIndex(layerPool: ReadonlyArray<SceneNode>, index: number)
     return found ? (found as SceneNode & LayoutMixin) : null;
 }
 
+function getBarRowColor(config: any, rowIndex: number) {
+    if (!Array.isArray(config?.rowColors)) return null;
+    return normalizeHexColor(config.rowColors[rowIndex]);
+}
+
 export function applyBar(config: any, H: number, graph: SceneNode) {
     const { values, mode, markNum, reason, markRatio } = config;
     const cols = collectColumns(graph);
@@ -196,6 +202,10 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                 const barLayer = findBarLayerByIndex(barLayerPool, targetNum);
 
                 if (barLayer) {
+                    const rowColor = getBarRowColor(config, m);
+                    if (rowColor) {
+                        tryApplyFill(barLayer as SceneNode, rowColor);
+                    }
                     if (measureWidth > 0) {
                         try {
                             const barWidthBefore = getNodeContentWidth(barLayer);

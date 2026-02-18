@@ -48,6 +48,7 @@ export const PLUGIN_DATA_KEYS = {
 
     // 스타일 관련 키
     LAST_BAR_PADDING: "lastBarPadding",
+    LAST_ROW_COLORS: "lastRowColors",
     LAST_CORNER_RADIUS: "lastCornerRadius",
     LAST_STROKE_WIDTH: "lastStrokeWidth",
     LAST_ASSIST_LINE_ENABLED: "lastAssistLineEnabled",

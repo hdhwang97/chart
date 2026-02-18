@@ -3,7 +3,7 @@ import {
     VARIANT_PROPERTY_TYPE, PLUGIN_DATA_KEYS, MARK_NAME_PATTERNS,
     VARIANT_MAPPING
 } from './constants';
-import { traverse, findActualPropKey } from './utils';
+import { traverse, findActualPropKey, normalizeHexColor } from './utils';
 import { loadChartData } from './data-layer';
 import { extractChartColors, extractStyleFromNode } from './style';
 import { collectColumns } from './drawing/shared';
@@ -54,6 +54,46 @@ function resolveAssistLineEnabledFromNode(node: SceneNode) {
 
 function resolveAssistLineVisibleFromNode(node: SceneNode) {
     return node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
+}
+
+const DEFAULT_ROW_COLORS = [
+    '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE',
+    '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#FB923C'
+];
+
+function getDefaultRowColor(index: number) {
+    return DEFAULT_ROW_COLORS[index % DEFAULT_ROW_COLORS.length];
+}
+
+function resolveRowColorsFromNode(
+    node: SceneNode,
+    chartType: string,
+    rowCount: number,
+    fallbackColors?: string[]
+) {
+    const savedRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ROW_COLORS);
+    let saved: any[] = [];
+    if (savedRaw) {
+        try {
+            const parsed = JSON.parse(savedRaw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const fallback = Array.isArray(fallbackColors) ? fallbackColors : [];
+    const fallbackRowColors = (chartType === 'stackedBar' || chartType === 'stacked')
+        ? [getDefaultRowColor(0), ...fallback]
+        : fallback;
+    const next: string[] = [];
+
+    for (let i = 0; i < rowCount; i++) {
+        const color =
+            normalizeHexColor(saved[i]) ||
+            normalizeHexColor(fallbackRowColors[i]) ||
+            getDefaultRowColor(i);
+        next.push(color);
+    }
+
+    return next;
 }
 
 export async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode | null> {
@@ -132,6 +172,9 @@ export async function initPluginUI(
 
         const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
         const assistLineVisible = resolveAssistLineVisibleFromNode(node);
+        const autoStyleInfo = extractStyleFromNode(node, chartType);
+        const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
+        const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, autoStyleInfo.colors);
         const payload = {
             type: chartType,
             mode,
@@ -145,6 +188,7 @@ export async function initPluginUI(
             markNum: chartData.markNum,
             strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
             markRatio: chartType === 'bar' ? resolveMarkRatioFromNode(node) : undefined,
+            rowColors,
             assistLineVisible,
             assistLineEnabled,
             reason: opts?.reason || 'auto-resize'
@@ -168,6 +212,8 @@ export async function initPluginUI(
     const markRatio = resolveMarkRatioFromNode(node, styleInfo.markRatio);
     const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
+    const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
+    const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors);
 
     figma.ui.postMessage({
         type: 'init',
@@ -183,6 +229,7 @@ export async function initPluginUI(
         lastYMax: parsedLastYMax,
 
         markColors: extractedColors,
+        rowColors,
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
         markRatio,
         assistLineVisible,

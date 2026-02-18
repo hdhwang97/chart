@@ -1,5 +1,5 @@
 import { ui } from './dom';
-import { state, getTotalStackedCols } from './state';
+import { state, getTotalStackedCols, getRowColor, normalizeHexColorInput } from './state';
 import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 import { getEffectiveYDomain } from './y-range';
 
@@ -40,6 +40,36 @@ function applyStroke(selection: any, stroke: StrokeStyleSnapshot | null, fallbac
 function getRowStroke(row: number, styles: RowStrokeStyle[]): StrokeStyleSnapshot | null {
     const found = styles.find(item => item.row === row);
     return found ? found.stroke : null;
+}
+
+function resolveRowColors(style: any, chartType: string, numRows: number): string[] {
+    const styleRowColors = Array.isArray(style?.rowColors) ? style.rowColors : [];
+    const stateRowColors = Array.isArray(state.rowColors) ? state.rowColors : [];
+    const baseRowColors = stateRowColors.length > 0 ? stateRowColors : styleRowColors;
+    const fallbackColors = Array.isArray(style?.colors) ? style.colors : [];
+    const targetCount = Math.max(
+        1,
+        chartType === 'stackedBar' || chartType === 'stacked'
+            ? Math.max(state.rows, numRows + 1)
+            : Math.max(state.rows, numRows)
+    );
+    const resolved: string[] = [];
+
+    for (let i = 0; i < targetCount; i++) {
+        const fromRowColors = normalizeHexColorInput(baseRowColors[i]);
+        const fromFallback = chartType === 'stackedBar' || chartType === 'stacked'
+            ? normalizeHexColorInput(i === 0 ? undefined : fallbackColors[i - 1])
+            : normalizeHexColorInput(fallbackColors[i]);
+        resolved.push(fromRowColors || fromFallback || getRowColor(i));
+    }
+    return resolved;
+}
+
+function getSeriesColor(rowColors: string[], rowIndex: number, chartType: string) {
+    if (chartType === 'stackedBar' || chartType === 'stacked') {
+        return rowColors[rowIndex + 1] || getRowColor(rowIndex + 1);
+    }
+    return rowColors[rowIndex] || getRowColor(rowIndex);
 }
 
 function buildXAxisLabels(totalCols: number): string[] {
@@ -196,6 +226,12 @@ export function handleStyleExtracted(payload: any) {
     updateCodeOutput(payload);
 }
 
+export function refreshExportPreview() {
+    if (!lastStylePayload) return;
+    renderD3Preview(lastStylePayload);
+    updateCodeOutput(lastStylePayload);
+}
+
 function renderD3Preview(style: any) {
     const container = document.getElementById('d3-preview-container')!;
     container.innerHTML = '';
@@ -213,7 +249,6 @@ function renderD3Preview(style: any) {
     const h = height - margin.top - margin.bottom;
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const colors = style.colors && style.colors.length > 0 ? style.colors : ['#3b82f6'];
     const colCount = style.colCount || 5;
     const markNum = style.markNum || 1;
     const yCount = style.yCount || 4;
@@ -241,6 +276,7 @@ function renderD3Preview(style: any) {
         }
     }
     const numRows = sampleData.length;
+    const rowColors = resolveRowColors(style, chartType, numRows);
 
     const yDomain = getEffectiveYDomain({
         mode: state.dataMode,
@@ -282,7 +318,7 @@ function renderD3Preview(style: any) {
                     .attr('y', yScale(val))
                     .attr('width', clusterLayout.subBarW)
                     .attr('height', h - yScale(val))
-                    .attr('fill', colors[r % colors.length])
+                    .attr('fill', getSeriesColor(rowColors, r, 'bar'))
                     .attr('rx', cornerRadius);
                 applyStroke(rect, getRowStroke(r, rowStrokeStyles) || colStrokeStyle, 'none', 0);
             }
@@ -298,7 +334,7 @@ function renderD3Preview(style: any) {
                 .curve(d3.curveMonotoneX);
 
             const rowStroke = getRowStroke(r, rowStrokeStyles) || colStrokeStyle;
-            const baseColor = colors[r % colors.length];
+            const baseColor = getSeriesColor(rowColors, r, 'line');
             const path = g.append('path')
                 .datum(lineData)
                 .attr('fill', 'none')
@@ -337,7 +373,7 @@ function renderD3Preview(style: any) {
                         .attr('y', yOffset - barH)
                         .attr('width', innerScale.bandwidth())
                         .attr('height', barH)
-                        .attr('fill', colors[r % colors.length])
+                        .attr('fill', getSeriesColor(rowColors, r, 'stackedBar'))
                         .attr('rx', cornerRadius);
                     applyStroke(rect, getRowStroke(r, rowStrokeStyles) || colStrokeStyle, 'none', 0);
                     yOffset -= barH;

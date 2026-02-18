@@ -1,4 +1,4 @@
-import { state, CHART_ICONS, initData, getTotalStackedCols } from './state';
+import { state, CHART_ICONS, initData, getTotalStackedCols, ensureRowColorsLength } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -90,6 +90,7 @@ export function selectType(type: string) {
 
     const totalCols = type === 'stackedBar' ? getTotalStackedCols() : state.cols;
     state.data = initData(state.rows, totalCols);
+    ensureRowColorsLength(state.rows);
     syncMarkCountFromRows();
     if (state.dataMode === 'raw') {
         ui.settingYMin.value = '0';
@@ -106,6 +107,7 @@ export function selectType(type: string) {
 export function resetData() {
     const totalCols = state.chartType === 'stackedBar' ? getTotalStackedCols() : state.cols;
     state.data = initData(state.rows, totalCols);
+    ensureRowColorsLength(state.rows);
     state.csvFileName = null;
 
     updateCsvUi();
@@ -201,6 +203,7 @@ export function submitData() {
         markNum: markNum,
         strokeWidth: state.strokeWidth,
         markRatio: state.chartType === 'bar' ? normalizeMarkRatio(state.markRatio) : undefined,
+        rowColors: ensureRowColorsLength(state.rows),
         assistLineVisible: state.assistLineVisible,
         assistLineEnabled: {
             min: state.assistLineEnabled.min,

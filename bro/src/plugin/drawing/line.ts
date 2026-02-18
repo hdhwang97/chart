@@ -1,5 +1,5 @@
 import { LINE_VARIANT_KEY_DEFAULT, LINE_VARIANT_VALUES } from '../constants';
-import { clamp } from '../utils';
+import { clamp, normalizeHexColor, tryApplyFill, tryApplyStroke, traverse } from '../utils';
 import { collectColumns, setVariantProperty } from './shared';
 
 // ==========================================
@@ -30,8 +30,10 @@ export function applyLine(config: any, H: number, graph: SceneNode) {
 
     const cols = collectColumns(graph);
     const rowCount = values.length;
+    const rowColors = Array.isArray(config?.rowColors) ? config.rowColors : [];
 
     for (let r = 0; r < rowCount; r++) {
+        const rowColor = normalizeHexColor(rowColors[r]);
         const seriesData = values[r];
         for (let c = 0; c < seriesData.length - 1; c++) {
             if (c >= cols.length) break;
@@ -48,6 +50,9 @@ export function applyLine(config: any, H: number, graph: SceneNode) {
 
             if (lineInst && lineInst.type === "INSTANCE") {
                 lineInst.visible = true;
+                if (rowColor) {
+                    tryApplyStroke(lineInst, rowColor);
+                }
 
                 // 인스턴스 내부의 Vector(선) 레이어를 찾아 두께 적용
                 const vectorLayer = lineInst.children.find((n: SceneNode) => n.type === "VECTOR" || n.type === "LINE") as (VectorNode | LineNode);
@@ -55,6 +60,25 @@ export function applyLine(config: any, H: number, graph: SceneNode) {
                     if (vectorLayer.strokeWeight !== thickness) {
                         vectorLayer.strokeWeight = thickness;
                     }
+                    if (rowColor) {
+                        tryApplyStroke(vectorLayer as unknown as SceneNode, rowColor);
+                    }
+                }
+
+                if (rowColor) {
+                    traverse(lineInst, (child) => {
+                        if (child.id === lineInst.id || !child.visible) return;
+                        if (child.type === 'VECTOR' || child.type === 'LINE') {
+                            tryApplyStroke(child, rowColor);
+                            return;
+                        }
+                        const lower = child.name.toLowerCase();
+                        const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+                        if (isPointLike) {
+                            tryApplyFill(child, rowColor);
+                            tryApplyStroke(child, rowColor);
+                        }
+                    });
                 }
 
                 const startRatio = (startVal - min) / safeRange;

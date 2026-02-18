@@ -8,6 +8,7 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
 
     <script>
         tailwind.config = {
@@ -360,6 +361,20 @@
             <button id="toast-yes-btn" class="font-bold text-primary hover:text-blue-300 cursor-pointer">예</button>
             <button id="toast-close-btn" class="text-gray-400 hover:text-white cursor-pointer">✕</button>
         </div>
+    </div>
+
+    <div id="row-color-popover"
+        class="hidden fixed z-[80] w-64 rounded border border-border bg-white shadow-lg p-2 text-xxs text-text">
+        <div class="flex items-center justify-between mb-2">
+            <span id="row-color-popover-title" class="font-semibold text-text-sub">Row Color</span>
+            <span id="row-color-preview" class="w-4 h-4 rounded border border-border block"></span>
+        </div>
+        <div id="row-color-wheel" class="row-color-wheel mb-2"></div>
+        <label class="block">
+            <span class="block text-[10px] text-text-sub mb-0.5">Hex</span>
+            <input id="row-color-hex-input" type="text" value="#3B82F6"
+                class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+        </label>
     </div>
 
     <script type="module" src="./main.ts"></script>

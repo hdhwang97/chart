@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols } from './state';
+import { state, getTotalStackedCols, getRowColor } from './state';
 import { ui } from './dom';
 import type { StrokeStyleSnapshot } from '../shared/style-types';
 import { getEffectiveYDomain } from './y-range';
@@ -96,6 +96,13 @@ function applyStroke(selection: any, stroke: StrokeStyleSnapshot | null, fallbac
 function getRowStroke(row: number): StrokeStyleSnapshot | null {
     const found = state.rowStrokeStyles.find(item => item.row === row);
     return found ? found.stroke : null;
+}
+
+function getSeriesColor(rowIndex: number, chartType: string) {
+    if (chartType === 'stackedBar' || chartType === 'stacked') {
+        return getRowColor(rowIndex + 1);
+    }
+    return getRowColor(rowIndex);
 }
 
 function buildYTickValues(yMin: number, yMax: number, cellCount: number): number[] {
@@ -282,7 +289,7 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
                 .attr('y', yScale(val))
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
-                .attr('fill', PREVIEW_OPTS.colors[r % PREVIEW_OPTS.colors.length])
+                .attr('fill', getSeriesColor(r, 'bar'))
                 .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('data-base-opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('rx', 2);
@@ -314,7 +321,7 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
             .curve(d3.curveMonotoneX);
 
         const rowStroke = getRowStroke(r) || state.colStrokeStyle;
-        const baseColor = PREVIEW_OPTS.colors[r % PREVIEW_OPTS.colors.length];
+        const baseColor = getSeriesColor(r, 'line');
         const path = g.append('path')
             .attr('class', 'preview-mark')
             .datum(lineData)
@@ -393,7 +400,7 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
                     .attr('y', yOffset - barH)
                     .attr('width', groupInnerScale.bandwidth())
                     .attr('height', barH)
-                    .attr('fill', PREVIEW_OPTS.colors[(r - startRow) % PREVIEW_OPTS.colors.length])
+                    .attr('fill', getSeriesColor(r - startRow, 'stackedBar'))
                     .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
                     .attr('data-base-opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
                     .attr('rx', 1);

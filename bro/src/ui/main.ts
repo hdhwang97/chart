@@ -1,5 +1,15 @@
 import './style.css';
-import { state, CHART_ICONS, initData, getTotalStackedCols } from './state';
+import {
+    state,
+    CHART_ICONS,
+    initData,
+    getTotalStackedCols,
+    applyIncomingRowColors,
+    ensureRowColorsLength,
+    getDefaultRowColor,
+    getRowColor,
+    normalizeHexColorInput
+} from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -7,15 +17,147 @@ import { setMode, toggleMode, updateModeButtonState, checkCtaValidation, syncYMa
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount } from './data-ops';
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
-import { switchTab, handleStyleExtracted, setDataTabRenderer } from './export';
+import { switchTab, handleStyleExtracted, setDataTabRenderer, refreshExportPreview } from './export';
 
 // ==========================================
 // UI ENTRY POINT
 // ==========================================
 
+declare const iro: any;
+
 let uiInitialized = false;
 const pendingMessages: any[] = [];
 let assistLinePopoverOpen = false;
+let rowColorPopoverOpen = false;
+let activeRowColorIndex: number | null = null;
+let rowColorPicker: any = null;
+let isSyncingFromPicker = false;
+
+function buildRowColorFallback(chartType: string, source: unknown): string[] {
+    const colors = Array.isArray(source) ? source : [];
+    const normalized = colors
+        .map((c) => normalizeHexColorInput(c))
+        .filter((c): c is string => Boolean(c));
+
+    if (chartType === 'stackedBar' || chartType === 'stacked') {
+        return [getDefaultRowColor(0), ...normalized];
+    }
+    return normalized;
+}
+
+function applyRowColorsFromPayload(
+    chartType: string,
+    rowCount: number,
+    incomingRowColors: unknown,
+    fallbackColors: unknown
+) {
+    const fallback = buildRowColorFallback(chartType, fallbackColors);
+    return applyIncomingRowColors(incomingRowColors, rowCount, fallback);
+}
+
+function closeRowColorPopover() {
+    rowColorPopoverOpen = false;
+    activeRowColorIndex = null;
+    ui.rowColorPopover.classList.add('hidden');
+    ui.rowColorHexInput.classList.remove('row-color-hex-error');
+}
+
+function initializeRowColorPicker() {
+    if (rowColorPicker || typeof iro === 'undefined') return;
+    rowColorPicker = new iro.ColorPicker(ui.rowColorWheel, {
+        width: 220,
+        color: '#3B82F6',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        layout: [
+            { component: iro.ui.Wheel },
+            { component: iro.ui.Slider, options: { sliderType: 'value' } }
+        ]
+    });
+
+    rowColorPicker.on('color:change', (color: any) => {
+        if (activeRowColorIndex === null) return;
+        const hex = normalizeHexColorInput(color?.hexString || '');
+        if (!hex) return;
+        if (isSyncingFromPicker) return;
+        applyRowColorHex(activeRowColorIndex, hex);
+    });
+}
+
+function updateRowColorSwatchDom(row: number) {
+    const color = getRowColor(row);
+    document.querySelectorAll<HTMLButtonElement>(`.row-color-swatch[data-row="${row}"]`)
+        .forEach((swatch) => {
+            swatch.style.backgroundColor = color;
+            swatch.title = color;
+        });
+}
+
+function updateRowColorPopoverUi(row: number, colorHex: string) {
+    const color = normalizeHexColorInput(colorHex) || getRowColor(row);
+    const rowLabel = state.chartType === 'stackedBar' ? `R${row}` : `R${row + 1}`;
+
+    ui.rowColorPopoverTitle.textContent = `Row ${rowLabel}`;
+    ui.rowColorPreview.style.backgroundColor = color;
+    ui.rowColorHexInput.value = color;
+    ui.rowColorHexInput.classList.remove('row-color-hex-error');
+    if (rowColorPicker) {
+        isSyncingFromPicker = true;
+        rowColorPicker.color.hexString = color;
+        isSyncingFromPicker = false;
+    }
+}
+
+function positionRowColorPopover(anchorRect: { left: number; top: number; right: number; bottom: number }) {
+    const pop = ui.rowColorPopover;
+    const margin = 8;
+    const popW = pop.offsetWidth || 256;
+    const popH = pop.offsetHeight || 320;
+    let left = anchorRect.left;
+    let top = anchorRect.bottom + 6;
+
+    if (left + popW > window.innerWidth - margin) {
+        left = window.innerWidth - popW - margin;
+    }
+    if (top + popH > window.innerHeight - margin) {
+        top = anchorRect.top - popH - 6;
+    }
+
+    pop.style.left = `${Math.max(margin, left)}px`;
+    pop.style.top = `${Math.max(margin, top)}px`;
+}
+
+function applyRowColorHex(row: number, rawHex: string, render = true) {
+    const normalized = normalizeHexColorInput(rawHex);
+    if (!normalized) {
+        ui.rowColorHexInput.classList.add('row-color-hex-error');
+        return false;
+    }
+
+    ensureRowColorsLength(state.rows);
+    state.rowColors[row] = normalized;
+    ui.rowColorHexInput.classList.remove('row-color-hex-error');
+    updateRowColorSwatchDom(row);
+    updateRowColorPopoverUi(row, normalized);
+
+    if (render) {
+        renderPreview();
+        refreshExportPreview();
+    }
+    return true;
+}
+
+function openRowColorPopover(row: number, anchorRect: { left: number; top: number; right: number; bottom: number }) {
+    if (state.mode === 'read') return;
+    if (assistLinePopoverOpen) closeAssistLinePopover();
+    ensureRowColorsLength(state.rows);
+    initializeRowColorPicker();
+    activeRowColorIndex = row;
+    rowColorPopoverOpen = true;
+    ui.rowColorPopover.classList.remove('hidden');
+    updateRowColorPopoverUi(row, getRowColor(row));
+    positionRowColorPopover(anchorRect);
+}
 
 function normalizeMarkRatioInput(value: unknown): number {
     const ratio = typeof value === 'number' ? value : Number(value);
@@ -60,17 +202,20 @@ function updateAssistLineToggleUi() {
 
 function handlePluginMessage(msg: any) {
     if (msg.type === 'init') {
+        closeRowColorPopover();
         if (!msg.chartType) {
             // No selection
             state.uiMode = 'create';
             state.mode = 'edit';
             state.markRatio = 0.8;
+            state.rowColors = [getDefaultRowColor(0), getDefaultRowColor(1), getDefaultRowColor(2)];
             state.assistLineVisible = false;
             state.assistLineEnabled = { min: false, max: false, avg: false };
             ui.settingMarkRatioInput.value = '0.8';
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
             closeAssistLinePopover();
+            closeRowColorPopover();
             updateAssistLineToggleUi();
             state.colStrokeStyle = null;
             state.cellStrokeStyles = [];
@@ -120,6 +265,8 @@ function handlePluginMessage(msg: any) {
             state.data = initData(state.rows, totalCols);
         }
         syncMarkCountFromRows();
+        applyRowColorsFromPayload(msg.chartType, state.rows, msg.rowColors, msg.markColors);
+        ensureRowColorsLength(state.rows);
 
         // Apply saved settings
         if (msg.lastCellCount) state.cellCount = Number(msg.lastCellCount);
@@ -177,6 +324,8 @@ function handlePluginMessage(msg: any) {
 
     if (msg.type === 'style_extracted') {
         state.markRatio = normalizeMarkRatioInput(msg.payload?.markRatio);
+        applyRowColorsFromPayload(state.chartType, state.rows, msg.payload?.rowColors, msg.payload?.colors);
+        ensureRowColorsLength(state.rows);
         if (msg.payload?.assistLineVisible !== undefined) {
             state.assistLineVisible = normalizeAssistLineVisibleInput(msg.payload.assistLineVisible);
         }
@@ -188,7 +337,9 @@ function handlePluginMessage(msg: any) {
         state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
+        renderGrid();
         renderPreview();
+        refreshExportPreview();
         syncYMaxValidationUi();
         applyModeLocks();
         checkCtaValidation();
@@ -200,7 +351,10 @@ function bindUiEvents() {
     // Header buttons
     ui.backBtn.addEventListener('click', () => goToStep(1));
     ui.mainCta.addEventListener('click', () => submitData());
-    ui.editModeBtn.addEventListener('click', () => toggleMode());
+    ui.editModeBtn.addEventListener('click', () => {
+        closeRowColorPopover();
+        toggleMode();
+    });
 
     // Settings inputs
     ui.settingColInput.addEventListener('change', handleDimensionInput);
@@ -240,8 +394,35 @@ function bindUiEvents() {
     });
     ui.assistLinePopover.addEventListener('click', (e) => e.stopPropagation());
     ui.assistLineControl.addEventListener('click', (e) => e.stopPropagation());
+    ui.rowColorPopover.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('row-color-swatch-click', ((event: Event) => {
+        const custom = event as CustomEvent<{ row: number; anchorRect: { left: number; top: number; right: number; bottom: number } }>;
+        if (!custom.detail || typeof custom.detail.row !== 'number') return;
+        openRowColorPopover(custom.detail.row, custom.detail.anchorRect);
+    }) as EventListener);
+    ui.rowColorHexInput.addEventListener('input', () => {
+        if (activeRowColorIndex === null) return;
+        const normalized = normalizeHexColorInput(ui.rowColorHexInput.value);
+        if (!normalized) {
+            ui.rowColorHexInput.classList.add('row-color-hex-error');
+            return;
+        }
+        applyRowColorHex(activeRowColorIndex, normalized);
+    });
+    ui.rowColorHexInput.addEventListener('blur', () => {
+        if (activeRowColorIndex === null) return;
+        if (!normalizeHexColorInput(ui.rowColorHexInput.value)) {
+            updateRowColorPopoverUi(activeRowColorIndex, getRowColor(activeRowColorIndex));
+        }
+    });
     document.addEventListener('click', () => {
         if (assistLinePopoverOpen) closeAssistLinePopover();
+        if (rowColorPopoverOpen) closeRowColorPopover();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && rowColorPopoverOpen) {
+            closeRowColorPopover();
+        }
     });
 
     // Y axis inputs
@@ -278,6 +459,11 @@ function bindUiEvents() {
 
 function initializeUi() {
     if (uiInitialized) return;
+    ensureRowColorsLength(state.rows);
+    initializeRowColorPicker();
+    if (!rowColorPicker) {
+        console.warn('[ui][row-color] iro.js is not available. Falling back to HEX input only.');
+    }
     bindUiEvents();
     updateAssistLineToggleUi();
     setDataTabRenderer(() => {

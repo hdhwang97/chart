@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols } from './state';
+import { state, getTotalStackedCols, ensureRowColorsLength } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -57,6 +57,7 @@ export function parseAndApplyCsv(text: string) {
         state.data = lines;
     }
 
+    ensureRowColorsLength(state.rows);
     updateCsvUi();
     syncMarkCountFromRows();
     renderGrid();

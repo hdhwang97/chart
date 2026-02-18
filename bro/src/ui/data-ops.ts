@@ -1,4 +1,4 @@
-import { state, MAX_SIZE } from './state';
+import { state, MAX_SIZE, ensureRowColorsLength } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -41,6 +41,7 @@ export function addRow() {
     if (state.rows >= MAX_SIZE) return;
     state.rows++;
     state.data.push(new Array(state.chartType === 'stackedBar' ? state.groupStructure.reduce((a, b) => a + b, 0) : state.cols).fill(""));
+    ensureRowColorsLength(state.rows);
     syncMarkCountFromRows();
     renderGrid();
     renderPreview();
@@ -70,6 +71,7 @@ export function deleteRow(rowIdx: number) {
     if (state.rows <= 1) return;
     state.rows--;
     state.data.splice(rowIdx, 1);
+    ensureRowColorsLength(state.rows);
     syncMarkCountFromRows();
     renderGrid();
     renderPreview();
@@ -154,6 +156,7 @@ export function updateGridSize(newCols: number, newRows: number) {
     }
     state.cols = newCols;
     state.rows = newRows;
+    ensureRowColorsLength(state.rows);
     syncMarkCountFromRows();
     renderGrid();
     checkCtaValidation();
