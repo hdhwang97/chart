@@ -8,10 +8,35 @@ import { checkCtaValidation } from './mode';
 // DATA OPERATIONS
 // ==========================================
 
-function rebuildMarkCountOptions() {
-    if (state.chartType === 'stackedBar') return;
+function normalizeSegmentCount(value: unknown, fallback = 1): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(1, Math.min(MAX_SIZE, Math.floor(parsed)));
+}
+
+function getUniformSegmentCount(): number | null {
+    if (!Array.isArray(state.groupStructure) || state.groupStructure.length === 0) return null;
+    const normalized = state.groupStructure.map((count) => normalizeSegmentCount(count, 1));
+    const first = normalized[0];
+    const isUniform = normalized.every((count) => count === first);
+    return isUniform ? first : null;
+}
+
+function resolveDefaultSegmentForNewGroup() {
+    const uniform = getUniformSegmentCount();
+    if (uniform !== null) return uniform;
+    return normalizeSegmentCount(state.groupStructure[0], 2);
+}
+
+function rebuildMarkCountOptions(opts?: { includeMixed?: boolean }) {
     const select = ui.settingMarkSelect;
     select.innerHTML = '';
+    if (opts?.includeMixed) {
+        const mixed = document.createElement('option');
+        mixed.value = 'mixed';
+        mixed.textContent = 'Mixed';
+        select.appendChild(mixed);
+    }
     for (let i = 1; i <= MAX_SIZE; i++) {
         const opt = document.createElement('option');
         opt.value = String(i);
@@ -20,8 +45,77 @@ function rebuildMarkCountOptions() {
     }
 }
 
+function setSegmentSelectDisabled(disabled: boolean) {
+    ui.settingMarkSelect.disabled = disabled;
+    ui.settingMarkSelect.classList.toggle('opacity-50', disabled);
+    ui.settingMarkSelect.classList.toggle('cursor-not-allowed', disabled);
+}
+
+export function syncSegmentControlForStacked() {
+    if (state.chartType !== 'stackedBar') {
+        setSegmentSelectDisabled(false);
+        return;
+    }
+
+    const uniform = getUniformSegmentCount();
+    if (uniform === null) {
+        rebuildMarkCountOptions({ includeMixed: true });
+        ui.settingMarkSelect.value = 'mixed';
+        setSegmentSelectDisabled(true);
+        return;
+    }
+
+    rebuildMarkCountOptions();
+    ui.settingMarkSelect.value = String(uniform);
+    setSegmentSelectDisabled(false);
+}
+
+export function applySegmentCountToAllGroups(segmentCount: number) {
+    if (state.chartType !== 'stackedBar') return;
+
+    const nextSegmentCount = normalizeSegmentCount(segmentCount, 1);
+    const groupCount = Math.max(1, state.groupStructure.length || state.cols || 1);
+    const prevStructure = Array.from({ length: groupCount }, (_, idx) => {
+        return normalizeSegmentCount(state.groupStructure[idx], nextSegmentCount);
+    });
+    const nextStructure = Array.from({ length: groupCount }, () => nextSegmentCount);
+
+    const nextData = state.data.map((row) => {
+        const sourceRow = Array.isArray(row) ? row : [];
+        const rebuiltRow: string[] = [];
+        let offset = 0;
+
+        for (let g = 0; g < groupCount; g++) {
+            const oldCount = prevStructure[g];
+            const keep = Math.min(oldCount, nextSegmentCount);
+            for (let i = 0; i < keep; i++) {
+                rebuiltRow.push(sourceRow[offset + i] ?? '');
+            }
+            for (let i = keep; i < nextSegmentCount; i++) {
+                rebuiltRow.push('');
+            }
+            offset += oldCount;
+        }
+
+        return rebuiltRow;
+    });
+
+    state.groupStructure = nextStructure;
+    state.cols = groupCount;
+    state.data = nextData;
+    ui.settingColInput.value = String(state.cols);
+    syncSegmentControlForStacked();
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
 export function syncMarkCountFromRows() {
-    if (state.chartType === 'stackedBar') return;
+    if (state.chartType === 'stackedBar') {
+        syncSegmentControlForStacked();
+        return;
+    }
+    setSegmentSelectDisabled(false);
     rebuildMarkCountOptions();
     const next = Math.max(1, Math.min(MAX_SIZE, state.rows));
     ui.settingMarkSelect.value = String(next);
@@ -53,12 +147,14 @@ export function addRow() {
 
 export function addColumn() {
     if (state.chartType === 'stackedBar') {
-        state.groupStructure.push(2);
+        const defaultSegment = resolveDefaultSegmentForNewGroup();
+        state.groupStructure.push(defaultSegment);
         const totalCols = state.groupStructure.reduce((a, b) => a + b, 0);
         for (let r = 0; r < state.data.length; r++) {
             while (state.data[r].length < totalCols) state.data[r].push("");
         }
         state.cols = state.groupStructure.length;
+        syncSegmentControlForStacked();
     } else {
         if (state.cols >= MAX_SIZE) return;
         state.cols++;
@@ -90,6 +186,7 @@ export function deleteColumn(colIdx: number) {
         state.groupStructure.splice(groupIndex, 1);
         state.data.forEach(row => row.splice(removeStart, removeCount));
         state.cols = state.groupStructure.length;
+        syncSegmentControlForStacked();
     } else {
         if (state.cols <= 1) return;
         state.cols--;
@@ -106,6 +203,7 @@ export function addBarToGroup(groupIndex: number) {
     const insertPos = state.groupStructure.slice(0, groupIndex + 1).reduce((a, b) => a + b, 0);
     state.groupStructure[groupIndex]++;
     state.data.forEach(row => row.splice(insertPos, 0, ""));
+    syncSegmentControlForStacked();
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -116,6 +214,7 @@ export function removeBarFromGroup(groupIndex: number) {
     const removePos = state.groupStructure.slice(0, groupIndex + 1).reduce((a, b) => a + b, 0) - 1;
     state.groupStructure[groupIndex]--;
     state.data.forEach(row => row.splice(removePos, 1));
+    syncSegmentControlForStacked();
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -140,7 +239,8 @@ export function handleDimensionInput(e: Event) {
 
 export function updateGridSize(newCols: number, newRows: number) {
     if (state.chartType === 'stackedBar') {
-        while (state.groupStructure.length < newCols) state.groupStructure.push(2);
+        const defaultSegment = resolveDefaultSegmentForNewGroup();
+        while (state.groupStructure.length < newCols) state.groupStructure.push(defaultSegment);
         state.groupStructure = state.groupStructure.slice(0, newCols);
         const totalCols = state.groupStructure.reduce((a, b) => a + b, 0);
         for (let r = 0; r < state.data.length; r++) {

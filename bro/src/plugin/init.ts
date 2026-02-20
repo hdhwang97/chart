@@ -152,10 +152,13 @@ export async function initPluginUI(
         const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
         const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
         const mode = lastMode || 'raw';
+        const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
 
         let valuesToUse = chartData.values;
         if (lastDrawingVals) {
             try { valuesToUse = JSON.parse(lastDrawingVals); } catch (e) { }
+        } else if (isStacked && Array.isArray(chartData.values)) {
+            valuesToUse = chartData.values.slice(1);
         }
 
         const yMinInput = Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : 0;
@@ -284,7 +287,8 @@ export function inferStructureFromGraph(chartType: string, graph: SceneNode) {
             }
         });
         markNum = groupStructure;
-        rowCount = Math.max(...groupStructure) || 1;
+        const maxVisibleSegments = groupStructure.length > 0 ? Math.max(...groupStructure) : 0;
+        rowCount = Math.max(1, maxVisibleSegments + 1);
 
     } else if (chartType === "bar" || chartType === "line") {
         let maxRows = 1;

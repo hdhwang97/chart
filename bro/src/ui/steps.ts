@@ -63,7 +63,7 @@ export function selectType(type: string) {
     if (type === 'stackedBar') {
         ui.labelColInput.textContent = 'Group Count';
         ui.labelMarkPosition.textContent = 'Segments';
-        ui.containerMarkNormal.classList.add('hidden');
+        ui.containerMarkNormal.classList.remove('hidden');
         ui.tooltipStackedHint.classList.remove('hidden');
 
         state.groupStructure = [2, 2, 2];
@@ -124,12 +124,7 @@ export function updateSettingInputs() {
     ui.settingStrokeInput.value = String(state.strokeWidth);
     state.markRatio = normalizeMarkRatio(state.markRatio);
     ui.settingMarkRatioInput.value = String(state.markRatio);
-
-    if (state.chartType === 'stackedBar') {
-        ui.containerMarkNormal.classList.add('hidden');
-    } else {
-        ui.containerMarkNormal.classList.remove('hidden');
-    }
+    ui.containerMarkNormal.classList.remove('hidden');
 
     if (state.chartType === 'line') {
         ui.containerStrokeWidth.classList.remove('hidden');

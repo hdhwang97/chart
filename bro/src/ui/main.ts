@@ -16,7 +16,7 @@ import { renderGrid } from './grid';
 import { renderPreview } from './preview';
 import { setMode, toggleMode, updateModeButtonState, checkCtaValidation, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
-import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount } from './data-ops';
+import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, refreshExportPreview } from './export';
 
@@ -310,9 +310,11 @@ function handlePluginMessage(msg: any) {
         // Stacked-specific UI
         if (msg.chartType === 'stackedBar') {
             ui.labelColInput.textContent = 'Group Count';
-            ui.containerMarkNormal.classList.add('hidden');
+            ui.labelMarkPosition.textContent = 'Segments';
+            ui.containerMarkNormal.classList.remove('hidden');
         } else {
             ui.labelColInput.textContent = 'Graph Col';
+            ui.labelMarkPosition.textContent = 'Mark Count';
             ui.containerMarkNormal.classList.remove('hidden');
             if (msg.savedMarkNum && typeof msg.savedMarkNum === 'number') {
                 ui.settingMarkSelect.value = String(msg.savedMarkNum);
@@ -376,6 +378,13 @@ function bindUiEvents() {
         renderPreview();
     });
     ui.settingMarkSelect.addEventListener('change', () => {
+        if (state.chartType === 'stackedBar') {
+            const nextSegment = Number(ui.settingMarkSelect.value);
+            if (Number.isFinite(nextSegment) && nextSegment > 0) {
+                applySegmentCountToAllGroups(nextSegment);
+            }
+            return;
+        }
         syncRowsFromMarkCount();
         renderGrid();
         renderPreview();

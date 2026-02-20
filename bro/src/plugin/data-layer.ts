@@ -35,6 +35,35 @@ function normalizeRowColors(value: any): string[] {
     return next;
 }
 
+function isStackedChartType(chartType: string) {
+    return chartType === 'stackedBar' || chartType === 'stacked';
+}
+
+function recoverLegacyStackedValuesIfNeeded(values: any, markNum: any) {
+    if (!Array.isArray(values)) return values;
+    if (!Array.isArray(markNum)) return values;
+
+    const maxSegments = markNum.reduce((acc: number, raw: unknown) => {
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n <= 0) return acc;
+        return Math.max(acc, Math.floor(n));
+    }, 0);
+    if (maxSegments <= 0) return values;
+    if (values.length !== maxSegments) return values;
+
+    const normalizedRows = values.map((row) => Array.isArray(row) ? [...row] : []);
+    const maxCols = normalizedRows.reduce((acc, row) => Math.max(acc, row.length), 0);
+    const allRow = Array.from({ length: maxCols }, (_, col) => {
+        let sum = 0;
+        for (let r = 0; r < normalizedRows.length; r++) {
+            sum += Number(normalizedRows[r][col]) || 0;
+        }
+        return String(sum);
+    });
+
+    return [allRow, ...normalizedRows];
+}
+
 // styleInfo를 받아 스타일 데이터도 함께 저장
 export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
@@ -98,8 +127,11 @@ export async function loadChartData(node: SceneNode, chartType: string) {
 
     if (savedValuesStr) {
         try {
-            const values = JSON.parse(savedValuesStr);
+            const parsedValues = JSON.parse(savedValuesStr);
             const markNum = savedMarkNumStr ? JSON.parse(savedMarkNumStr) : 1;
+            const values = isStackedChartType(chartType)
+                ? recoverLegacyStackedValuesIfNeeded(parsedValues, markNum)
+                : parsedValues;
             const cellCount = Number(savedCell) || 4;
             console.log('[chart-plugin][data] saved LAST_VALUES found', {
                 nodeId: node.id,
