@@ -35,6 +35,19 @@ input[type=number]::-webkit-outer-spin-button {
     background-color: #E0F2FE !important;
 }
 
+.grid-cell-remaining-preview {
+    color: rgba(55, 65, 81, 0.5) !important;
+}
+
+.grid-cell-remaining-preview::placeholder {
+    color: rgba(55, 65, 81, 0.5) !important;
+}
+
+.grid-cell-stacked-overflow {
+    background-color: #FEF2F2 !important;
+    border-color: #EF4444 !important;
+}
+
 .row-color-swatch:hover {
     box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
 }

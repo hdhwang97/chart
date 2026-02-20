@@ -246,6 +246,27 @@ export function removeBarFromGroupAt(groupIndex: number, barIndex: number) {
     checkCtaValidation();
 }
 
+export function getGroupStartIndex(groupIndex: number): number {
+    if (groupIndex <= 0) return 0;
+    return state.groupStructure.slice(0, groupIndex).reduce((a, b) => a + b, 0);
+}
+
+export function flatIndexFromGroupBar(groupIndex: number, barIndex: number): number {
+    return getGroupStartIndex(groupIndex) + barIndex;
+}
+
+export function groupBarFromFlatIndex(flatColIdx: number): { groupIndex: number; barIndex: number } {
+    let running = 0;
+    for (let g = 0; g < state.groupStructure.length; g++) {
+        const count = state.groupStructure[g];
+        if (flatColIdx < running + count) {
+            return { groupIndex: g, barIndex: flatColIdx - running };
+        }
+        running += count;
+    }
+    return { groupIndex: 0, barIndex: 0 };
+}
+
 export function handleDimensionInput(e: Event) {
     const input = e.target as HTMLInputElement;
     let val = parseInt(input.value) || 1;

@@ -1,7 +1,7 @@
 import { state, getTotalStackedCols, getRowColor, getGridColsForChart } from './state';
 import { ui } from './dom';
-import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroupAt, clearAllData } from './data-ops';
-import { checkCtaValidation, getAutoFillValue, syncYMaxValidationUi } from './mode';
+import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroupAt, clearAllData, getGroupStartIndex, flatIndexFromGroupBar } from './data-ops';
+import { checkCtaValidation, getAutoFillValue, getStackedOverflowState, syncYMaxValidationUi } from './mode';
 import { renderPreview, highlightPreview, highlightPreviewCell, resetPreviewHighlight } from './preview';
 
 // ==========================================
@@ -14,11 +14,12 @@ export function renderGrid() {
 
     const isStacked = state.chartType === 'stackedBar';
     const totalCols = isStacked ? getTotalStackedCols() : getGridColsForChart(state.chartType, state.cols);
+    const renderCols = isStacked ? state.groupStructure.length : totalCols;
     const topLeftCorner = document.getElementById('header-corner-tl');
     const topRightCorner = document.getElementById('header-corner-tr');
 
     // Grid template
-    grid.style.gridTemplateColumns = `repeat(${totalCols}, 64px)`;
+    grid.style.gridTemplateColumns = `repeat(${renderCols}, 64px)`;
     if (topLeftCorner) {
         topLeftCorner.classList.toggle('h-12', isStacked);
         topLeftCorner.classList.toggle('h-6', !isStacked);
@@ -40,7 +41,7 @@ export function renderGrid() {
         state.groupStructure.forEach((barCount, gIdx) => {
             const gCell = document.createElement('div');
             gCell.className = 'flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group';
-            gCell.style.gridColumn = `span ${barCount}`;
+            gCell.style.gridColumn = 'span 1';
             gCell.style.height = '24px';
             const groupControls = state.mode !== 'read'
                 ? `<div class="hidden group-hover:flex items-center gap-0.5 ml-1">
@@ -58,7 +59,7 @@ export function renderGrid() {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer';
                 delBtn.innerHTML = '✕';
-                delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(state.groupStructure.slice(0, gIdx).reduce((a, b) => a + b, 0)); };
+                delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(getGroupStartIndex(gIdx)); };
                 gCell.appendChild(delBtn);
             }
             groupRow.appendChild(gCell);
@@ -68,25 +69,31 @@ export function renderGrid() {
         // Sub-column headers
         const subRow = document.createElement('div');
         subRow.style.display = 'contents';
-        let flatIdx = 0;
         state.groupStructure.forEach((barCount, gIdx) => {
+            const subCell = document.createElement('div');
+            subCell.className = 'w-16 h-6 border-r border-b border-border-strong bg-surface relative';
+            subCell.style.display = 'grid';
+            subCell.style.gridTemplateColumns = `repeat(${barCount}, minmax(0, 1fr))`;
+
             for (let b = 0; b < barCount; b++) {
-                const subCell = document.createElement('div');
-                subCell.className = 'w-16 h-6 flex items-center justify-center text-xxs font-medium text-text-sub border-r border-b border-border-strong bg-surface relative group';
-                subCell.innerHTML = `<span>B${b + 1}</span>`;
+                const flatIdx = flatIndexFromGroupBar(gIdx, b);
+                const bWrap = document.createElement('div');
+                bWrap.className = 'h-6 flex items-center justify-center text-xxs font-medium text-text-sub relative group';
+                bWrap.textContent = `B${b + 1}`;
+                bWrap.addEventListener('mouseenter', () => highlightPreview('col', flatIdx));
+                bWrap.addEventListener('mouseleave', () => resetPreviewHighlight());
+
                 if (state.mode !== 'read' && barCount > 1) {
                     const removeBtn = document.createElement('button');
                     removeBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-gray-300 text-white text-[6px] hover:bg-danger cursor-pointer stacked-remove-bar';
                     removeBtn.textContent = '−';
                     removeBtn.dataset.g = String(gIdx);
                     removeBtn.dataset.b = String(b);
-                    subCell.appendChild(removeBtn);
+                    bWrap.appendChild(removeBtn);
                 }
-                subCell.addEventListener('mouseenter', () => highlightPreview('col', flatIdx));
-                subCell.addEventListener('mouseleave', () => resetPreviewHighlight());
-                subRow.appendChild(subCell);
-                flatIdx++;
+                subCell.appendChild(bWrap);
             }
+            subRow.appendChild(subCell);
         });
         grid.appendChild(subRow);
     } else {
@@ -193,77 +200,27 @@ export function renderGrid() {
         const rowDiv = document.createElement('div');
         rowDiv.style.display = 'contents';
 
-        for (let c = 0; c < totalCols; c++) {
-            const cell = document.createElement('input');
-            cell.type = 'text';
-            cell.inputMode = 'decimal';
-            cell.className = 'grid-cell w-16 h-6 text-center text-xs border-r border-b border-border focus:outline-none focus:border-primary focus:bg-blue-50 hover:bg-gray-50 transition-colors';
-            cell.value = state.data[r]?.[c] || '';
-
-            // Auto-fill preview for stacked row 0
-            if (isStacked && r === 0 && cell.value === '') {
-                const gInfo = getGroupInfoForFlatCol(c);
-                const autoVal = getAutoFillValue(r, gInfo.groupIndex, gInfo.barInGroup);
-                if (autoVal) {
-                    cell.placeholder = autoVal;
-                    cell.classList.add('text-gray-300');
-                }
+        if (!isStacked) {
+            for (let c = 0; c < totalCols; c++) {
+                const cell = buildDataCell(r, c, totalCols, grid, false);
+                rowDiv.appendChild(cell);
             }
+        } else {
+            state.groupStructure.forEach((barCount, gIdx) => {
+                const groupCell = document.createElement('div');
+                groupCell.className = 'w-16 h-6 border-r border-b border-border bg-white';
+                groupCell.style.display = 'grid';
+                groupCell.style.gridTemplateColumns = `repeat(${barCount}, minmax(0, 1fr))`;
 
-            if (state.mode === 'read') {
-                cell.readOnly = true;
-                cell.classList.add('cursor-default', 'bg-gray-50');
-            }
-
-            // Percent mode range error highlight
-            if (state.dataMode === 'percent' && cell.value !== '') {
-                const n = Number(cell.value);
-                if (n < 0 || n > 100) {
-                    cell.classList.add('border-danger', 'border-2');
+                for (let b = 0; b < barCount; b++) {
+                    const flatC = flatIndexFromGroupBar(gIdx, b);
+                    const cell = buildDataCell(r, flatC, totalCols, grid, true);
+                    cell.classList.remove('w-16');
+                    cell.classList.add('w-full', 'min-w-0', 'h-full');
+                    groupCell.appendChild(cell);
                 }
-            }
-
-            cell.addEventListener('input', (e) => {
-                const val = (e.target as HTMLInputElement).value;
-                if (!state.data[r]) state.data[r] = [];
-                state.data[r][c] = val;
-                syncYMaxValidationUi();
-                renderPreview();
-                checkCtaValidation();
-
-                // Re-check auto-fill for stacked
-                if (isStacked && r > 0) {
-                    renderGrid(); // re-render to update row-0 placeholders
-                }
+                rowDiv.appendChild(groupCell);
             });
-
-            cell.addEventListener('keydown', (e) => {
-                const ke = e as KeyboardEvent;
-                if (ke.key === 'Tab' || ke.key === 'Enter') {
-                    e.preventDefault();
-                    const nextC = c + 1;
-                    const nextR = r + 1;
-                    if (ke.key === 'Tab' && nextC < totalCols) {
-                        const next = grid.querySelector(`input[data-r="${r}"][data-c="${nextC}"]`) as HTMLInputElement;
-                        next?.focus();
-                    } else if (ke.key === 'Enter' && nextR < state.rows) {
-                        const next = grid.querySelector(`input[data-r="${nextR}"][data-c="${c}"]`) as HTMLInputElement;
-                        next?.focus();
-                    }
-                }
-            });
-            cell.addEventListener('mouseenter', () => {
-                cell.classList.add('grid-cell-self-hover');
-                highlightPreviewCell(r, c);
-            });
-            cell.addEventListener('mouseleave', () => {
-                cell.classList.remove('grid-cell-self-hover');
-                resetPreviewHighlight();
-            });
-
-            cell.dataset.r = String(r);
-            cell.dataset.c = String(c);
-            rowDiv.appendChild(cell);
         }
         grid.appendChild(rowDiv);
     }
@@ -291,6 +248,10 @@ export function renderGrid() {
             });
         });
     }
+
+    if (isStacked) {
+        updateStackedDerivedUi();
+    }
 }
 
 function getGroupInfoForFlatCol(flatCol: number): { groupIndex: number; barInGroup: number } {
@@ -304,8 +265,199 @@ function getGroupInfoForFlatCol(flatCol: number): { groupIndex: number; barInGro
     return { groupIndex: 0, barInGroup: 0 };
 }
 
+function buildDataCell(
+    r: number,
+    c: number,
+    totalCols: number,
+    grid: HTMLElement,
+    isStacked: boolean
+): HTMLInputElement {
+    const cell = document.createElement('input');
+    cell.type = 'text';
+    cell.inputMode = 'decimal';
+    cell.className = 'grid-cell w-16 h-6 text-center text-xs border-r border-b border-border focus:outline-none focus:border-primary focus:bg-blue-50 hover:bg-gray-50 transition-colors';
+    cell.value = state.data[r]?.[c] || '';
+
+    if (state.mode === 'read') {
+        cell.readOnly = true;
+        cell.classList.add('cursor-default', 'bg-gray-50');
+    }
+
+    if (state.dataMode === 'percent' && cell.value !== '') {
+        const n = Number(cell.value);
+        if (n < 0 || n > 100) {
+            cell.classList.add('border-danger', 'border-2');
+        }
+    }
+
+    cell.addEventListener('input', (e) => {
+        const val = (e.target as HTMLInputElement).value;
+        if (!state.data[r]) state.data[r] = [];
+        state.data[r][c] = val;
+        syncYMaxValidationUi();
+        renderPreview();
+        checkCtaValidation();
+
+        if (isStacked) {
+            updateStackedDerivedUi();
+        }
+    });
+
+    cell.addEventListener('keydown', (e) => {
+        const ke = e as KeyboardEvent;
+        if (ke.key === 'Enter' && isStacked && cell.dataset.remainingPreview === 'true') {
+            const commitVal = cell.dataset.remainingValue || '';
+            if (!state.data[r]) state.data[r] = [];
+            state.data[r][c] = commitVal;
+            cell.value = commitVal;
+            cell.dataset.remainingPreview = 'false';
+            cell.dataset.remainingValue = '';
+            cell.placeholder = '';
+            cell.classList.remove('grid-cell-remaining-preview');
+            cell.removeAttribute('title');
+            syncYMaxValidationUi();
+            renderPreview();
+            checkCtaValidation();
+            updateStackedDerivedUi();
+        }
+
+        if (ke.key === 'Tab' || ke.key === 'Enter') {
+            e.preventDefault();
+            const nextC = c + 1;
+            const nextR = r + 1;
+            if (ke.key === 'Tab' && nextC < totalCols) {
+                const next = grid.querySelector(`input[data-r="${r}"][data-c="${nextC}"]`) as HTMLInputElement;
+                next?.focus();
+            } else if (ke.key === 'Enter' && nextR < state.rows) {
+                const next = grid.querySelector(`input[data-r="${nextR}"][data-c="${c}"]`) as HTMLInputElement;
+                next?.focus();
+            }
+        }
+    });
+
+    cell.addEventListener('mouseenter', () => {
+        cell.classList.add('grid-cell-self-hover');
+        highlightPreviewCell(r, c);
+    });
+    cell.addEventListener('mouseleave', () => {
+        cell.classList.remove('grid-cell-self-hover');
+        resetPreviewHighlight();
+    });
+
+    cell.dataset.r = String(r);
+    cell.dataset.c = String(c);
+    return cell;
+}
+
 function getRowHeaderLabel(rowIndex: number, isStacked: boolean): string {
     if (!isStacked) return `R${rowIndex + 1}`;
     if (rowIndex === 0) return 'All';
     return `R${rowIndex}`;
+}
+
+function formatNumeric(value: number): string {
+    if (Number.isInteger(value)) return String(value);
+    return String(Math.round(value * 100) / 100);
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+function clearStackedDerivedMarks(totalCols: number) {
+    for (let r = 1; r < state.rows; r++) {
+        for (let c = 0; c < totalCols; c++) {
+            const cell = ui.gridContainer.querySelector(`input[data-r="${r}"][data-c="${c}"]`) as HTMLInputElement | null;
+            if (!cell) continue;
+            cell.classList.remove('grid-cell-remaining-preview', 'grid-cell-stacked-overflow');
+            cell.dataset.remainingPreview = 'false';
+            cell.dataset.remainingValue = '';
+            cell.removeAttribute('title');
+            if (cell.value === '') {
+                cell.placeholder = '';
+            }
+        }
+    }
+}
+
+function updateStackedDerivedUi() {
+    if (state.chartType !== 'stackedBar') return;
+
+    const totalCols = getTotalStackedCols();
+    clearStackedDerivedMarks(totalCols);
+
+    const overflowState = getStackedOverflowState(state.data);
+
+    overflowState.overflowCells.forEach((key) => {
+        const [rStr, cStr] = key.split(':');
+        const r = Number(rStr);
+        const c = Number(cStr);
+        const cell = ui.gridContainer.querySelector(`input[data-r="${r}"][data-c="${c}"]`) as HTMLInputElement | null;
+        if (!cell) return;
+        cell.classList.add('grid-cell-stacked-overflow');
+        cell.title = 'All보다 합계가 큽니다.';
+    });
+
+    for (let c = 0; c < totalCols; c++) {
+        const allCell = ui.gridContainer.querySelector(`input[data-r="0"][data-c="${c}"]`) as HTMLInputElement | null;
+        if (!allCell) continue;
+
+        // Manual input has priority; placeholder is only a fallback when All cell is blank.
+        if (allCell.value !== '') {
+            allCell.placeholder = '';
+        } else {
+            const gInfo = getGroupInfoForFlatCol(c);
+            const autoVal = getAutoFillValue(0, gInfo.groupIndex, gInfo.barInGroup);
+            allCell.placeholder = autoVal || '';
+        }
+
+        if (overflowState.overflowCells.size > 0) {
+            let hasOverflowInCol = false;
+            for (let r = 1; r < state.rows; r++) {
+                if (overflowState.overflowCells.has(`${r}:${c}`)) {
+                    hasOverflowInCol = true;
+                    break;
+                }
+            }
+            if (hasOverflowInCol) continue;
+        }
+
+        const allVal = toFiniteNumberOrNull(state.data[0]?.[c]);
+        if (allVal === null) continue;
+
+        let blankRow = -1;
+        let blankCount = 0;
+        let sumFilled = 0;
+        let allFilledAreNumeric = true;
+        for (let r = 1; r < state.rows; r++) {
+            const raw = state.data[r]?.[c];
+            if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) {
+                blankCount++;
+                blankRow = r;
+                continue;
+            }
+            const n = Number(raw);
+            if (!Number.isFinite(n)) {
+                allFilledAreNumeric = false;
+                break;
+            }
+            sumFilled += n;
+        }
+
+        if (blankCount !== 1 || !allFilledAreNumeric) continue;
+
+        const remaining = allVal - sumFilled;
+        if (remaining < 0) continue;
+        const targetCell = ui.gridContainer.querySelector(`input[data-r="${blankRow}"][data-c="${c}"]`) as HTMLInputElement | null;
+        if (!targetCell || targetCell.value !== '') continue;
+        const previewValue = formatNumeric(remaining);
+        targetCell.placeholder = previewValue;
+        targetCell.dataset.remainingPreview = 'true';
+        targetCell.dataset.remainingValue = previewValue;
+        targetCell.classList.add('grid-cell-remaining-preview');
+        targetCell.title = 'Enter로 남은 값 확정';
+    }
 }

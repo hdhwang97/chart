@@ -102,7 +102,9 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     }
 
     // 추출된 스타일 정보 저장
-    const requestedRatio = msg.type === 'bar' ? normalizeMarkRatio(msg.markRatio) : null;
+    const requestedRatio = (msg.type === 'bar' || msg.type === 'stackedBar' || msg.type === 'stacked')
+        ? normalizeMarkRatio(msg.markRatio)
+        : null;
     if (requestedRatio !== null) {
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(requestedRatio));
     }

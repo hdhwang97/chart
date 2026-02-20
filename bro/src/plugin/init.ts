@@ -190,7 +190,9 @@ export async function initPluginUI(
             rawYMaxAuto: effectiveY.rawYMaxAuto,
             markNum: chartData.markNum,
             strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
-            markRatio: chartType === 'bar' ? resolveMarkRatioFromNode(node) : undefined,
+            markRatio: (chartType === 'bar' || chartType === 'stackedBar' || chartType === 'stacked')
+                ? resolveMarkRatioFromNode(node)
+                : undefined,
             rowColors,
             assistLineVisible,
             assistLineEnabled,

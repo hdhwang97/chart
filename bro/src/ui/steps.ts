@@ -133,7 +133,7 @@ export function updateSettingInputs() {
         ui.containerStrokeWidth.classList.add('hidden');
         ui.spacerStroke.classList.remove('hidden');
     }
-    if (state.chartType === 'bar') {
+    if (state.chartType === 'bar' || state.chartType === 'stackedBar') {
         ui.containerMarkRatio.classList.remove('hidden');
     } else {
         ui.containerMarkRatio.classList.add('hidden');
@@ -199,7 +199,9 @@ export function submitData() {
         rawYMaxAuto,
         markNum: markNum,
         strokeWidth: state.strokeWidth,
-        markRatio: state.chartType === 'bar' ? normalizeMarkRatio(state.markRatio) : undefined,
+        markRatio: (state.chartType === 'bar' || state.chartType === 'stackedBar')
+            ? normalizeMarkRatio(state.markRatio)
+            : undefined,
         rowColors: ensureRowColorsLength(state.rows),
         assistLineVisible: state.assistLineVisible,
         assistLineEnabled: {

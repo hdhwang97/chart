@@ -234,6 +234,7 @@ export function renderPreview() {
     const chartType = state.chartType;
     const isStacked = chartType === 'stackedBar';
     const totalCols = isStacked ? getTotalStackedCols() : getGridColsForChart(chartType, state.cols);
+    const axisCols = isStacked ? state.groupStructure.length : totalCols;
 
     // Get numeric values
     const numData: number[][] = [];
@@ -262,14 +263,14 @@ export function renderPreview() {
         : undefined;
     const xAxisScale = isLine
         ? d3.scaleLinear().domain([0, Math.max(1, totalCols - 1)]).range([0, w])
-        : d3.scaleBand().domain(d3.range(totalCols)).range([0, w]).padding(0);
+        : d3.scaleBand().domain(d3.range(axisCols)).range([0, w]).padding(0);
     const yTickValues = buildYTickValues(yMin, yMax, state.cellCount);
 
     renderAxes(g, xAxisScale, yScale, yTickValues, h, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;
-    drawGuides(g, w, h, totalCols, state.cellCount, lineGuidePositions);
+    drawGuides(g, w, h, axisCols, state.cellCount, lineGuidePositions);
 
     if (chartType === 'bar') {
         renderBarPreview(g, numData, w, h, yScale);
@@ -423,7 +424,8 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
 
 function renderStackedPreview(g: any, data: number[][], w: number, h: number, yMin: number, yMax: number) {
     const groups = state.groupStructure;
-    const xScale = d3.scaleBand().domain(d3.range(groups.length)).range([0, w]).padding(PREVIEW_OPTS.barPadding);
+    const ratio = normalizeMarkRatio(state.markRatio);
+    const xScale = d3.scaleBand().domain(d3.range(groups.length)).range([0, w]).padding(1 - ratio);
 
     const startRow = 1; // Skip "All" row
     const rowCount = state.rows - startRow;

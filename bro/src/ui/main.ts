@@ -301,7 +301,7 @@ function handlePluginMessage(msg: any) {
             ui.containerStrokeWidth.classList.add('hidden');
             ui.spacerStroke.classList.remove('hidden');
         }
-        if (msg.chartType === 'bar') {
+        if (msg.chartType === 'bar' || msg.chartType === 'stackedBar') {
             ui.containerMarkRatio.classList.remove('hidden');
         } else {
             ui.containerMarkRatio.classList.add('hidden');

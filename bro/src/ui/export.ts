@@ -257,11 +257,15 @@ function renderD3Preview(style: any) {
     const strokeWidth = style.strokeWidth || state.strokeWidth || 2;
     const colStrokeStyle: StrokeStyleSnapshot | null = style.colStrokeStyle || null;
     const rowStrokeStyles: RowStrokeStyle[] = style.rowStrokeStyles || [];
+    const groups = chartType === 'stackedBar'
+        ? (Array.isArray(markNum) ? markNum : [colCount])
+        : [];
 
-    const numCols = Array.isArray(markNum)
+    const flatCols = Array.isArray(markNum)
         ? markNum.reduce((a: number, b: number) => a + b, 0)
         : (chartType === 'line' ? getGridColsForChart('line', colCount) : colCount);
-    const stateData = buildStateNumericData(chartType, numCols);
+    const axisCols = chartType === 'stackedBar' ? groups.length : flatCols;
+    const stateData = buildStateNumericData(chartType, flatCols);
     const hasStateData = stateData.length > 0 && stateData.some(row => row.some(v => Number.isFinite(v)));
 
     // fallback data when UI state is empty
@@ -271,7 +275,7 @@ function renderD3Preview(style: any) {
         sampleData = [];
         for (let r = 0; r < fallbackRows; r++) {
             const row = [];
-            for (let c = 0; c < numCols; c++) {
+            for (let c = 0; c < flatCols; c++) {
                 row.push(20 + Math.random() * 60);
             }
             sampleData.push(row);
@@ -290,18 +294,18 @@ function renderD3Preview(style: any) {
     const yScale = d3.scaleLinear().domain([yDomain.yMin, yDomain.yMax]).range([h, 0]);
     const isLine = chartType === 'line';
     const lineTickValues = isLine
-        ? Array.from({ length: numCols }, (_, i) => i)
+        ? Array.from({ length: flatCols }, (_, i) => i)
         : undefined;
     const xAxisScale = isLine
-        ? d3.scaleLinear().domain([0, Math.max(1, numCols - 1)]).range([0, w])
-        : d3.scaleBand().domain(d3.range(numCols)).range([0, w]).padding(0);
+        ? d3.scaleLinear().domain([0, Math.max(1, flatCols - 1)]).range([0, w])
+        : d3.scaleBand().domain(d3.range(axisCols)).range([0, w]).padding(0);
     const yTickValues = buildYTickValues(yDomain.yMin, yDomain.yMax, yCount);
 
     renderAxes(g, xAxisScale, yScale, yTickValues, h, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;
-    drawGuides(g, w, h, numCols, yCount, colStrokeStyle, rowStrokeStyles, lineGuidePositions);
+    drawGuides(g, w, h, axisCols, yCount, colStrokeStyle, rowStrokeStyles, lineGuidePositions);
 
     if (chartType === 'bar') {
         const xScale = d3.scaleBand().domain(d3.range(colCount)).range([0, w]).padding(0);
@@ -357,8 +361,9 @@ function renderD3Preview(style: any) {
             });
         }
     } else if (chartType === 'stackedBar') {
-        const groups = Array.isArray(markNum) ? markNum : [colCount];
-        const xScale = d3.scaleBand().domain(d3.range(groups.length)).range([0, w]).padding(1 - (style.markRatio || 0.8));
+        const ratio = normalizeMarkRatio(style.markRatio);
+        const xScale = d3.scaleBand().domain(d3.range(groups.length)).range([0, w]).padding(1 - ratio);
+        const startRow = sampleData.length > 1 ? 1 : 0;
 
         let flatIdx = 0;
         groups.forEach((barCount: number, gIdx: number) => {
@@ -366,7 +371,7 @@ function renderD3Preview(style: any) {
 
             for (let b = 0; b < barCount; b++) {
                 let yOffset = h;
-                for (let r = 0; r < numRows; r++) {
+                for (let r = startRow; r < numRows; r++) {
                     const val = sampleData[r]?.[flatIdx] || 0;
                     const barH = Math.max(0, h - yScale(val));
 
@@ -375,7 +380,7 @@ function renderD3Preview(style: any) {
                         .attr('y', yOffset - barH)
                         .attr('width', innerScale.bandwidth())
                         .attr('height', barH)
-                        .attr('fill', getSeriesColor(rowColors, r, 'stackedBar'))
+                        .attr('fill', getSeriesColor(rowColors, r - startRow, 'stackedBar'))
                         .attr('rx', cornerRadius);
                     applyStroke(rect, getRowStroke(r, rowStrokeStyles) || colStrokeStyle, 'none', 0);
                     yOffset -= barH;

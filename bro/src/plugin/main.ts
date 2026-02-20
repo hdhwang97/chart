@@ -242,7 +242,9 @@ figma.ui.onmessage = async (msg) => {
 
         // 5. 스타일 자동 추출 및 전송
         const styleInfo = extractStyleFromNode(targetNode, type);
-        const requestedRatio = type === 'bar' ? normalizeMarkRatio(markRatio) : null;
+        const requestedRatio = (type === 'bar' || type === 'stackedBar' || type === 'stacked')
+            ? normalizeMarkRatio(markRatio)
+            : null;
         const requestedRowColors = normalizeRowColors(rowColors);
         const rowColorsForUi = requestedRowColors.length > 0
             ? requestedRowColors

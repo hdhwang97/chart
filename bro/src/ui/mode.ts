@@ -157,8 +157,47 @@ export function applyModeLocks() {
 export function clearRangeErrors() {
     const cells = ui.gridContainer.querySelectorAll('.grid-cell');
     cells.forEach(cell => {
-        (cell as HTMLElement).classList.remove('border-danger', 'border-2');
+        (cell as HTMLElement).classList.remove('border-danger', 'border-2', 'grid-cell-stacked-overflow');
     });
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+export function getStackedOverflowState(data: string[][]): { hasOverflow: boolean; overflowCells: Set<string> } {
+    const overflowCells = new Set<string>();
+    if (state.chartType !== 'stackedBar' || !Array.isArray(data) || data.length <= 1) {
+        return { hasOverflow: false, overflowCells };
+    }
+
+    const maxCols = data.reduce((acc, row) => Math.max(acc, Array.isArray(row) ? row.length : 0), 0);
+    for (let c = 0; c < maxCols; c++) {
+        const allVal = toFiniteNumberOrNull(data[0]?.[c]);
+        if (allVal === null) continue;
+
+        let sumR = 0;
+        const nonEmptyRows: number[] = [];
+        for (let r = 1; r < data.length; r++) {
+            const raw = data[r]?.[c];
+            if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) continue;
+            nonEmptyRows.push(r);
+            const n = Number(raw);
+            if (Number.isFinite(n)) sumR += n;
+        }
+
+        if (sumR > allVal) {
+            nonEmptyRows.forEach((r) => overflowCells.add(`${r}:${c}`));
+        }
+    }
+
+    return {
+        hasOverflow: overflowCells.size > 0,
+        overflowCells
+    };
 }
 
 export function checkCtaValidation() {
@@ -181,8 +220,10 @@ export function checkCtaValidation() {
         });
     }
 
+    const stackedOverflow = getStackedOverflowState(state.data).hasOverflow;
+
     syncYMaxValidationUi();
-    ui.mainCta.disabled = state.mode === 'edit' || !hasAny || !rangeOk;
+    ui.mainCta.disabled = state.mode === 'edit' || !hasAny || !rangeOk || stackedOverflow;
     return !ui.mainCta.disabled;
 }
 

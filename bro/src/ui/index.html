@@ -276,8 +276,11 @@
                                         <p><strong class="text-primary-hover">%:</strong> 0~100 사이의 비율값으로 보여집니다.</p>
                                         <p id="tooltip-stacked-hint"
                                             class="hidden text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-600">
-                                            * Stacked Bar: 첫 데이터 행(All)은 총합 행이며 직접 입력 가능, 비어있으면 합계로 보정됩니다.
-                                            B 헤더 행 좌측 셀은 그룹 공백 영역입니다.</p>
+                                            * Stacked Bar: Group Count는 그룹 칼럼 수(G1..Gn), Segments는 각 그룹 내부 바 수(B1..Bm)입니다.
+                                            Column Width Ratio는 stacked에서 그룹 폭 기준으로 적용됩니다.
+                                            첫 데이터 행(All)은 총합 행이며 직접 입력 가능, 비어있으면 합계로 보정됩니다.
+                                            열에서 R 셀이 1개만 비면 남은 값을 반투명으로 제안하며 Enter로 확정됩니다.
+                                            All보다 합계가 크면 붉은 배경 에러로 표시되고 Apply가 비활성화됩니다.</p>
                                     </div>
                                     <div id="tooltip-warning" class="hidden text-danger font-medium">⚠️ % 모드에서는 0~100
                                         사이의 값만 입력할 수 있습니다.</div>
