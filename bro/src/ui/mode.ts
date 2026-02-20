@@ -195,7 +195,7 @@ export function validateStackedData(): boolean {
 
 export function getAutoFillValue(rowIdx: number, groupIndex: number, barInGroup: number): string | null {
     if (state.chartType !== 'stackedBar' || rowIdx !== 0) return null;
-    // Row 0 = "All" row for stacked => auto-sum remaining rows
+    // Row 0 = All (editable) for stacked => fallback sum placeholder from remaining rows
     let totalDataCol = 0;
     for (let g = 0; g < groupIndex; g++) totalDataCol += state.groupStructure[g];
     totalDataCol += barInGroup;

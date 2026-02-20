@@ -151,7 +151,7 @@ export function submitData() {
 
     if (isStacked) {
         rawValues = state.data.map(row => [...row]);
-        // Row 0 (All) : if empty, use sum 
+        // Row 0 (All, manual input allowed): if empty, use sum fallback 
         const totalCols = getTotalStackedCols();
         for (let c = 0; c < totalCols; c++) {
             if (rawValues[0][c] === '' || rawValues[0][c] === undefined) {

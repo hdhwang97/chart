@@ -1,6 +1,6 @@
 import { state, getTotalStackedCols, getRowColor, getGridColsForChart } from './state';
 import { ui } from './dom';
-import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroup } from './data-ops';
+import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroupAt, clearAllData } from './data-ops';
 import { checkCtaValidation, getAutoFillValue, syncYMaxValidationUi } from './mode';
 import { renderPreview, highlightPreview, highlightPreviewCell, resetPreviewHighlight } from './preview';
 
@@ -14,9 +14,19 @@ export function renderGrid() {
 
     const isStacked = state.chartType === 'stackedBar';
     const totalCols = isStacked ? getTotalStackedCols() : getGridColsForChart(state.chartType, state.cols);
+    const topLeftCorner = document.getElementById('header-corner-tl');
+    const topRightCorner = document.getElementById('header-corner-tr');
 
     // Grid template
     grid.style.gridTemplateColumns = `repeat(${totalCols}, 64px)`;
+    if (topLeftCorner) {
+        topLeftCorner.classList.toggle('h-12', isStacked);
+        topLeftCorner.classList.toggle('h-6', !isStacked);
+    }
+    if (topRightCorner) {
+        topRightCorner.classList.toggle('h-12', isStacked);
+        topRightCorner.classList.toggle('h-6', !isStacked);
+    }
 
     // Row header rendering
     const headerCont = ui.rowHeaderContainer;
@@ -35,7 +45,6 @@ export function renderGrid() {
             const groupControls = state.mode !== 'read'
                 ? `<div class="hidden group-hover:flex items-center gap-0.5 ml-1">
                     <button class="w-3.5 h-3.5 flex items-center justify-center rounded-full bg-primary text-white text-[8px] hover:bg-primary-hover cursor-pointer stacked-add-bar" data-g="${gIdx}">+</button>
-                    ${barCount > 1 ? `<button class="w-3.5 h-3.5 flex items-center justify-center rounded-full bg-gray-300 text-white text-[8px] hover:bg-danger cursor-pointer stacked-remove-bar" data-g="${gIdx}">−</button>` : ''}
                 </div>`
                 : '';
             gCell.innerHTML = `
@@ -63,8 +72,16 @@ export function renderGrid() {
         state.groupStructure.forEach((barCount, gIdx) => {
             for (let b = 0; b < barCount; b++) {
                 const subCell = document.createElement('div');
-                subCell.className = 'w-16 h-6 flex items-center justify-center text-xxs font-medium text-text-sub border-r border-b border-border-strong bg-surface';
-                subCell.textContent = `B${b + 1}`;
+                subCell.className = 'w-16 h-6 flex items-center justify-center text-xxs font-medium text-text-sub border-r border-b border-border-strong bg-surface relative group';
+                subCell.innerHTML = `<span>B${b + 1}</span>`;
+                if (state.mode !== 'read' && barCount > 1) {
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-gray-300 text-white text-[6px] hover:bg-danger cursor-pointer stacked-remove-bar';
+                    removeBtn.textContent = '−';
+                    removeBtn.dataset.g = String(gIdx);
+                    removeBtn.dataset.b = String(b);
+                    subCell.appendChild(removeBtn);
+                }
                 subCell.addEventListener('mouseenter', () => highlightPreview('col', flatIdx));
                 subCell.addEventListener('mouseleave', () => resetPreviewHighlight());
                 subRow.appendChild(subCell);
@@ -100,7 +117,7 @@ export function renderGrid() {
         const rowH = document.createElement('div');
         rowH.className = 'row-header flex items-center h-6 px-2 border-b border-r border-border text-xxs font-medium text-text-sub relative group';
 
-        const label = isStacked && r === 0 ? 'All' : `R${isStacked ? r : r + 1}`;
+        const label = getRowHeaderLabel(r, isStacked);
         const leftWrap = document.createElement('div');
         leftWrap.className = 'flex items-center gap-1.5 min-w-0';
 
@@ -149,7 +166,19 @@ export function renderGrid() {
         rowH.addEventListener('mouseenter', () => highlightPreview('row', r));
         rowH.addEventListener('mouseleave', () => resetPreviewHighlight());
 
-        if (state.mode !== 'read' && state.rows > 1) {
+        if (isStacked && r === 0 && state.mode !== 'read') {
+            const clearBtn = document.createElement('button');
+            clearBtn.className = 'hidden absolute right-1 w-5 h-3 items-center justify-center rounded-full bg-gray-300 text-white text-[7px] cursor-pointer group-hover:flex hover:bg-danger';
+            clearBtn.textContent = 'CLR';
+            clearBtn.title = 'Clear all data';
+            clearBtn.onclick = (e) => {
+                e.stopPropagation();
+                clearAllData();
+            };
+            rowH.appendChild(clearBtn);
+        }
+
+        if (state.mode !== 'read' && state.rows > 1 && !(isStacked && r === 0)) {
             const delBtn = document.createElement('button');
             delBtn.className = 'del-row-btn hidden absolute right-1 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer group-hover:flex';
             delBtn.innerHTML = '✕';
@@ -254,8 +283,11 @@ export function renderGrid() {
         });
         grid.querySelectorAll('.stacked-remove-bar').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const g = parseInt((e.currentTarget as HTMLElement).dataset.g!);
-                removeBarFromGroup(g);
+                e.stopPropagation();
+                const target = e.currentTarget as HTMLElement;
+                const g = parseInt(target.dataset.g!);
+                const b = parseInt(target.dataset.b!);
+                removeBarFromGroupAt(g, b);
             });
         });
     }
@@ -270,4 +302,10 @@ function getGroupInfoForFlatCol(flatCol: number): { groupIndex: number; barInGro
         running += state.groupStructure[g];
     }
     return { groupIndex: 0, barInGroup: 0 };
+}
+
+function getRowHeaderLabel(rowIndex: number, isStacked: boolean): string {
+    if (!isStacked) return `R${rowIndex + 1}`;
+    if (rowIndex === 0) return 'All';
+    return `R${rowIndex}`;
 }

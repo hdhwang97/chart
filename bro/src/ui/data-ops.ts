@@ -145,6 +145,17 @@ export function addRow() {
     checkCtaValidation();
 }
 
+export function clearAllData() {
+    const totalCols = state.chartType === 'stackedBar'
+        ? state.groupStructure.reduce((a, b) => a + b, 0)
+        : getGridColsForChart(state.chartType, state.cols);
+
+    state.data = Array.from({ length: state.rows }, () => new Array(totalCols).fill(''));
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
 export function addColumn() {
     if (state.chartType === 'stackedBar') {
         const defaultSegment = resolveDefaultSegmentForNewGroup();
@@ -212,6 +223,21 @@ export function addBarToGroup(groupIndex: number) {
 export function removeBarFromGroup(groupIndex: number) {
     if (!state.groupStructure[groupIndex] || state.groupStructure[groupIndex] <= 1) return;
     const removePos = state.groupStructure.slice(0, groupIndex + 1).reduce((a, b) => a + b, 0) - 1;
+    state.groupStructure[groupIndex]--;
+    state.data.forEach(row => row.splice(removePos, 1));
+    syncSegmentControlForStacked();
+    renderGrid();
+    renderPreview();
+    checkCtaValidation();
+}
+
+export function removeBarFromGroupAt(groupIndex: number, barIndex: number) {
+    const groupBarCount = state.groupStructure[groupIndex];
+    if (!groupBarCount || groupBarCount <= 1) return;
+    if (barIndex < 0 || barIndex >= groupBarCount) return;
+
+    const groupStart = state.groupStructure.slice(0, groupIndex).reduce((a, b) => a + b, 0);
+    const removePos = groupStart + barIndex;
     state.groupStructure[groupIndex]--;
     state.data.forEach(row => row.splice(removePos, 1));
     syncSegmentControlForStacked();
