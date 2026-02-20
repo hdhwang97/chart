@@ -11,6 +11,29 @@ function normalizeRatio(value: number | null | undefined): number {
     return Math.max(0.01, Math.min(1, ratio));
 }
 
+function computeClusterLayout(cellWidth: number, markRatio: number, markNum: number) {
+    const safeCellWidth = Math.max(1, cellWidth);
+    const safeMarkNum = Math.max(1, Math.floor(markNum));
+    const clusterW = safeCellWidth * markRatio;
+    const gaps = Math.max(0, safeMarkNum - 1);
+
+    const t = Math.max(0, Math.min(1, (markRatio - 0.01) / 0.99));
+    const gapRatioRaw = 0.005 + ((0.05 - 0.005) * (t * t));
+    let gapPx = safeCellWidth * gapRatioRaw;
+    if (gaps > 0) {
+        const maxTotalGap = clusterW * 0.35;
+        const totalGap = gapPx * gaps;
+        if (totalGap > maxTotalGap) {
+            gapPx = maxTotalGap / gaps;
+        }
+    } else {
+        gapPx = 0;
+    }
+
+    const subBarW = Math.max(1, (clusterW - (gapPx * gaps)) / safeMarkNum);
+    return { clusterW, subBarW, gapPx };
+}
+
 function hasHorizontalPadding(node: SceneNode): node is SceneNode & { paddingLeft: number; paddingRight: number } {
     return 'paddingLeft' in node && 'paddingRight' in node;
 }
@@ -97,10 +120,8 @@ function setLayerWidthWithCentering(layer: SceneNode & LayoutMixin, targetWidth:
 }
 
 function applyStackedMarkRatioToSubBar(subBar: SceneNode, cellWidth: number, ratio: number, barCount: number) {
-    const safeCellWidth = Math.max(1, cellWidth);
-    const safeBarCount = Math.max(1, barCount);
-    const targetClusterWidth = safeCellWidth * ratio;
-    const targetSubBarWidth = Math.max(1, targetClusterWidth / safeBarCount);
+    const clusterLayout = computeClusterLayout(cellWidth, ratio, barCount);
+    const targetSubBarWidth = clusterLayout.subBarW;
 
     const markLayer = findSubBarMarkLayer(subBar);
     if (!markLayer) return;
@@ -123,9 +144,9 @@ function applyStackedMarkRatioToSubBar(subBar: SceneNode, cellWidth: number, rat
     setLayerWidthWithCentering(markLayer, targetSubBarWidth, parentWidth);
 }
 
-function forceGroupContainerHug(groupInstance: InstanceNode) {
+function forceGroupContainerHug(groupInstance: InstanceNode, itemSpacing: number) {
     if (hasItemSpacing(groupInstance)) {
-        groupInstance.itemSpacing = 0;
+        groupInstance.itemSpacing = itemSpacing;
     }
     if (hasHorizontalPadding(groupInstance)) {
         groupInstance.paddingLeft = 0;
@@ -192,7 +213,8 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
         }
 
         if (groupInstance && groupInstance.type === 'INSTANCE') {
-            forceGroupContainerHug(groupInstance);
+            const clusterLayout = computeClusterLayout(cellWidth, targetRatio, currentGroupBarCount);
+            forceGroupContainerHug(groupInstance, clusterLayout.gapPx);
             let markNumChanged = setMarkNumVariantWithFallback(groupInstance, currentGroupBarCount);
 
             const subBars = (groupInstance as any).children.filter((n: SceneNode) => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name));

@@ -137,9 +137,22 @@ function computeClusterLayout(cellWidth: number, markRatio: number, markNum: num
     const safeCellWidth = Math.max(1, cellWidth);
     const safeMarkNum = Math.max(1, Math.floor(markNum));
     const clusterW = safeCellWidth * markRatio;
+    const gaps = Math.max(0, safeMarkNum - 1);
+    const t = Math.max(0, Math.min(1, (markRatio - 0.01) / 0.99));
+    const gapRatioRaw = 0.005 + ((0.05 - 0.005) * (t * t));
+    let gapPx = safeCellWidth * gapRatioRaw;
+    if (gaps > 0) {
+        const maxTotalGap = clusterW * 0.35;
+        const totalGap = gapPx * gaps;
+        if (totalGap > maxTotalGap) {
+            gapPx = maxTotalGap / gaps;
+        }
+    } else {
+        gapPx = 0;
+    }
     const clusterOffset = (safeCellWidth - clusterW) / 2;
-    const subBarW = Math.max(1, clusterW / safeMarkNum);
-    return { clusterW, clusterOffset, subBarW };
+    const subBarW = Math.max(1, (clusterW - (gapPx * gaps)) / safeMarkNum);
+    return { clusterW, clusterOffset, subBarW, gapPx };
 }
 
 function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
@@ -303,7 +316,7 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
 
             const rect = g.append('rect')
                 .attr('class', 'preview-mark')
-                .attr('x', colX + clusterLayout.clusterOffset + (r * clusterLayout.subBarW))
+                .attr('x', colX + clusterLayout.clusterOffset + (r * (clusterLayout.subBarW + clusterLayout.gapPx)))
                 .attr('y', yScale(val))
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
@@ -425,7 +438,7 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
 function renderStackedPreview(g: any, data: number[][], w: number, h: number, yMin: number, yMax: number) {
     const groups = state.groupStructure;
     const ratio = normalizeMarkRatio(state.markRatio);
-    const xScale = d3.scaleBand().domain(d3.range(groups.length)).range([0, w]).padding(1 - ratio);
+    const xScale = d3.scaleBand().domain(d3.range(groups.length)).range([0, w]).padding(0);
 
     const startRow = 1; // Skip "All" row
     const rowCount = state.rows - startRow;
@@ -435,7 +448,8 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
 
     let flatIdx = 0;
     groups.forEach((barCount, gIdx) => {
-        const groupInnerScale = d3.scaleBand().domain(d3.range(barCount)).range([0, xScale.bandwidth()!]).padding(0.05);
+        const cellW = xScale.bandwidth();
+        const clusterLayout = computeClusterLayout(cellW, ratio, barCount);
 
         for (let b = 0; b < barCount; b++) {
             let yOffset = h;
@@ -452,9 +466,9 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
 
                 const rect = g.append('rect')
                     .attr('class', 'preview-mark')
-                    .attr('x', xScale(gIdx)! + groupInnerScale(b)!)
+                    .attr('x', xScale(gIdx)! + clusterLayout.clusterOffset + (b * (clusterLayout.subBarW + clusterLayout.gapPx)))
                     .attr('y', yOffset - barH)
-                    .attr('width', groupInnerScale.bandwidth())
+                    .attr('width', clusterLayout.subBarW)
                     .attr('height', barH)
                     .attr('fill', getSeriesColor(r - startRow, 'stackedBar'))
                     .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)

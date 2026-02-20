@@ -15,8 +15,23 @@ function computeClusterLayout(cellWidth: number, markRatio: number, markNum: num
     const safeCellWidth = Math.max(1, cellWidth);
     const safeMarkNum = Math.max(1, Math.floor(markNum));
     const clusterW = safeCellWidth * markRatio;
-    const subBarW = Math.max(1, clusterW / safeMarkNum);
-    return { clusterW, subBarW };
+    const gaps = Math.max(0, safeMarkNum - 1);
+
+    const t = Math.max(0, Math.min(1, (markRatio - 0.01) / 0.99));
+    const gapRatioRaw = 0.005 + ((0.05 - 0.005) * (t * t));
+    let gapPx = safeCellWidth * gapRatioRaw;
+    if (gaps > 0) {
+        const maxTotalGap = clusterW * 0.35;
+        const totalGap = gapPx * gaps;
+        if (totalGap > maxTotalGap) {
+            gapPx = maxTotalGap / gaps;
+        }
+    } else {
+        gapPx = 0;
+    }
+
+    const subBarW = Math.max(1, (clusterW - (gapPx * gaps)) / safeMarkNum);
+    return { clusterW, subBarW, gapPx, gapRatio: gapPx / safeCellWidth };
 }
 
 function hasHorizontalPadding(node: SceneNode): node is SceneNode & { paddingLeft: number; paddingRight: number } {
@@ -157,6 +172,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
         barWidth: number;
         appliedRatio: number;
         subBarWidth: number;
+        gapPx: number;
         leftPadding: number;
         rightPadding: number;
     }> = [];
@@ -183,7 +199,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                 child.visible = layerIndex <= numMarks;
             });
             if (hasItemSpacing(barInst)) {
-                barInst.itemSpacing = 0;
+                barInst.itemSpacing = clusterLayout.gapPx;
             }
             if (hasHorizontalPadding(barInst)) {
                 // cluster(bar)에는 좌우 padding을 주입하지 않는다.
@@ -251,6 +267,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                                     barWidth: barWidthAfter,
                                     appliedRatio: ratioAfter,
                                     subBarWidth: clusterLayout.subBarW,
+                                    gapPx: clusterLayout.gapPx,
                                     leftPadding,
                                     rightPadding
                                 });
@@ -310,9 +327,11 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
             savedRatio,
             inferredRatio,
             markNum: numMarks,
-            gapRatio: 0,
             effectiveRatio: targetRatio,
             appliedRatio: targetRatio,
+            gapRatio: ratioAuditRows.length > 0
+                ? (ratioAuditRows.reduce((acc, row) => acc + (row.measuredCellWidth > 0 ? (row.gapPx / row.measuredCellWidth) : 0), 0) / ratioAuditRows.length)
+                : 0,
             columns: ratioAuditRows.length
         });
         ratioAuditRows.forEach((row) => {
