@@ -115,6 +115,58 @@ function getRowStroke(row: number): StrokeStyleSnapshot | null {
     return found ? found.stroke : null;
 }
 
+function getDraftLineStroke(target: 'cellBottom' | 'tabRight'): StrokeStyleSnapshot | null {
+    const draft = target === 'cellBottom' ? state.styleInjectionDraft.cellBottom : state.styleInjectionDraft.tabRight;
+    return {
+        color: draft.color,
+        weight: draft.visible ? draft.thickness : 0
+    };
+}
+
+function drawGridContainerBorder(g: any, w: number, h: number) {
+    const grid = state.styleInjectionDraft.gridContainer;
+    const thickness = grid.visible ? grid.thickness : 0;
+    if (thickness <= 0) return;
+
+    const color = grid.color;
+    if (grid.sides.top) {
+        g.append('line')
+            .attr('x1', 0)
+            .attr('x2', w)
+            .attr('y1', 0)
+            .attr('y2', 0)
+            .attr('stroke', color)
+            .attr('stroke-width', thickness);
+    }
+    if (grid.sides.right) {
+        g.append('line')
+            .attr('x1', w)
+            .attr('x2', w)
+            .attr('y1', 0)
+            .attr('y2', h)
+            .attr('stroke', color)
+            .attr('stroke-width', thickness);
+    }
+    if (grid.sides.bottom) {
+        g.append('line')
+            .attr('x1', 0)
+            .attr('x2', w)
+            .attr('y1', h)
+            .attr('y2', h)
+            .attr('stroke', color)
+            .attr('stroke-width', thickness);
+    }
+    if (grid.sides.left) {
+        g.append('line')
+            .attr('x1', 0)
+            .attr('x2', 0)
+            .attr('y1', 0)
+            .attr('y2', h)
+            .attr('stroke', color)
+            .attr('stroke-width', thickness);
+    }
+}
+
 function getSeriesColor(rowIndex: number, chartType: string) {
     if (chartType === 'stackedBar' || chartType === 'stacked') {
         return getRowColor(rowIndex + 1);
@@ -181,7 +233,10 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
 }
 
 function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount: number, xGuidePositions?: number[]) {
-    if (state.colStrokeStyle && totalCols > 0) {
+    const tabRightStroke = getDraftLineStroke('tabRight') || state.colStrokeStyle;
+    const cellBottomStroke = getDraftLineStroke('cellBottom');
+
+    if (tabRightStroke && totalCols > 0) {
         if (xGuidePositions && xGuidePositions.length > 0) {
             xGuidePositions.forEach((x) => {
                 const line = g.append('line')
@@ -189,7 +244,7 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
                     .attr('x2', x)
                     .attr('y1', 0)
                     .attr('y2', h);
-                applyStroke(line, state.colStrokeStyle, '#E5E7EB', 1);
+                applyStroke(line, tabRightStroke, '#E5E7EB', 1);
                 line.attr('opacity', 0.35);
             });
         } else {
@@ -200,7 +255,7 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
                     .attr('x2', c * step)
                     .attr('y1', 0)
                     .attr('y2', h);
-                applyStroke(line, state.colStrokeStyle, '#E5E7EB', 1);
+                applyStroke(line, tabRightStroke, '#E5E7EB', 1);
                 line.attr('opacity', 0.35);
             }
         }
@@ -209,7 +264,7 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
     if (yCellCount > 0) {
         const step = h / yCellCount;
         for (let r = 0; r <= yCellCount; r++) {
-            const stroke = getRowStroke(r);
+            const stroke = cellBottomStroke || getRowStroke(r);
             const line = g.append('line')
                 .attr('x1', 0)
                 .attr('x2', w)
@@ -292,6 +347,8 @@ export function renderPreview() {
     } else if (isStacked) {
         renderStackedPreview(g, numData, w, h, yMin, yMax);
     }
+
+    drawGridContainerBorder(g, w, h);
 }
 
 function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale: any) {

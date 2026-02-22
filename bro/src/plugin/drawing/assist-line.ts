@@ -1,5 +1,5 @@
 import { collectColumns } from './shared';
-import { clamp, traverse, findActualPropKey } from '../utils';
+import { clamp, traverse, findActualPropKey, normalizeHexColor, tryApplyStroke } from '../utils';
 
 type AssistMetricType = 'min' | 'max' | 'avg';
 
@@ -7,6 +7,11 @@ type AssistLineEnabled = {
     min: boolean;
     max: boolean;
     avg: boolean;
+};
+
+type AssistLineStyle = {
+    color?: string;
+    thickness?: number;
 };
 
 const DEFAULT_ASSIST_LINE_ENABLED: AssistLineEnabled = {
@@ -120,6 +125,62 @@ function trySetAssistLineData(instance: InstanceNode, value: string): boolean {
     }
 }
 
+function normalizeAssistLineStyle(value: unknown): AssistLineStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as AssistLineStyle;
+    const color = normalizeHexColor(source.color);
+    const thicknessRaw = typeof source.thickness === 'number' ? source.thickness : Number(source.thickness);
+    const thickness = Number.isFinite(thicknessRaw) && thicknessRaw >= 0 ? thicknessRaw : undefined;
+    if (!color && thickness === undefined) return null;
+    return {
+        color: color || undefined,
+        thickness
+    };
+}
+
+function applyAssistLineVisualStyle(node: SceneNode, style: AssistLineStyle | null) {
+    if (!style) return;
+
+    const applyToNode = (target: SceneNode) => {
+        if (style.color) tryApplyStroke(target, style.color);
+        if (typeof style.thickness === 'number') {
+            try {
+                if (
+                    'strokeTopWeight' in target
+                    && 'strokeRightWeight' in target
+                    && 'strokeBottomWeight' in target
+                    && 'strokeLeftWeight' in target
+                ) {
+                    const withIndividual = target as SceneNode & IndividualStrokesMixin & { individualStrokeWeights?: boolean };
+                    if ('individualStrokeWeights' in withIndividual) {
+                        withIndividual.individualStrokeWeights = true;
+                    }
+                    withIndividual.strokeTopWeight = style.thickness;
+                    withIndividual.strokeRightWeight = 0;
+                    withIndividual.strokeBottomWeight = 0;
+                    withIndividual.strokeLeftWeight = 0;
+                } else if ('strokeWeight' in target) {
+                    (target as SceneNode & GeometryMixin).strokeWeight = style.thickness;
+                }
+            } catch { }
+        }
+    };
+
+    let containerLayer: SceneNode | null = null;
+    traverse(node, (child) => {
+        if (containerLayer) return;
+        if (child.id === node.id) return;
+        if (!child.visible) return;
+        if (child.name === 'Container') {
+            containerLayer = child;
+        }
+    });
+
+    if (containerLayer) {
+        applyToNode(containerLayer);
+    }
+}
+
 export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: number) {
     const assistLineVisible = Boolean(config?.assistLineVisible);
     const enabled = normalizeAssistLineEnabled(config?.assistLineEnabled);
@@ -129,6 +190,7 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
     const yMax = Number.isFinite(Number(config?.yMax)) ? Number(config.yMax) : 100;
     const graphHeight = resolveReferenceHeight(graph, fallbackHeight);
     const nodesByMetric = resolveAssistLineNodes(graph);
+    const assistLineStyle = normalizeAssistLineStyle(config?.assistLineStyle);
 
     (['min', 'max', 'avg'] as AssistMetricType[]).forEach((metric) => {
         const metricNodes = nodesByMetric[metric];
@@ -175,6 +237,7 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
                 if (node.type === 'INSTANCE') {
                     dataApplied = trySetAssistLineData(node, metricText);
                 }
+                applyAssistLineVisualStyle(node, assistLineStyle);
 
                 console.log('[chart-plugin][assist-line]', {
                     metric,

@@ -1,7 +1,7 @@
 import { PLUGIN_DATA_KEYS } from './constants';
 import { inferStructureFromGraph } from './init';
 import { normalizeHexColor } from './utils';
-import type { GridStrokeInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
+import type { AssistLineInjectionStyle, GridStrokeInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
 
 // ==========================================
 // DATA LAYER (저장/로드 핵심 로직)
@@ -73,6 +73,18 @@ function normalizeGridStrokeStyle(value: unknown): GridStrokeInjectionStyle | nu
         ...(side || {}),
         enableIndividualStroke,
         sides
+    };
+}
+
+function normalizeAssistLineStyle(value: unknown): AssistLineInjectionStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as AssistLineInjectionStyle;
+    const color = normalizeHexColor(source.color);
+    const thickness = normalizeThickness(source.thickness);
+    if (!color && thickness === undefined) return null;
+    return {
+        color: color || undefined,
+        thickness
     };
 }
 
@@ -165,6 +177,7 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     const cellBottomStyle = normalizeSideStrokeStyle(msg.cellBottomStyle);
     const tabRightStyle = normalizeSideStrokeStyle(msg.tabRightStyle);
     const gridContainerStyle = normalizeGridStrokeStyle(msg.gridContainerStyle);
+    const assistLineStyle = normalizeAssistLineStyle(msg.assistLineStyle);
 
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE,
@@ -177,6 +190,10 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE,
         gridContainerStyle ? JSON.stringify(gridContainerStyle) : ''
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE,
+        assistLineStyle ? JSON.stringify(assistLineStyle) : ''
     );
 }
 

@@ -99,5 +99,7 @@ export const ui = {
     get styleGridSideTopInput() { return byId<HTMLInputElement>('style-grid-side-top'); },
     get styleGridSideRightInput() { return byId<HTMLInputElement>('style-grid-side-right'); },
     get styleGridSideBottomInput() { return byId<HTMLInputElement>('style-grid-side-bottom'); },
-    get styleGridSideLeftInput() { return byId<HTMLInputElement>('style-grid-side-left'); }
+    get styleGridSideLeftInput() { return byId<HTMLInputElement>('style-grid-side-left'); },
+    get styleAssistLineColorInput() { return byId<HTMLInputElement>('style-assist-line-color'); },
+    get styleAssistLineThicknessInput() { return byId<HTMLInputElement>('style-assist-line-thickness'); }
 };

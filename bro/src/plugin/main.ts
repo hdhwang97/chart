@@ -1,7 +1,7 @@
 import { VARIANT_MAPPING, PLUGIN_DATA_KEYS } from './constants';
 import { saveChartData } from './data-layer';
 import { extractStyleFromNode } from './style';
-import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, getGraphHeight } from './drawing/shared';
+import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, getGraphHeight, applyColumnXEmptyAlign, applyColumnXEmptyLabels } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
@@ -165,6 +165,8 @@ figma.ui.onmessage = async (msg) => {
             rawYMaxAuto,
             assistLineVisible,
             assistLineEnabled,
+            assistLineStyle,
+            xAxisLabels,
             rowStrokeStyles,
             colStrokeStyle,
             cellBottomStyle,
@@ -255,13 +257,26 @@ figma.ui.onmessage = async (msg) => {
             markRatio,
             rowColors: normalizeRowColors(rowColors),
             assistLineVisible,
-            assistLineEnabled
+            assistLineEnabled,
+            assistLineStyle
         };
 
         if (type === "bar") applyBar(drawConfig, H, targetNode);
         else if (type === "line") applyLine(drawConfig, H, targetNode);
         else if (type === "stackedBar" || type === "stacked") applyStackedBar(drawConfig, H, targetNode);
         applyAssistLines(drawConfig, targetNode, H);
+
+        const xEmptyAlign: 'center' | 'right' =
+            type === 'line'
+                ? 'right'
+                : 'center';
+        const xEmptyAlignResult = applyColumnXEmptyAlign(targetNode, xEmptyAlign);
+        console.log('[chart-plugin][x-empty-align]', { type, align: xEmptyAlign, ...xEmptyAlignResult });
+        const xEmptyLabelResult = applyColumnXEmptyLabels(
+            targetNode,
+            Array.isArray(xAxisLabels) ? xAxisLabels : []
+        );
+        console.log('[chart-plugin][x-empty-label]', { type, ...xEmptyLabelResult });
 
         const strokeInjectionResult = applyStrokeInjection(targetNode, {
             cellBottomStyle,
@@ -301,11 +316,12 @@ figma.ui.onmessage = async (msg) => {
             strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
             colStrokeStyle: styleInfo.colStrokeStyle || null,
             chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
+            assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
             rowStrokeStyles: styleInfo.rowStrokeStyles || []
         };
 
-        figma.ui.postMessage({ type: 'style_extracted', payload: stylePayload });
+        figma.ui.postMessage({ type: 'style_extracted', source: 'generate_apply', payload: stylePayload });
 
         if (msg.type === 'generate') {
             figma.notify("Chart Generated!");
@@ -383,11 +399,12 @@ figma.ui.onmessage = async (msg) => {
             strokeWidth: resolveStrokeWidthForUi(node, undefined, styleInfo.strokeWidth),
             colStrokeStyle: styleInfo.colStrokeStyle || null,
             chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
+            assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
             rowStrokeStyles: styleInfo.rowStrokeStyles || []
         };
 
-        figma.ui.postMessage({ type: 'style_extracted', payload: payload });
+        figma.ui.postMessage({ type: 'style_extracted', source: 'extract_style', payload: payload });
         figma.notify("Style Extracted!");
     }
 };

@@ -24,6 +24,22 @@ function parseOptionalNumber(value: string): number | null {
     return Number.isFinite(n) ? n : null;
 }
 
+function collectGridHeaderLabels(): string[] {
+    const grid = ui.gridContainer;
+    if (state.chartType === 'stackedBar') {
+        const nodes = Array.from(grid.querySelectorAll<HTMLDivElement>('div[data-header-label]'))
+            .filter((node) => /^G\d+$/i.test((node.dataset.headerLabel || '').trim()));
+        return nodes
+            .map((node) => (node.dataset.headerLabel || '').trim())
+            .filter((label) => label.length > 0);
+    }
+
+    const nodes = Array.from(grid.querySelectorAll<HTMLDivElement>('.col-header[data-header-label]'));
+    return nodes
+        .map((node) => (node.dataset.headerLabel || '').trim())
+        .filter((label) => label.length > 0);
+}
+
 export function goToStep(step: number) {
     state.currentStep = step;
 
@@ -204,6 +220,7 @@ export function submitData() {
         mode: state.dataMode,
         values: drawingValues,
         rawValues: rawValues,
+        xAxisLabels: collectGridHeaderLabels(),
         cols: state.cols,
         rows: state.rows,
         cellCount: state.cellCount,

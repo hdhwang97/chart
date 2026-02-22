@@ -12,6 +12,22 @@ declare const d3: any;
 let lastStylePayload: any = null;
 let dataTabRenderer: (() => void) | null = null;
 
+function buildPreviewStyleFromState() {
+    return {
+        chartType: state.chartType || 'bar',
+        markNum: state.chartType === 'stackedBar' ? state.groupStructure : state.rows,
+        yCount: state.cellCount,
+        colCount: state.cols,
+        markRatio: state.markRatio,
+        rowColors: state.rowColors,
+        strokeWidth: state.strokeWidth,
+        colStrokeStyle: state.colStrokeStyle || null,
+        rowStrokeStyles: state.rowStrokeStyles || [],
+        cornerRadius: 0,
+        colors: state.rowColors
+    };
+}
+
 function strokeColor(stroke: StrokeStyleSnapshot | null, fallback = '#E5E7EB') {
     return stroke?.color || fallback;
 }
@@ -135,6 +151,57 @@ function applyStrokeExtras(selection: any, stroke: StrokeStyleSnapshot | null) {
     }
 }
 
+function getDraftLineStroke(target: 'cellBottom' | 'tabRight'): StrokeStyleSnapshot | null {
+    const draft = target === 'cellBottom' ? state.styleInjectionDraft.cellBottom : state.styleInjectionDraft.tabRight;
+    return {
+        color: draft.color,
+        weight: draft.visible ? draft.thickness : 0
+    };
+}
+
+function drawGridContainerBorder(g: any, w: number, h: number) {
+    const grid = state.styleInjectionDraft.gridContainer;
+    const thickness = grid.visible ? grid.thickness : 0;
+    if (thickness <= 0) return;
+
+    if (grid.sides.top) {
+        g.append('line')
+            .attr('x1', 0)
+            .attr('x2', w)
+            .attr('y1', 0)
+            .attr('y2', 0)
+            .attr('stroke', grid.color)
+            .attr('stroke-width', thickness);
+    }
+    if (grid.sides.right) {
+        g.append('line')
+            .attr('x1', w)
+            .attr('x2', w)
+            .attr('y1', 0)
+            .attr('y2', h)
+            .attr('stroke', grid.color)
+            .attr('stroke-width', thickness);
+    }
+    if (grid.sides.bottom) {
+        g.append('line')
+            .attr('x1', 0)
+            .attr('x2', w)
+            .attr('y1', h)
+            .attr('y2', h)
+            .attr('stroke', grid.color)
+            .attr('stroke-width', thickness);
+    }
+    if (grid.sides.left) {
+        g.append('line')
+            .attr('x1', 0)
+            .attr('x2', 0)
+            .attr('y1', 0)
+            .attr('y2', h)
+            .attr('stroke', grid.color)
+            .attr('stroke-width', thickness);
+    }
+}
+
 function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
@@ -161,7 +228,10 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
 }
 
 function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: number, colStroke: StrokeStyleSnapshot | null, rowStrokes: RowStrokeStyle[], xGuidePositions?: number[]) {
-    if (colStroke && colCount > 0) {
+    const tabRightStroke = getDraftLineStroke('tabRight') || colStroke;
+    const cellBottomStroke = getDraftLineStroke('cellBottom');
+
+    if (tabRightStroke && colCount > 0) {
         if (xGuidePositions && xGuidePositions.length > 0) {
             xGuidePositions.forEach((x) => {
                 const line = g.append('line')
@@ -169,7 +239,7 @@ function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: 
                     .attr('x2', x)
                     .attr('y1', 0)
                     .attr('y2', h);
-                applyStroke(line, colStroke, '#E5E7EB', 1);
+                applyStroke(line, tabRightStroke, '#E5E7EB', 1);
                 line.attr('opacity', 0.35);
             });
         } else {
@@ -180,7 +250,7 @@ function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: 
                     .attr('x2', c * step)
                     .attr('y1', 0)
                     .attr('y2', h);
-                applyStroke(line, colStroke, '#E5E7EB', 1);
+                applyStroke(line, tabRightStroke, '#E5E7EB', 1);
                 line.attr('opacity', 0.35);
             }
         }
@@ -189,7 +259,7 @@ function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: 
     if (yCellCount > 0) {
         const step = h / yCellCount;
         for (let r = 0; r <= yCellCount; r++) {
-            const stroke = getRowStroke(r, rowStrokes);
+            const stroke = cellBottomStroke || getRowStroke(r, rowStrokes);
             const line = g.append('line')
                 .attr('x1', 0)
                 .attr('x2', w)
@@ -238,13 +308,12 @@ export function switchTab(tab: 'data' | 'style' | 'export') {
         stepStyle.classList.remove('active');
         stepExport.classList.add('active');
 
+        const previewPayload = lastStylePayload || buildPreviewStyleFromState();
+        renderD3Preview(previewPayload);
+        updateCodeOutput(previewPayload);
+
         // Request style extraction from plugin
         parent.postMessage({ pluginMessage: { type: 'extract_style' } }, '*');
-
-        if (lastStylePayload) {
-            renderD3Preview(lastStylePayload);
-            updateCodeOutput(lastStylePayload);
-        }
     }
 }
 
@@ -255,9 +324,9 @@ export function handleStyleExtracted(payload: any) {
 }
 
 export function refreshExportPreview() {
-    if (!lastStylePayload) return;
-    renderD3Preview(lastStylePayload);
-    updateCodeOutput(lastStylePayload);
+    const previewPayload = lastStylePayload || buildPreviewStyleFromState();
+    renderD3Preview(previewPayload);
+    updateCodeOutput(previewPayload);
 }
 
 function renderD3Preview(style: any) {
@@ -418,6 +487,8 @@ function renderD3Preview(style: any) {
             }
         });
     }
+
+    drawGridContainerBorder(g, w, h);
 }
 
 function updateCodeOutput(style: any) {

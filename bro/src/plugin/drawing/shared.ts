@@ -139,3 +139,95 @@ export function applyYAxis(node: SceneNode, cellCount: number, payload: any) {
         }
     });
 }
+
+export function applyColumnXEmptyAlign(graph: SceneNode, align: 'center' | 'right') {
+    const columns = collectColumns(graph);
+    const result = { candidates: columns.length, applied: 0, skipped: 0 };
+
+    columns.forEach((col) => {
+        const target = findColumnXEmptyInstance(col.node);
+
+        if (!target) {
+            result.skipped += 1;
+            return;
+        }
+
+        const changed =
+            setVariantProperty(target, 'align', align)
+            || setVariantProperty(target, 'Align', align);
+
+        if (changed) result.applied += 1;
+        else result.skipped += 1;
+    });
+
+    return result;
+}
+
+function findColumnXEmptyInstance(colNode: SceneNode): InstanceNode | null {
+    let target: InstanceNode | null = null;
+
+    if ('children' in colNode) {
+        const direct = (colNode as SceneNode & ChildrenMixin).children.find(
+            (child) => child.name === 'x-empty' && child.type === 'INSTANCE'
+        );
+        if (direct && direct.type === 'INSTANCE') {
+            target = direct;
+        }
+    }
+
+    if (!target) {
+        traverse(colNode, (node) => {
+            if (target) return;
+            if (node.name === 'x-empty' && node.type === 'INSTANCE') {
+                target = node;
+            }
+        });
+    }
+
+    return target;
+}
+
+export function applyColumnXEmptyLabels(graph: SceneNode, labels: string[]) {
+    const columns = collectColumns(graph);
+    const result = { candidates: columns.length, applied: 0, skipped: 0 };
+
+    if (!Array.isArray(labels) || labels.length === 0) {
+        result.skipped = columns.length;
+        return result;
+    }
+
+    columns.forEach((col, colIndex) => {
+        const target = findColumnXEmptyInstance(col.node);
+        const rawLabel = labels[colIndex];
+        const label = typeof rawLabel === 'string' ? rawLabel.trim() : '';
+
+        if (!target || !label) {
+            result.skipped += 1;
+            return;
+        }
+
+        try {
+            const props = target.componentProperties;
+            const propKey =
+                findActualPropKey(props, 'x-label')
+                || findActualPropKey(props, 'x_label')
+                || findActualPropKey(props, 'X-label')
+                || findActualPropKey(props, 'X_label');
+            if (!propKey) {
+                result.skipped += 1;
+                return;
+            }
+
+            if (props[propKey].value !== label) {
+                target.setProperties({ [propKey]: label });
+                result.applied += 1;
+            } else {
+                result.skipped += 1;
+            }
+        } catch {
+            result.skipped += 1;
+        }
+    });
+
+    return result;
+}

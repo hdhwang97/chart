@@ -13,7 +13,7 @@ import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { getGraphHeight } from './drawing/shared';
 import { resolveEffectiveYRange } from './drawing/y-range';
-import type { GridStrokeInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
+import type { AssistLineInjectionStyle, GridStrokeInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
 
 // ==========================================
 // COMPONENT DISCOVERY
@@ -76,6 +76,18 @@ function parseSavedGridStyleFromNode(node: SceneNode, key: string): GridStrokeIn
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object') return null;
         return parsed as GridStrokeInjectionStyle;
+    } catch {
+        return null;
+    }
+}
+
+function parseSavedAssistLineStyleFromNode(node: SceneNode, key: string): AssistLineInjectionStyle | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed as AssistLineInjectionStyle;
     } catch {
         return null;
     }
@@ -221,6 +233,7 @@ export async function initPluginUI(
             rowColors,
             assistLineVisible,
             assistLineEnabled,
+            assistLineStyle: parseSavedAssistLineStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE),
             reason: opts?.reason || 'auto-resize'
         };
 
@@ -245,6 +258,7 @@ export async function initPluginUI(
     const savedCellBottomStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
     const savedTabRightStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE);
     const savedGridContainerStyle = parseSavedGridStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE);
+    const savedAssistLineStyle = parseSavedAssistLineStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE);
     const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
     const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors);
 
@@ -270,9 +284,11 @@ export async function initPluginUI(
         savedCellBottomStyle,
         savedTabRightStyle,
         savedGridContainerStyle,
+        savedAssistLineStyle,
 
         colStrokeStyle: styleInfo.colStrokeStyle || null,
         chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
+        assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
         cellStrokeStyles: styleInfo.cellStrokeStyles || [],
         rowStrokeStyles: styleInfo.rowStrokeStyles || []
     });

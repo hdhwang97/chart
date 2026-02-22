@@ -16,6 +16,11 @@ export type StyleInjectionDraftItem = {
     visible: boolean;
 };
 
+export type AssistLineStyleInjectionDraftItem = {
+    color: string;
+    thickness: number;
+};
+
 export type GridStyleInjectionDraftItem = StyleInjectionDraftItem & {
     sides: {
         top: boolean;
@@ -29,6 +34,7 @@ export type StyleInjectionDraft = {
     cellBottom: StyleInjectionDraftItem;
     tabRight: StyleInjectionDraftItem;
     gridContainer: GridStyleInjectionDraftItem;
+    assistLine: AssistLineStyleInjectionDraftItem;
 };
 
 export const DEFAULT_STYLE_INJECTION_ITEM: StyleInjectionDraftItem = {
@@ -43,6 +49,10 @@ export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
     gridContainer: {
         ...DEFAULT_STYLE_INJECTION_ITEM,
         sides: { top: true, right: true, bottom: true, left: true }
+    },
+    assistLine: {
+        color: '#E5E7EB',
+        thickness: 1
     }
 };
 
@@ -74,6 +84,10 @@ export const state = {
         gridContainer: {
             ...DEFAULT_STYLE_INJECTION_ITEM,
             sides: { top: true, right: true, bottom: true, left: true }
+        },
+        assistLine: {
+            color: '#E5E7EB',
+            thickness: 1
         }
     } as StyleInjectionDraft,
     styleInjectionDirty: false

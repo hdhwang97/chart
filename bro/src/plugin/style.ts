@@ -170,6 +170,37 @@ function collectLineStrokeWeights(layer: SceneNode): number[] {
     return weights;
 }
 
+function parseAssistMetricFromName(name: string): 'min' | 'max' | 'avg' | null {
+    const lower = name.toLowerCase();
+    if (!lower.includes('asst_line')) return null;
+    if (lower.includes('min') || lower.includes('최소')) return 'min';
+    if (lower.includes('max') || lower.includes('최대')) return 'max';
+    if (lower.includes('avg') || lower.includes('average') || lower.includes('평균')) return 'avg';
+    return null;
+}
+
+export function extractAssistLineStrokeStyle(graph: SceneNode): StrokeStyleSnapshot | null {
+    let firstAssistNode: SceneNode | null = null;
+    traverse(graph, (node) => {
+        if (firstAssistNode) return;
+        if (!parseAssistMetricFromName(node.name)) return;
+        firstAssistNode = node;
+    });
+    if (!firstAssistNode) return null;
+
+    const direct = getStrokeSnapshot(firstAssistNode);
+    if (direct) return direct;
+
+    let nestedStroke: StrokeStyleSnapshot | null = null;
+    traverse(firstAssistNode, (node) => {
+        if (nestedStroke) return;
+        if (node.id === firstAssistNode!.id) return;
+        const snapshot = getStrokeSnapshot(node);
+        if (snapshot) nestedStroke = snapshot;
+    });
+    return nestedStroke;
+}
+
 export function extractColStrokeStyle(graph: SceneNode): StrokeStyleSnapshot | null {
     const columns = collectColumns(graph);
     for (const col of columns) {
@@ -420,6 +451,7 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
 
     const colStrokeStyle = extractColStrokeStyle(node);
     const chartContainerStrokeStyle = extractChartContainerStrokeStyle(node);
+    const assistLineStrokeStyle = extractAssistLineStrokeStyle(node);
     const cellStrokeStyles = extractCellStrokeStyles(node);
     const inferredRowCount = Math.max(0, ...cellStrokeStyles.map(c => c.row + 1));
     const rowStrokeStyles = deriveRowStrokeStyles(cellStrokeStyles, inferredRowCount, cols.length);
@@ -431,6 +463,7 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
         strokeWidth,
         colStrokeStyle,
         chartContainerStrokeStyle,
+        assistLineStrokeStyle,
         cellStrokeStyles,
         rowStrokeStyles
     };

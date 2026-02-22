@@ -53,6 +53,7 @@ export const PLUGIN_DATA_KEYS = {
     LAST_STROKE_WIDTH: "lastStrokeWidth",
     LAST_ASSIST_LINE_ENABLED: "lastAssistLineEnabled",
     LAST_ASSIST_LINE_VISIBLE: "lastAssistLineVisible",
+    LAST_ASSIST_LINE_STYLE: "lastAssistLineStyle",
     LAST_CELL_BOTTOM_STYLE: "lastCellBottomStyle",
     LAST_TAB_RIGHT_STYLE: "lastTabRightStyle",
     LAST_GRID_CONTAINER_STYLE: "lastGridContainerStyle"

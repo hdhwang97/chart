@@ -29,6 +29,11 @@ export type SideStrokeInjectionStyle = {
     visible?: boolean;
 };
 
+export type AssistLineInjectionStyle = {
+    color?: string;
+    thickness?: number;
+};
+
 export type GridStrokeInjectionStyle = {
     color?: string;
     thickness?: number;
@@ -46,4 +51,5 @@ export type StrokeInjectionPayload = {
     cellBottomStyle?: SideStrokeInjectionStyle;
     tabRightStyle?: SideStrokeInjectionStyle;
     gridContainerStyle?: GridStrokeInjectionStyle;
+    assistLineStyle?: AssistLineInjectionStyle;
 };

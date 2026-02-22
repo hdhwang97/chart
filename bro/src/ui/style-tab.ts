@@ -1,5 +1,6 @@
 import { ui } from './dom';
 import {
+    type AssistLineStyleInjectionDraftItem,
     DEFAULT_STYLE_INJECTION_DRAFT,
     DEFAULT_STYLE_INJECTION_ITEM,
     type GridStyleInjectionDraftItem,
@@ -9,6 +10,7 @@ import {
     normalizeHexColorInput
 } from './state';
 import type {
+    AssistLineInjectionStyle,
     GridStrokeInjectionStyle,
     RowStrokeStyle,
     SideStrokeInjectionStyle,
@@ -26,12 +28,14 @@ type SavedStylePayload = {
     savedCellBottomStyle?: unknown;
     savedTabRightStyle?: unknown;
     savedGridContainerStyle?: unknown;
+    savedAssistLineStyle?: unknown;
 };
 
 type ExtractedStylePayload = {
     rowStrokeStyles?: unknown;
     colStrokeStyle?: unknown;
     chartContainerStrokeStyle?: unknown;
+    assistLineStrokeStyle?: unknown;
 };
 
 let styleColorPicker: any = null;
@@ -53,7 +57,8 @@ function cloneDraft(draft: StyleInjectionDraft): StyleInjectionDraft {
         gridContainer: {
             ...draft.gridContainer,
             sides: { ...draft.gridContainer.sides }
-        }
+        },
+        assistLine: { ...draft.assistLine }
     };
 }
 
@@ -107,6 +112,18 @@ function normalizeGridStyle(value: unknown): GridStrokeInjectionStyle | null {
     };
 }
 
+function normalizeAssistLineStyle(value: unknown): AssistLineInjectionStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as AssistLineInjectionStyle;
+    const color = normalizeHexColorInput(source.color);
+    const thickness = Number.isFinite(Number(source.thickness)) ? clampThickness(source.thickness, DEFAULT_STYLE_INJECTION_DRAFT.assistLine.thickness) : undefined;
+    if (!color && thickness === undefined) return null;
+    return {
+        color: color || undefined,
+        thickness
+    };
+}
+
 function draftItemFromSideStyle(style: SideStrokeInjectionStyle | null, fallback: StyleInjectionDraftItem): StyleInjectionDraftItem {
     if (!style) return { ...fallback };
     const color = normalizeHexColorInput(style.color) || fallback.color;
@@ -135,6 +152,17 @@ function draftItemFromGridStyle(style: GridStrokeInjectionStyle | null, fallback
         thickness: visible ? baseThickness : 0,
         visible,
         sides
+    };
+}
+
+function draftItemFromAssistLineStyle(
+    style: AssistLineInjectionStyle | null,
+    fallback: AssistLineStyleInjectionDraftItem
+): AssistLineStyleInjectionDraftItem {
+    if (!style) return { ...fallback };
+    return {
+        color: normalizeHexColorInput(style.color) || fallback.color,
+        thickness: clampThickness(style.thickness, fallback.thickness)
     };
 }
 
@@ -190,6 +218,19 @@ function asStrokeSnapshot(value: unknown): StrokeStyleSnapshot | null {
     return value as StrokeStyleSnapshot;
 }
 
+function assistLineStyleFromSnapshot(stroke: StrokeStyleSnapshot | null): AssistLineInjectionStyle | null {
+    if (!stroke) return null;
+    const color = normalizeHexColorInput(stroke.color);
+    const thickness = typeof stroke.weight === 'number'
+        ? clampThickness(stroke.weight, DEFAULT_STYLE_INJECTION_DRAFT.assistLine.thickness)
+        : undefined;
+    if (!color && thickness === undefined) return null;
+    return {
+        color: color || undefined,
+        thickness
+    };
+}
+
 function setInputError(input: HTMLInputElement, invalid: boolean) {
     if (invalid) input.classList.add('style-input-error');
     else input.classList.remove('style-input-error');
@@ -199,6 +240,7 @@ function resolveStyleColorLabel(input: HTMLInputElement): string {
     if (input === ui.styleCellBottomColorInput) return 'Cell Bottom';
     if (input === ui.styleTabRightColorInput) return 'Tab Right';
     if (input === ui.styleGridColorInput) return 'Grid';
+    if (input === ui.styleAssistLineColorInput) return 'Assist Line';
     return 'Style Color';
 }
 
@@ -314,6 +356,30 @@ function normalizeFromDom(
     };
 }
 
+function normalizeColorThicknessFromDom(
+    colorInput: HTMLInputElement,
+    thicknessInput: HTMLInputElement,
+    fallback: AssistLineStyleInjectionDraftItem
+): { item: AssistLineStyleInjectionDraftItem; colorValid: boolean; thicknessValid: boolean } {
+    const normalizedColor = normalizeHexColorInput(colorInput.value);
+    const colorValid = Boolean(normalizedColor);
+    const color = normalizedColor || fallback.color;
+
+    const thicknessRaw = Number(thicknessInput.value);
+    const thicknessValid = Number.isFinite(thicknessRaw) && Number.isInteger(thicknessRaw) && thicknessRaw >= THICKNESS_MIN && thicknessRaw <= THICKNESS_MAX;
+    const thickness = thicknessValid ? thicknessRaw : clampThickness(thicknessRaw, fallback.thickness);
+
+    return {
+        item: { color, thickness },
+        colorValid,
+        thicknessValid
+    };
+}
+
+function emitStyleDraftUpdated() {
+    document.dispatchEvent(new CustomEvent('style-draft-updated'));
+}
+
 export function buildDraftFromPayload(
     saved: SavedStylePayload,
     extracted: ExtractedStylePayload
@@ -321,20 +387,24 @@ export function buildDraftFromPayload(
     const rowStrokeStyles = asRowStrokeStyles(extracted.rowStrokeStyles);
     const colStroke = asStrokeSnapshot(extracted.colStrokeStyle);
     const chartContainerStroke = asStrokeSnapshot(extracted.chartContainerStrokeStyle);
+    const assistLineStroke = asStrokeSnapshot(extracted.assistLineStrokeStyle);
     const rowZeroStroke = resolveRowZeroStroke(rowStrokeStyles);
 
     const extractedCellBottom = sideStyleFromSnapshot(rowZeroStroke, 'bottom');
     const extractedTabRight = sideStyleFromSnapshot(colStroke, 'right');
     const extractedGrid = gridStyleFromSnapshot(chartContainerStroke || colStroke);
+    const extractedAssistLine = assistLineStyleFromSnapshot(assistLineStroke);
 
     const savedCellBottom = normalizeSideStyle(saved.savedCellBottomStyle);
     const savedTabRight = normalizeSideStyle(saved.savedTabRightStyle);
     const savedGrid = normalizeGridStyle(saved.savedGridContainerStyle);
+    const savedAssistLine = normalizeAssistLineStyle(saved.savedAssistLineStyle);
 
     return {
         cellBottom: draftItemFromSideStyle(savedCellBottom || extractedCellBottom, DEFAULT_STYLE_INJECTION_DRAFT.cellBottom),
         tabRight: draftItemFromSideStyle(savedTabRight || extractedTabRight, DEFAULT_STYLE_INJECTION_DRAFT.tabRight),
-        gridContainer: draftItemFromGridStyle(savedGrid || extractedGrid, DEFAULT_STYLE_INJECTION_DRAFT.gridContainer)
+        gridContainer: draftItemFromGridStyle(savedGrid || extractedGrid, DEFAULT_STYLE_INJECTION_DRAFT.gridContainer),
+        assistLine: draftItemFromAssistLineStyle(savedAssistLine || extractedAssistLine, DEFAULT_STYLE_INJECTION_DRAFT.assistLine)
     };
 }
 
@@ -354,6 +424,9 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleGridSideRightInput.checked = draft.gridContainer.sides.right;
     ui.styleGridSideBottomInput.checked = draft.gridContainer.sides.bottom;
     ui.styleGridSideLeftInput.checked = draft.gridContainer.sides.left;
+
+    ui.styleAssistLineColorInput.value = draft.assistLine.color;
+    ui.styleAssistLineThicknessInput.value = String(draft.assistLine.thickness);
 
     if (styleColorPopoverOpen && styleColorTargetInput) {
         updateStyleColorPopoverUi(styleColorTargetInput, styleColorTargetInput.value);
@@ -391,7 +464,12 @@ export function readStyleTabDraft(): StyleInjectionDraft {
     return {
         cellBottom,
         tabRight,
-        gridContainer
+        gridContainer,
+        assistLine: normalizeColorThicknessFromDom(
+            ui.styleAssistLineColorInput,
+            ui.styleAssistLineThicknessInput,
+            state.styleInjectionDraft.assistLine
+        ).item
     };
 }
 
@@ -423,6 +501,11 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
             left: ui.styleGridSideLeftInput.checked
         }
     };
+    const assistLineNorm = normalizeColorThicknessFromDom(
+        ui.styleAssistLineColorInput,
+        ui.styleAssistLineThicknessInput,
+        draft.assistLine
+    );
 
     setInputError(ui.styleCellBottomColorInput, !cellBottomNorm.colorValid);
     setInputError(ui.styleCellBottomThicknessInput, !cellBottomNorm.thicknessValid);
@@ -430,19 +513,24 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     setInputError(ui.styleTabRightThicknessInput, !tabRightNorm.thicknessValid);
     setInputError(ui.styleGridColorInput, !gridNorm.colorValid);
     setInputError(ui.styleGridThicknessInput, !gridNorm.thicknessValid);
+    setInputError(ui.styleAssistLineColorInput, !assistLineNorm.colorValid);
+    setInputError(ui.styleAssistLineThicknessInput, !assistLineNorm.thicknessValid);
 
     const isValid = cellBottomNorm.colorValid
         && cellBottomNorm.thicknessValid
         && tabRightNorm.colorValid
         && tabRightNorm.thicknessValid
         && gridNorm.colorValid
-        && gridNorm.thicknessValid;
+        && gridNorm.thicknessValid
+        && assistLineNorm.colorValid
+        && assistLineNorm.thicknessValid;
 
     return {
         draft: {
             cellBottom: cellBottomNorm.item,
             tabRight: tabRightNorm.item,
-            gridContainer: normalizedGrid
+            gridContainer: normalizedGrid,
+            assistLine: assistLineNorm.item
         },
         isValid
     };
@@ -471,6 +559,10 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
                 bottom: draft.gridContainer.sides.bottom,
                 left: draft.gridContainer.sides.left
             }
+        },
+        assistLineStyle: {
+            color: draft.assistLine.color,
+            thickness: draft.assistLine.thickness
         }
     };
 }
@@ -511,6 +603,7 @@ export function bindStyleTabEvents() {
         markStyleInjectionDirty();
         const normalized = validateStyleTabDraft(readStyleTabDraft());
         setStyleInjectionDraft(normalized.draft);
+        emitStyleDraftUpdated();
     };
 
     [
@@ -526,13 +619,15 @@ export function bindStyleTabEvents() {
         ui.styleGridSideTopInput,
         ui.styleGridSideRightInput,
         ui.styleGridSideBottomInput,
-        ui.styleGridSideLeftInput
+        ui.styleGridSideLeftInput,
+        ui.styleAssistLineColorInput,
+        ui.styleAssistLineThicknessInput
     ].forEach((input) => {
         input.addEventListener('input', handleChange);
         input.addEventListener('change', handleChange);
     });
 
-    [ui.styleCellBottomColorInput, ui.styleTabRightColorInput, ui.styleGridColorInput].forEach((input) => {
+    [ui.styleCellBottomColorInput, ui.styleTabRightColorInput, ui.styleGridColorInput, ui.styleAssistLineColorInput].forEach((input) => {
         input.addEventListener('focus', () => openStyleColorPopover(input));
         input.addEventListener('click', () => openStyleColorPopover(input));
     });

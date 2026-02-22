@@ -43,6 +43,7 @@ export function renderGrid() {
             gCell.className = 'flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group';
             gCell.style.gridColumn = 'span 1';
             gCell.style.height = '24px';
+            gCell.dataset.headerLabel = `G${gIdx + 1}`;
             const groupControls = state.mode !== 'read'
                 ? `<div class="hidden group-hover:flex items-center gap-0.5 ml-1">
                     <button class="w-3.5 h-3.5 flex items-center justify-center rounded-full bg-primary text-white text-[8px] hover:bg-primary-hover cursor-pointer stacked-add-bar" data-g="${gIdx}">+</button>
@@ -104,6 +105,7 @@ export function renderGrid() {
             const hCell = document.createElement('div');
             hCell.className = 'w-16 h-6 flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group col-header';
             hCell.textContent = `C${c + 1}`;
+            hCell.dataset.headerLabel = `C${c + 1}`;
             hCell.addEventListener('mouseenter', () => highlightPreview('col', c));
             hCell.addEventListener('mouseleave', () => resetPreviewHighlight());
 

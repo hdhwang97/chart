@@ -298,12 +298,14 @@ function handlePluginMessage(msg: any) {
             {
                 savedCellBottomStyle: msg.savedCellBottomStyle,
                 savedTabRightStyle: msg.savedTabRightStyle,
-                savedGridContainerStyle: msg.savedGridContainerStyle
+                savedGridContainerStyle: msg.savedGridContainerStyle,
+                savedAssistLineStyle: msg.savedAssistLineStyle
             },
             {
                 rowStrokeStyles: msg.rowStrokeStyles,
                 colStrokeStyle: msg.colStrokeStyle,
-                chartContainerStrokeStyle: msg.chartContainerStrokeStyle
+                chartContainerStrokeStyle: msg.chartContainerStrokeStyle,
+                assistLineStrokeStyle: msg.assistLineStrokeStyle
             }
         );
 
@@ -345,6 +347,11 @@ function handlePluginMessage(msg: any) {
     }
 
     if (msg.type === 'style_extracted') {
+        if (msg.source === 'extract_style') {
+            handleStyleExtracted(msg.payload);
+            return;
+        }
+
         state.markRatio = normalizeMarkRatioInput(msg.payload?.markRatio);
         if (msg.payload?.strokeWidth !== undefined && Number.isFinite(Number(msg.payload.strokeWidth))) {
             state.strokeWidth = Number(msg.payload.strokeWidth);
@@ -366,7 +373,8 @@ function handlePluginMessage(msg: any) {
         syncStyleTabDraftFromExtracted({
             rowStrokeStyles: msg.payload?.rowStrokeStyles,
             colStrokeStyle: msg.payload?.colStrokeStyle,
-            chartContainerStrokeStyle: msg.payload?.chartContainerStrokeStyle
+            chartContainerStrokeStyle: msg.payload?.chartContainerStrokeStyle,
+            assistLineStrokeStyle: msg.payload?.assistLineStrokeStyle
         });
         renderGrid();
         renderPreview();
@@ -461,6 +469,10 @@ function bindUiEvents() {
         if (e.key === 'Escape' && rowColorPopoverOpen) {
             closeRowColorPopover();
         }
+    });
+    document.addEventListener('style-draft-updated', () => {
+        renderPreview();
+        refreshExportPreview();
     });
 
     // Y axis inputs
