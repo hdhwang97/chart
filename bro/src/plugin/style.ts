@@ -201,6 +201,21 @@ export function extractCellStrokeStyles(graph: SceneNode): CellStrokeStyle[] {
     return cellStyles;
 }
 
+export function extractChartContainerStrokeStyle(graph: SceneNode): StrokeStyleSnapshot | null {
+    if (!('children' in graph)) return null;
+
+    const col = (graph as SceneNode & ChildrenMixin).children.find((child) => child.name === 'col');
+    if (!col || !('children' in col)) return null;
+
+    const chartContainer = (col as SceneNode & ChildrenMixin).children.find((child) => child.name === 'chart_container');
+    if (!chartContainer || !('children' in chartContainer)) return null;
+
+    const styleLayer = (chartContainer as SceneNode & ChildrenMixin).children.find((child) => child.name === 'style');
+    if (!styleLayer) return null;
+
+    return getStrokeSnapshot(styleLayer);
+}
+
 export function deriveRowStrokeStyles(cellStrokeStyles: CellStrokeStyle[], rowCount: number, _colCount: number): RowStrokeStyle[] {
     const bucket = new Map<number, StrokeStyleSnapshot[]>();
     cellStrokeStyles.forEach(item => {
@@ -404,6 +419,7 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
     }
 
     const colStrokeStyle = extractColStrokeStyle(node);
+    const chartContainerStrokeStyle = extractChartContainerStrokeStyle(node);
     const cellStrokeStyles = extractCellStrokeStyles(node);
     const inferredRowCount = Math.max(0, ...cellStrokeStyles.map(c => c.row + 1));
     const rowStrokeStyles = deriveRowStrokeStyles(cellStrokeStyles, inferredRowCount, cols.length);
@@ -414,6 +430,7 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
         cornerRadius,
         strokeWidth,
         colStrokeStyle,
+        chartContainerStrokeStyle,
         cellStrokeStyles,
         rowStrokeStyles
     };

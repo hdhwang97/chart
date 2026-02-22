@@ -13,6 +13,7 @@ import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { getGraphHeight } from './drawing/shared';
 import { resolveEffectiveYRange } from './drawing/y-range';
+import type { GridStrokeInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
 
 // ==========================================
 // COMPONENT DISCOVERY
@@ -54,6 +55,30 @@ function resolveAssistLineEnabledFromNode(node: SceneNode) {
 
 function resolveAssistLineVisibleFromNode(node: SceneNode) {
     return node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
+}
+
+function parseSavedSideStyleFromNode(node: SceneNode, key: string): SideStrokeInjectionStyle | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed as SideStrokeInjectionStyle;
+    } catch {
+        return null;
+    }
+}
+
+function parseSavedGridStyleFromNode(node: SceneNode, key: string): GridStrokeInjectionStyle | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed as GridStrokeInjectionStyle;
+    } catch {
+        return null;
+    }
 }
 
 const DEFAULT_ROW_COLORS = [
@@ -217,6 +242,9 @@ export async function initPluginUI(
     const markRatio = resolveMarkRatioFromNode(node, styleInfo.markRatio);
     const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
+    const savedCellBottomStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
+    const savedTabRightStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE);
+    const savedGridContainerStyle = parseSavedGridStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE);
     const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
     const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors);
 
@@ -239,8 +267,12 @@ export async function initPluginUI(
         markRatio,
         assistLineVisible,
         assistLineEnabled,
+        savedCellBottomStyle,
+        savedTabRightStyle,
+        savedGridContainerStyle,
 
         colStrokeStyle: styleInfo.colStrokeStyle || null,
+        chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
         cellStrokeStyles: styleInfo.cellStrokeStyles || [],
         rowStrokeStyles: styleInfo.rowStrokeStyles || []
     });

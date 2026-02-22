@@ -10,6 +10,42 @@ export const DEFAULT_ROW_COLORS = [
     '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#FB923C'
 ];
 
+export type StyleInjectionDraftItem = {
+    color: string;
+    thickness: number;
+    visible: boolean;
+};
+
+export type GridStyleInjectionDraftItem = StyleInjectionDraftItem & {
+    sides: {
+        top: boolean;
+        right: boolean;
+        bottom: boolean;
+        left: boolean;
+    };
+};
+
+export type StyleInjectionDraft = {
+    cellBottom: StyleInjectionDraftItem;
+    tabRight: StyleInjectionDraftItem;
+    gridContainer: GridStyleInjectionDraftItem;
+};
+
+export const DEFAULT_STYLE_INJECTION_ITEM: StyleInjectionDraftItem = {
+    color: '#E5E7EB',
+    thickness: 1,
+    visible: true
+};
+
+export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
+    cellBottom: { ...DEFAULT_STYLE_INJECTION_ITEM },
+    tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
+    gridContainer: {
+        ...DEFAULT_STYLE_INJECTION_ITEM,
+        sides: { top: true, right: true, bottom: true, left: true }
+    }
+};
+
 export const state = {
     rows: 3,
     cols: 3,
@@ -31,7 +67,16 @@ export const state = {
     assistLineEnabled: { min: false, max: false, avg: false },
     colStrokeStyle: null as StrokeStyleSnapshot | null,
     cellStrokeStyles: [] as CellStrokeStyle[],
-    rowStrokeStyles: [] as RowStrokeStyle[]
+    rowStrokeStyles: [] as RowStrokeStyle[],
+    styleInjectionDraft: {
+        cellBottom: { ...DEFAULT_STYLE_INJECTION_ITEM },
+        tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
+        gridContainer: {
+            ...DEFAULT_STYLE_INJECTION_ITEM,
+            sides: { top: true, right: true, bottom: true, left: true }
+        }
+    } as StyleInjectionDraft,
+    styleInjectionDirty: false
 };
 
 export const CHART_ICONS: { [key: string]: string } = {

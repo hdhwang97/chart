@@ -13,6 +13,7 @@ function byId<T extends HTMLElement>(id: string): T {
 export const ui = {
     get step1() { return byId<HTMLElement>('step-1'); },
     get step2() { return byId<HTMLElement>('step-2'); },
+    get stepStyle() { return byId<HTMLElement>('step-style'); },
     get backBtn() { return byId<HTMLButtonElement>('back-btn'); },
     get mainCta() { return byId<HTMLButtonElement>('main-cta'); },
     get editModeBtn() { return byId<HTMLButtonElement>('edit-mode-btn'); },
@@ -20,6 +21,7 @@ export const ui = {
     get chartTypeWrapper() { return byId<HTMLElement>('chart-type-wrapper'); },
     get chartTypeIcon() { return byId<HTMLElement>('chart-type-icon'); },
     get chartTypeDisplay() { return byId<HTMLElement>('chart-type-display'); },
+    get tabStyleBtn() { return byId<HTMLButtonElement>('tab-style'); },
 
     get settingColInput() { return byId<HTMLInputElement>('setting-col-input'); },
     get settingCellInput() { return byId<HTMLInputElement>('setting-cell-input'); },
@@ -78,5 +80,24 @@ export const ui = {
     get rowColorPopoverTitle() { return byId<HTMLElement>('row-color-popover-title'); },
     get rowColorPreview() { return byId<HTMLElement>('row-color-preview'); },
     get rowColorWheel() { return byId<HTMLElement>('row-color-wheel'); },
-    get rowColorHexInput() { return byId<HTMLInputElement>('row-color-hex-input'); }
+    get rowColorHexInput() { return byId<HTMLInputElement>('row-color-hex-input'); },
+    get styleColorPopover() { return byId<HTMLElement>('style-color-popover'); },
+    get styleColorPopoverTitle() { return byId<HTMLElement>('style-color-popover-title'); },
+    get styleColorPreview() { return byId<HTMLElement>('style-color-preview'); },
+    get styleColorWheel() { return byId<HTMLElement>('style-color-wheel'); },
+    get styleColorHexInput() { return byId<HTMLInputElement>('style-color-hex-input'); },
+
+    get styleCellBottomColorInput() { return byId<HTMLInputElement>('style-cell-bottom-color'); },
+    get styleCellBottomThicknessInput() { return byId<HTMLInputElement>('style-cell-bottom-thickness'); },
+    get styleCellBottomVisibleInput() { return byId<HTMLInputElement>('style-cell-bottom-visible'); },
+    get styleTabRightColorInput() { return byId<HTMLInputElement>('style-tab-right-color'); },
+    get styleTabRightThicknessInput() { return byId<HTMLInputElement>('style-tab-right-thickness'); },
+    get styleTabRightVisibleInput() { return byId<HTMLInputElement>('style-tab-right-visible'); },
+    get styleGridColorInput() { return byId<HTMLInputElement>('style-grid-color'); },
+    get styleGridThicknessInput() { return byId<HTMLInputElement>('style-grid-thickness'); },
+    get styleGridVisibleInput() { return byId<HTMLInputElement>('style-grid-visible'); },
+    get styleGridSideTopInput() { return byId<HTMLInputElement>('style-grid-side-top'); },
+    get styleGridSideRightInput() { return byId<HTMLInputElement>('style-grid-side-right'); },
+    get styleGridSideBottomInput() { return byId<HTMLInputElement>('style-grid-side-bottom'); },
+    get styleGridSideLeftInput() { return byId<HTMLInputElement>('style-grid-side-left'); }
 };

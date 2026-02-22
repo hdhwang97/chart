@@ -69,6 +69,9 @@
                 <button id="tab-data"
                     class="px-3 py-0.5 text-xs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer"
                     onclick="switchTab('data')">Data</button>
+                <button id="tab-style"
+                    class="px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer"
+                    onclick="switchTab('style')">Style</button>
                 <button id="tab-export"
                     class="px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer"
                     onclick="switchTab('export')">Export</button>
@@ -320,6 +323,93 @@
             </div>
         </div>
     </div>
+    <div id="step-style" class="step flex-col gap-3 w-full p-3 h-full overflow-hidden bg-surface">
+        <div id="style-panel" class="bg-white border border-border rounded-md p-3 flex flex-col gap-3 shadow-sm">
+            <div class="flex items-center justify-between">
+                <h2 class="text-xs font-semibold text-text-sub m-0">Style Injection</h2>
+                <span class="text-[10px] text-gray-400">Apply로 Figma에 반영됩니다.</span>
+            </div>
+
+            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Cell Bottom</div>
+                <div class="grid grid-cols-3 gap-2 items-end">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Color (HEX)</span>
+                        <input id="style-cell-bottom-color" type="text" value="#E5E7EB"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Thickness</span>
+                        <input id="style-cell-bottom-thickness" type="number" value="1" min="0" max="20" step="1"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                    </label>
+                    <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
+                        <input id="style-cell-bottom-visible" type="checkbox" class="cursor-pointer" checked />
+                        <span>Visible</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Tab Right</div>
+                <div class="grid grid-cols-3 gap-2 items-end">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Color (HEX)</span>
+                        <input id="style-tab-right-color" type="text" value="#E5E7EB"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Thickness</span>
+                        <input id="style-tab-right-thickness" type="number" value="1" min="0" max="20" step="1"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                    </label>
+                    <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
+                        <input id="style-tab-right-visible" type="checkbox" class="cursor-pointer" checked />
+                        <span>Visible</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Grid (Chart Container)</div>
+                <div class="grid grid-cols-3 gap-2 items-end">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Color (HEX)</span>
+                        <input id="style-grid-color" type="text" value="#E5E7EB"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Thickness</span>
+                        <input id="style-grid-thickness" type="number" value="1" min="0" max="20" step="1"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                    </label>
+                    <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
+                        <input id="style-grid-visible" type="checkbox" class="cursor-pointer" checked />
+                        <span>Visible</span>
+                    </label>
+                </div>
+                <div class="flex items-center gap-3 text-xxs text-text-sub">
+                    <span class="font-medium">Individual Sides</span>
+                    <label class="flex items-center gap-1 select-none">
+                        <input id="style-grid-side-top" type="checkbox" class="cursor-pointer" checked />
+                        <span>Top</span>
+                    </label>
+                    <label class="flex items-center gap-1 select-none">
+                        <input id="style-grid-side-right" type="checkbox" class="cursor-pointer" checked />
+                        <span>Right</span>
+                    </label>
+                    <label class="flex items-center gap-1 select-none">
+                        <input id="style-grid-side-bottom" type="checkbox" class="cursor-pointer" checked />
+                        <span>Bottom</span>
+                    </label>
+                    <label class="flex items-center gap-1 select-none">
+                        <input id="style-grid-side-left" type="checkbox" class="cursor-pointer" checked />
+                        <span>Left</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
     <div id="step-export" class="step flex-col gap-3 w-full p-3 h-full overflow-hidden bg-surface">
         <div id="export-preview-panel" class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm h-1/2 shrink-0">
             <div class="flex justify-between items-center">
@@ -381,6 +471,43 @@
         </label>
     </div>
 
+    <div id="style-color-popover"
+        class="hidden fixed z-[80] w-64 rounded border border-border bg-white shadow-lg p-2 text-xxs text-text">
+        <div class="flex items-center justify-between mb-2">
+            <span id="style-color-popover-title" class="font-semibold text-text-sub">Style Color</span>
+            <span id="style-color-preview" class="w-4 h-4 rounded border border-border block"></span>
+        </div>
+        <div id="style-color-wheel" class="style-color-wheel mb-2"></div>
+        <label class="block">
+            <span class="block text-[10px] text-text-sub mb-0.5">Hex</span>
+            <input id="style-color-hex-input" type="text" value="#E5E7EB"
+                class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+        </label>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const panels = document.querySelectorAll('[id$="-panel"]');
+
+            panels.forEach((panel) => {
+                let lastHoveredId = '';
+
+                panel.addEventListener('mouseover', (event) => {
+                    if (!(event.target instanceof Element)) return;
+                    const hovered = event.target.closest('[id]');
+                    if (!hovered || !panel.contains(hovered) || !hovered.id) return;
+                    if (hovered.id === lastHoveredId) return;
+
+                    lastHoveredId = hovered.id;
+                    console.log(`[hover][${panel.id}] ${hovered.id}`);
+                });
+
+                panel.addEventListener('mouseleave', () => {
+                    lastHoveredId = '';
+                });
+            });
+        });
+    </script>
     <script type="module" src="./main.ts"></script>
 </body>
 

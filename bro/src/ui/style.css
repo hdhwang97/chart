@@ -57,10 +57,26 @@ input[type=number]::-webkit-outer-spin-button {
     background-color: #FEF2F2 !important;
 }
 
+.style-input-error {
+    border-color: #EF4444 !important;
+    background-color: #FEF2F2 !important;
+}
+
 .row-color-wheel {
     width: 100%;
     display: flex;
     justify-content: center;
+}
+
+.style-color-wheel {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.style-color-hex-error {
+    border-color: #EF4444 !important;
+    background-color: #FEF2F2 !important;
 }
 
 .read-panel-disabled {

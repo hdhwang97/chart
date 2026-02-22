@@ -6,6 +6,7 @@ import { updateModeButtonState, checkCtaValidation, setMode, syncYMaxValidationU
 import { updateCsvUi } from './csv';
 import { getEffectiveYDomain } from './y-range';
 import { syncMarkCountFromRows } from './data-ops';
+import { hydrateStyleTab, readStyleTabDraft, setStyleInjectionDraft, toStrokeInjectionPayload, validateStyleTabDraft } from './style-tab';
 
 // ==========================================
 // STEP / TYPE SELECTION / SUBMISSION
@@ -29,7 +30,9 @@ export function goToStep(step: number) {
     const allSteps = document.querySelectorAll('.step');
     allSteps.forEach(s => s.classList.remove('active'));
 
+    const stepStyle = document.getElementById('step-style')!;
     const stepExport = document.getElementById('step-export')!;
+    stepStyle.classList.remove('active');
     stepExport.classList.remove('active');
 
     if (step === 1) {
@@ -186,6 +189,16 @@ export function submitData() {
         ui.settingYMax.value = String(effectiveYMax);
     }
 
+    const styleDraft = readStyleTabDraft();
+    const validatedStyleDraft = validateStyleTabDraft(styleDraft);
+    setStyleInjectionDraft(validatedStyleDraft.draft);
+    if (!validatedStyleDraft.isValid) {
+        hydrateStyleTab(validatedStyleDraft.draft);
+    }
+    const explicitStylePayload = validatedStyleDraft.isValid
+        ? toStrokeInjectionPayload(validatedStyleDraft.draft)
+        : null;
+
     const payload = {
         type: state.chartType,
         mode: state.dataMode,
@@ -208,7 +221,10 @@ export function submitData() {
             min: state.assistLineEnabled.min,
             max: state.assistLineEnabled.max,
             avg: state.assistLineEnabled.avg
-        }
+        },
+        rowStrokeStyles: state.rowStrokeStyles,
+        colStrokeStyle: state.colStrokeStyle,
+        ...(explicitStylePayload || {})
     };
 
     const msgType = state.uiMode === 'edit' ? 'apply' : 'generate';

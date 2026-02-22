@@ -1,6 +1,7 @@
 import { PLUGIN_DATA_KEYS } from './constants';
 import { inferStructureFromGraph } from './init';
 import { normalizeHexColor } from './utils';
+import type { GridStrokeInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
 
 // ==========================================
 // DATA LAYER (저장/로드 핵심 로직)
@@ -33,6 +34,46 @@ function normalizeRowColors(value: any): string[] {
         if (normalized) next.push(normalized);
     });
     return next;
+}
+
+function normalizeThickness(value: unknown): number | undefined {
+    const n = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    return Math.max(0, Math.min(20, Math.round(n)));
+}
+
+function normalizeSideStrokeStyle(value: unknown): SideStrokeInjectionStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as SideStrokeInjectionStyle;
+    const color = normalizeHexColor(source.color);
+    const thickness = normalizeThickness(source.thickness);
+    const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+
+    if (!color && thickness === undefined && visible === undefined) return null;
+    return {
+        color: color || undefined,
+        thickness: visible === false ? 0 : thickness,
+        visible
+    };
+}
+
+function normalizeGridStrokeStyle(value: unknown): GridStrokeInjectionStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as GridStrokeInjectionStyle;
+    const side = normalizeSideStrokeStyle(source);
+    const enableIndividualStroke = source.enableIndividualStroke !== false;
+    const sides = {
+        top: source.sides?.top !== false,
+        right: source.sides?.right !== false,
+        bottom: source.sides?.bottom !== false,
+        left: source.sides?.left !== false
+    };
+    if (!side && source.enableIndividualStroke === undefined && source.sides === undefined) return null;
+    return {
+        ...(side || {}),
+        enableIndividualStroke,
+        sides
+    };
 }
 
 function isStackedChartType(chartType: string) {
@@ -120,6 +161,23 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
             node.setPluginData(PLUGIN_DATA_KEYS.LAST_CORNER_RADIUS, String(styleInfo.cornerRadius));
         }
     }
+
+    const cellBottomStyle = normalizeSideStrokeStyle(msg.cellBottomStyle);
+    const tabRightStyle = normalizeSideStrokeStyle(msg.tabRightStyle);
+    const gridContainerStyle = normalizeGridStrokeStyle(msg.gridContainerStyle);
+
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE,
+        cellBottomStyle ? JSON.stringify(cellBottomStyle) : ''
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE,
+        tabRightStyle ? JSON.stringify(tabRightStyle) : ''
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE,
+        gridContainerStyle ? JSON.stringify(gridContainerStyle) : ''
+    );
 }
 
 export async function loadChartData(node: SceneNode, chartType: string) {

@@ -205,22 +205,37 @@ export function setDataTabRenderer(renderer: () => void) {
     dataTabRenderer = renderer;
 }
 
-export function switchTab(tab: 'data' | 'export') {
+export function switchTab(tab: 'data' | 'style' | 'export') {
     const tabDataBtn = document.getElementById('tab-data')!;
+    const tabStyleBtn = document.getElementById('tab-style')!;
     const tabExportBtn = document.getElementById('tab-export')!;
     const step2 = document.getElementById('step-2')!;
+    const stepStyle = document.getElementById('step-style')!;
     const stepExport = document.getElementById('step-export')!;
+    const activeClass = 'px-3 py-0.5 text-xs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer';
+    const inactiveClass = 'px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer';
 
     if (tab === 'data') {
-        tabDataBtn.className = 'px-3 py-0.5 text-xs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer';
-        tabExportBtn.className = 'px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer';
+        tabDataBtn.className = activeClass;
+        tabStyleBtn.className = inactiveClass;
+        tabExportBtn.className = inactiveClass;
         step2.classList.add('active');
+        stepStyle.classList.remove('active');
         stepExport.classList.remove('active');
         if (dataTabRenderer) dataTabRenderer();
-    } else {
-        tabExportBtn.className = 'px-3 py-0.5 text-xs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer';
-        tabDataBtn.className = 'px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer';
+    } else if (tab === 'style') {
+        tabDataBtn.className = inactiveClass;
+        tabStyleBtn.className = activeClass;
+        tabExportBtn.className = inactiveClass;
         step2.classList.remove('active');
+        stepStyle.classList.add('active');
+        stepExport.classList.remove('active');
+    } else {
+        tabDataBtn.className = inactiveClass;
+        tabStyleBtn.className = inactiveClass;
+        tabExportBtn.className = activeClass;
+        step2.classList.remove('active');
+        stepStyle.classList.remove('active');
         stepExport.classList.add('active');
 
         // Request style extraction from plugin

@@ -19,6 +19,7 @@ import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, refreshExportPreview } from './export';
+import { bindStyleTabEvents, initializeStyleTabDraft, syncStyleTabDraftFromExtracted } from './style-tab';
 
 // ==========================================
 // UI ENTRY POINT
@@ -221,6 +222,7 @@ function handlePluginMessage(msg: any) {
             state.colStrokeStyle = null;
             state.cellStrokeStyles = [];
             state.rowStrokeStyles = [];
+            initializeStyleTabDraft({}, {});
             switchTab('data');
             goToStep(1);
             ui.editModeBtn.classList.add('hidden');
@@ -292,6 +294,18 @@ function handlePluginMessage(msg: any) {
         state.colStrokeStyle = msg.colStrokeStyle || null;
         state.cellStrokeStyles = msg.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.rowStrokeStyles || [];
+        initializeStyleTabDraft(
+            {
+                savedCellBottomStyle: msg.savedCellBottomStyle,
+                savedTabRightStyle: msg.savedTabRightStyle,
+                savedGridContainerStyle: msg.savedGridContainerStyle
+            },
+            {
+                rowStrokeStyles: msg.rowStrokeStyles,
+                colStrokeStyle: msg.colStrokeStyle,
+                chartContainerStrokeStyle: msg.chartContainerStrokeStyle
+            }
+        );
 
         // Line-specific UI
         if (msg.chartType === 'line') {
@@ -349,6 +363,11 @@ function handlePluginMessage(msg: any) {
         state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
+        syncStyleTabDraftFromExtracted({
+            rowStrokeStyles: msg.payload?.rowStrokeStyles,
+            colStrokeStyle: msg.payload?.colStrokeStyle,
+            chartContainerStrokeStyle: msg.payload?.chartContainerStrokeStyle
+        });
         renderGrid();
         renderPreview();
         refreshExportPreview();
@@ -474,11 +493,14 @@ function bindUiEvents() {
     ui.toastCloseBtn.addEventListener('click', () => {
         ui.toast.classList.add('hidden');
     });
+
+    bindStyleTabEvents();
 }
 
 function initializeUi() {
     if (uiInitialized) return;
     ensureRowColorsLength(state.rows);
+    initializeStyleTabDraft({}, {});
     initializeRowColorPicker();
     if (!rowColorPicker) {
         console.warn('[ui][row-color] iro.js is not available. Falling back to HEX input only.');

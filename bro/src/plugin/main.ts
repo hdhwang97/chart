@@ -6,6 +6,7 @@ import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
+import { applyStrokeInjection } from './drawing/stroke-injection';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
 import { normalizeHexColor } from './utils';
@@ -147,7 +148,29 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.resize(msg.width, msg.height);
     }
     else if (msg.type === 'generate' || msg.type === 'apply') {
-        const { type, mode, values, rawValues, cols, rows, cellCount, yMin, yMax, markNum, strokeWidth, markRatio, rowColors, rawYMaxAuto, assistLineVisible, assistLineEnabled } = msg.payload;
+        const {
+            type,
+            mode,
+            values,
+            rawValues,
+            cols,
+            rows,
+            cellCount,
+            yMin,
+            yMax,
+            markNum,
+            strokeWidth,
+            markRatio,
+            rowColors,
+            rawYMaxAuto,
+            assistLineVisible,
+            assistLineEnabled,
+            rowStrokeStyles,
+            colStrokeStyle,
+            cellBottomStyle,
+            tabRightStyle,
+            gridContainerStyle
+        } = msg.payload;
 
         const nodes = figma.currentPage.selection;
         let targetNode: FrameNode | ComponentNode | InstanceNode;
@@ -240,6 +263,15 @@ figma.ui.onmessage = async (msg) => {
         else if (type === "stackedBar" || type === "stacked") applyStackedBar(drawConfig, H, targetNode);
         applyAssistLines(drawConfig, targetNode, H);
 
+        const strokeInjectionResult = applyStrokeInjection(targetNode, {
+            cellBottomStyle,
+            tabRightStyle,
+            gridContainerStyle,
+            rowStrokeStyles,
+            colStrokeStyle
+        });
+        console.log('[chart-plugin][stroke-injection]', strokeInjectionResult);
+
         // 5. 스타일 자동 추출 및 전송
         const styleInfo = extractStyleFromNode(targetNode, type);
         const requestedRatio = (type === 'bar' || type === 'stackedBar' || type === 'stacked')
@@ -268,6 +300,7 @@ figma.ui.onmessage = async (msg) => {
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
             colStrokeStyle: styleInfo.colStrokeStyle || null,
+            chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
             rowStrokeStyles: styleInfo.rowStrokeStyles || []
         };
@@ -349,6 +382,7 @@ figma.ui.onmessage = async (msg) => {
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: resolveStrokeWidthForUi(node, undefined, styleInfo.strokeWidth),
             colStrokeStyle: styleInfo.colStrokeStyle || null,
+            chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
             rowStrokeStyles: styleInfo.rowStrokeStyles || []
         };
