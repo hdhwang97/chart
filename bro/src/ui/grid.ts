@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols, getRowColor, getGridColsForChart } from './state';
+import { state, ensureColHeaderTitlesLength, ensureRowHeaderLabelsLength, getDefaultColHeaderTitle, getTotalStackedCols, getRowColor, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroupAt, clearAllData, getGroupStartIndex, flatIndexFromGroupBar } from './data-ops';
 import { checkCtaValidation, getAutoFillValue, getStackedOverflowState, syncYMaxValidationUi } from './mode';
@@ -35,6 +35,7 @@ export function renderGrid() {
 
     // ===== COLUMN HEADERS =====
     if (isStacked) {
+        const groupHeaderLabels = ensureColHeaderTitlesLength(state.groupStructure.length, state.chartType);
         // Group headers row
         const groupRow = document.createElement('div');
         groupRow.style.display = 'contents';
@@ -43,16 +44,33 @@ export function renderGrid() {
             gCell.className = 'flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group';
             gCell.style.gridColumn = 'span 1';
             gCell.style.height = '24px';
-            gCell.dataset.headerLabel = `G${gIdx + 1}`;
-            const groupControls = state.mode !== 'read'
-                ? `<div class="hidden group-hover:flex items-center gap-0.5 ml-1">
-                    <button class="w-3.5 h-3.5 flex items-center justify-center rounded-full bg-primary text-white text-[8px] hover:bg-primary-hover cursor-pointer stacked-add-bar" data-g="${gIdx}">+</button>
-                </div>`
-                : '';
-            gCell.innerHTML = `
-                <span>G${gIdx + 1}</span>
-                ${groupControls}
-            `;
+            gCell.classList.add('group-header');
+            const label = groupHeaderLabels[gIdx] || getDefaultColHeaderTitle(gIdx, state.chartType);
+            gCell.dataset.headerLabel = label;
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'truncate';
+            labelSpan.textContent = label;
+            if (state.mode !== 'read') {
+                labelSpan.classList.add('cursor-text');
+                labelSpan.title = 'Click to edit';
+                labelSpan.addEventListener('click', (evt) => {
+                    evt.stopPropagation();
+                    startColHeaderInlineEdit(gCell, labelSpan, gIdx, true);
+                });
+            }
+            gCell.appendChild(labelSpan);
+
+            if (state.mode !== 'read') {
+                const controls = document.createElement('div');
+                controls.className = 'hidden group-hover:flex items-center gap-0.5 ml-1';
+                const addBtn = document.createElement('button');
+                addBtn.className = 'w-3.5 h-3.5 flex items-center justify-center rounded-full bg-primary text-white text-[8px] hover:bg-primary-hover cursor-pointer stacked-add-bar';
+                addBtn.dataset.g = String(gIdx);
+                addBtn.textContent = '+';
+                controls.appendChild(addBtn);
+                gCell.appendChild(controls);
+            }
             gCell.addEventListener('mouseenter', () => highlightPreview('group', gIdx));
             gCell.addEventListener('mouseleave', () => resetPreviewHighlight());
 
@@ -98,14 +116,27 @@ export function renderGrid() {
         });
         grid.appendChild(subRow);
     } else {
+        const colHeaderLabels = ensureColHeaderTitlesLength(totalCols, state.chartType);
         // Normal column headers
         const headerRow = document.createElement('div');
         headerRow.style.display = 'contents';
         for (let c = 0; c < totalCols; c++) {
             const hCell = document.createElement('div');
             hCell.className = 'w-16 h-6 flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group col-header';
-            hCell.textContent = `C${c + 1}`;
-            hCell.dataset.headerLabel = `C${c + 1}`;
+            const label = colHeaderLabels[c] || getDefaultColHeaderTitle(c, state.chartType);
+            hCell.dataset.headerLabel = label;
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'truncate';
+            labelSpan.textContent = label;
+            if (state.mode !== 'read') {
+                labelSpan.classList.add('cursor-text');
+                labelSpan.title = 'Click to edit';
+                labelSpan.addEventListener('click', (evt) => {
+                    evt.stopPropagation();
+                    startColHeaderInlineEdit(hCell, labelSpan, c, false);
+                });
+            }
+            hCell.appendChild(labelSpan);
             hCell.addEventListener('mouseenter', () => highlightPreview('col', c));
             hCell.addEventListener('mouseleave', () => resetPreviewHighlight());
 
@@ -122,11 +153,12 @@ export function renderGrid() {
     }
 
     // ===== ROW HEADERS =====
+    const rowHeaderLabels = ensureRowHeaderLabelsLength(state.rows, state.chartType);
     for (let r = 0; r < state.rows; r++) {
         const rowH = document.createElement('div');
         rowH.className = 'row-header flex items-center h-6 px-2 border-b border-r border-border text-xxs font-medium text-text-sub relative group';
 
-        const label = getRowHeaderLabel(r, isStacked);
+        const label = rowHeaderLabels[r] || getRowHeaderLabel(r, isStacked);
         const leftWrap = document.createElement('div');
         leftWrap.className = 'flex items-center gap-1.5 min-w-0';
 
@@ -169,6 +201,15 @@ export function renderGrid() {
         const labelSpan = document.createElement('span');
         labelSpan.className = 'truncate';
         labelSpan.textContent = label;
+        const isRowHeaderEditable = state.mode !== 'read' && !isStacked;
+        if (isRowHeaderEditable) {
+            labelSpan.classList.add('cursor-text');
+            labelSpan.title = 'Click to edit';
+            labelSpan.addEventListener('click', (evt) => {
+                evt.stopPropagation();
+                startRowHeaderInlineEdit(rowH, labelSpan, r);
+            });
+        }
         leftWrap.appendChild(labelSpan);
         rowH.appendChild(leftWrap);
 
@@ -355,6 +396,104 @@ function getRowHeaderLabel(rowIndex: number, isStacked: boolean): string {
     if (!isStacked) return `R${rowIndex + 1}`;
     if (rowIndex === 0) return 'All';
     return `R${rowIndex}`;
+}
+
+function startRowHeaderInlineEdit(rowHeaderEl: HTMLElement, labelEl: HTMLSpanElement, rowIndex: number) {
+    if (rowHeaderEl.dataset.editing === 'true') return;
+    rowHeaderEl.dataset.editing = 'true';
+
+    const fallbackLabel = getRowHeaderLabel(rowIndex, state.chartType === 'stackedBar');
+    const currentLabel = (state.rowHeaderLabels[rowIndex] || fallbackLabel).trim() || fallbackLabel;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentLabel;
+    input.className = 'w-16 h-5 text-xxs px-1 border border-primary rounded bg-white focus:outline-none';
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = (commit: boolean) => {
+        if (finished) return;
+        finished = true;
+        rowHeaderEl.dataset.editing = 'false';
+
+        let nextLabel = currentLabel;
+        if (commit) {
+            const normalized = input.value.trim();
+            nextLabel = normalized || currentLabel || fallbackLabel;
+            state.rowHeaderLabels[rowIndex] = nextLabel;
+            checkCtaValidation();
+        }
+
+        labelEl.textContent = nextLabel;
+        input.replaceWith(labelEl);
+    };
+
+    input.addEventListener('click', (evt) => evt.stopPropagation());
+    input.addEventListener('keydown', (evt) => {
+        evt.stopPropagation();
+        if (evt.key === 'Enter') {
+            evt.preventDefault();
+            finish(true);
+        } else if (evt.key === 'Escape') {
+            evt.preventDefault();
+            finish(false);
+        }
+    });
+    input.addEventListener('blur', () => finish(true));
+}
+
+function startColHeaderInlineEdit(
+    headerEl: HTMLElement,
+    labelEl: HTMLSpanElement,
+    colIndex: number,
+    isStackedGroup: boolean
+) {
+    if (headerEl.dataset.editing === 'true') return;
+    headerEl.dataset.editing = 'true';
+
+    const fallbackLabel = getDefaultColHeaderTitle(colIndex, isStackedGroup ? 'stackedBar' : state.chartType);
+    const currentLabel = (state.colHeaderTitles[colIndex] || fallbackLabel).trim() || fallbackLabel;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentLabel;
+    input.className = 'w-16 h-5 text-xxs px-1 border border-primary rounded bg-white focus:outline-none';
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = (commit: boolean) => {
+        if (finished) return;
+        finished = true;
+        headerEl.dataset.editing = 'false';
+
+        let nextLabel = currentLabel;
+        if (commit) {
+            const normalized = input.value.trim();
+            nextLabel = normalized || currentLabel || fallbackLabel;
+            state.colHeaderTitles[colIndex] = nextLabel;
+            headerEl.dataset.headerLabel = nextLabel;
+            checkCtaValidation();
+        }
+
+        labelEl.textContent = nextLabel;
+        input.replaceWith(labelEl);
+    };
+
+    input.addEventListener('click', (evt) => evt.stopPropagation());
+    input.addEventListener('keydown', (evt) => {
+        evt.stopPropagation();
+        if (evt.key === 'Enter') {
+            evt.preventDefault();
+            finish(true);
+        } else if (evt.key === 'Escape') {
+            evt.preventDefault();
+            finish(false);
+        }
+    });
+    input.addEventListener('blur', () => finish(true));
 }
 
 function formatNumeric(value: number): string {

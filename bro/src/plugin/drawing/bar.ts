@@ -51,6 +51,10 @@ function getNodeContentWidth(node: SceneNode): number {
     return node.width;
 }
 
+function getNodeHeight(node: SceneNode): number | null {
+    return 'height' in node && typeof node.height === 'number' ? node.height : null;
+}
+
 function findTabInColumn(colNode: SceneNode): SceneNode {
     if ("children" in colNode) {
         const tab = (colNode as SceneNode & ChildrenMixin).children.find((n: SceneNode) => n.name === "tab");
@@ -79,7 +83,7 @@ function inferRatioFromCurrentGeometry(cols: { node: SceneNode, index: number }[
         const { barInst, measureWidth } = resolveBarMeasureContext(col.node);
         if (!barInst || measureWidth <= 0) continue;
         const layerPool = resolveBarMarkLayerPool(barInst);
-        const firstBar = layerPool.find((n: SceneNode) => /^bar($|[-_]?0*\d+$)/.test(n.name));
+        const firstBar = layerPool.find((n: SceneNode) => parseBarLayerIndex(n.name) === 1);
         if (!firstBar) continue;
         const inferred = getNodeContentWidth(firstBar) / measureWidth;
         if (Number.isFinite(inferred) && inferred > 0) {
@@ -98,7 +102,6 @@ function setMarkNumVariantWithFallback(instance: InstanceNode, value: number): b
 }
 
 function parseBarLayerIndex(name: string): number | null {
-    if (name === 'bar') return 1;
     const match = /^bar[-_]?0*(\d+)$/.exec(name);
     if (!match) return null;
     const idx = Number(match[1]);
@@ -185,6 +188,11 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
 
         // 2. Bar Instance (컨테이너) 찾기
         const { barInst, measureWidth } = resolveBarMeasureContext(colObj.node);
+        const tabNode = ('children' in colObj.node)
+            ? (colObj.node as SceneNode & ChildrenMixin).children.find((n: SceneNode) => n.name === 'tab') || null
+            : null;
+        const colHeight = getNodeHeight(colObj.node);
+        const tabHeight = tabNode ? getNodeHeight(tabNode) : null;
 
         if (barInst) {
             const clusterLayout = computeClusterLayout(measureWidth, targetRatio, numMarks);
@@ -303,6 +311,20 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
 
                     if ('paddingBottom' in barLayer) {
                         (barLayer as any).paddingBottom = finalH;
+                    }
+                    if (m === 0) {
+                        console.log('[chart-plugin][bar-height-debug][col]', {
+                            colIndex: cIdx,
+                            colName: colObj.node.name,
+                            colHeight,
+                            tabHeight,
+                            graphH: H,
+                            mode,
+                            rawValue: val,
+                            maxVal,
+                            ratio,
+                            finalPaddingBottom: finalH
+                        });
                     }
                 }
             }

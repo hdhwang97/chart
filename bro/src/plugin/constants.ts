@@ -43,20 +43,31 @@ export const PLUGIN_DATA_KEYS = {
     LAST_MODE: "lastAppliedMode",
     LAST_CELL_COUNT: "lastCellCount",
     LAST_MARK_NUM: "lastMarkNum",
+    LAST_X_AXIS_LABELS: "lastXAxisLabels",
     LAST_Y_MIN: "lastYMin",
     LAST_Y_MAX: "lastYMax",
 
     // 스타일 관련 키
     LAST_BAR_PADDING: "lastBarPadding",
     LAST_ROW_COLORS: "lastRowColors",
+    LAST_COL_COLORS: "lastColColors",
+    LAST_MARK_COLOR_SOURCE: "lastMarkColorSource",
     LAST_CORNER_RADIUS: "lastCornerRadius",
     LAST_STROKE_WIDTH: "lastStrokeWidth",
     LAST_ASSIST_LINE_ENABLED: "lastAssistLineEnabled",
     LAST_ASSIST_LINE_VISIBLE: "lastAssistLineVisible",
     LAST_ASSIST_LINE_STYLE: "lastAssistLineStyle",
+    LAST_MARK_STYLE: "lastMarkStyle",
+    LAST_MARK_STYLES: "lastMarkStyles",
+    LAST_ROW_HEADER_LABELS: "lastRowHeaderLabels",
+    LAST_CELL_FILL_STYLE: "lastCellFillStyle",
     LAST_CELL_BOTTOM_STYLE: "lastCellBottomStyle",
     LAST_TAB_RIGHT_STYLE: "lastTabRightStyle",
     LAST_GRID_CONTAINER_STYLE: "lastGridContainerStyle"
+} as const;
+
+export const CLIENT_STORAGE_KEYS = {
+    STYLE_TEMPLATES: "styleTemplatesV1"
 } as const;
 
 // Naming Patterns (Regex)
@@ -73,6 +84,9 @@ export const MARK_NAME_PATTERNS = {
     COL_ALL: /^col-0*(\d+)$/,
 
     CEL: /^cel[-_]?0*(\d+)$/,
+    LEGEND_CONTAINER: /^chart_legend$/,
+    LEGEND_ELEM: /^legend_elem[-_]?0*(\d+)$/,
+    LEGEND_COLOR: /^legend_color$/,
     Y_AXIS_CONTAINER: /^y-axis$/,
     Y_CEL_ITEM: /^y_cel[-_]?0*(\d+)$/
 };

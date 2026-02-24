@@ -1,4 +1,4 @@
-import { state, MAX_SIZE, ensureRowColorsLength, getGridColsForChart } from './state';
+import { state, MAX_SIZE, ensureColHeaderColorsLength, ensureColHeaderTitlesLength, ensureRowColorsLength, ensureRowHeaderLabelsLength, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -139,6 +139,7 @@ export function addRow() {
         : getGridColsForChart(state.chartType, state.cols);
     state.data.push(new Array(newCols).fill(""));
     ensureRowColorsLength(state.rows);
+    ensureRowHeaderLabelsLength(state.rows, state.chartType);
     syncMarkCountFromRows();
     renderGrid();
     renderPreview();
@@ -172,6 +173,11 @@ export function addColumn() {
         state.data.forEach(row => row.push(""));
     }
     ui.settingColInput.value = String(state.cols);
+    ensureColHeaderColorsLength(getGridColsForChart(state.chartType, state.cols));
+    ensureColHeaderTitlesLength(
+        state.chartType === 'stackedBar' ? state.groupStructure.length : getGridColsForChart(state.chartType, state.cols),
+        state.chartType
+    );
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -182,6 +188,7 @@ export function deleteRow(rowIdx: number) {
     state.rows--;
     state.data.splice(rowIdx, 1);
     ensureRowColorsLength(state.rows);
+    ensureRowHeaderLabelsLength(state.rows, state.chartType);
     syncMarkCountFromRows();
     renderGrid();
     renderPreview();
@@ -204,6 +211,11 @@ export function deleteColumn(colIdx: number) {
         state.data.forEach(row => row.splice(colIdx, 1));
     }
     ui.settingColInput.value = String(state.cols);
+    ensureColHeaderColorsLength(getGridColsForChart(state.chartType, state.cols));
+    ensureColHeaderTitlesLength(
+        state.chartType === 'stackedBar' ? state.groupStructure.length : getGridColsForChart(state.chartType, state.cols),
+        state.chartType
+    );
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -308,6 +320,12 @@ export function updateGridSize(newCols: number, newRows: number) {
     state.cols = newCols;
     state.rows = newRows;
     ensureRowColorsLength(state.rows);
+    ensureRowHeaderLabelsLength(state.rows, state.chartType);
+    ensureColHeaderColorsLength(getGridColsForChart(state.chartType, state.cols));
+    ensureColHeaderTitlesLength(
+        state.chartType === 'stackedBar' ? state.groupStructure.length : getGridColsForChart(state.chartType, state.cols),
+        state.chartType
+    );
     syncMarkCountFromRows();
     renderGrid();
     checkCtaValidation();

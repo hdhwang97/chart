@@ -1,4 +1,4 @@
-import { state, CHART_ICONS, initData, getTotalStackedCols, ensureRowColorsLength, getGridColsForChart } from './state';
+import { state, CHART_ICONS, initData, getTotalStackedCols, ensureColHeaderColorsLength, ensureColHeaderTitlesLength, ensureRowColorsLength, ensureRowHeaderLabelsLength, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -25,18 +25,11 @@ function parseOptionalNumber(value: string): number | null {
 }
 
 function collectGridHeaderLabels(): string[] {
-    const grid = ui.gridContainer;
-    if (state.chartType === 'stackedBar') {
-        const nodes = Array.from(grid.querySelectorAll<HTMLDivElement>('div[data-header-label]'))
-            .filter((node) => /^G\d+$/i.test((node.dataset.headerLabel || '').trim()));
-        return nodes
-            .map((node) => (node.dataset.headerLabel || '').trim())
-            .filter((label) => label.length > 0);
-    }
-
-    const nodes = Array.from(grid.querySelectorAll<HTMLDivElement>('.col-header[data-header-label]'));
-    return nodes
-        .map((node) => (node.dataset.headerLabel || '').trim())
+    const headerCount = state.chartType === 'stackedBar'
+        ? state.groupStructure.length
+        : getGridColsForChart(state.chartType, state.cols);
+    return ensureColHeaderTitlesLength(headerCount, state.chartType)
+        .map((label) => label.trim())
         .filter((label) => label.length > 0);
 }
 
@@ -110,6 +103,10 @@ export function selectType(type: string) {
     const totalCols = type === 'stackedBar' ? getTotalStackedCols() : getGridColsForChart(type, state.cols);
     state.data = initData(state.rows, totalCols);
     ensureRowColorsLength(state.rows);
+    ensureRowHeaderLabelsLength(state.rows, state.chartType);
+    ensureColHeaderColorsLength(totalCols);
+    ensureColHeaderTitlesLength(type === 'stackedBar' ? state.groupStructure.length : totalCols, state.chartType);
+    state.markColorSource = 'row';
     syncMarkCountFromRows();
     if (state.dataMode === 'raw') {
         ui.settingYMin.value = '0';
@@ -129,6 +126,9 @@ export function resetData() {
         : getGridColsForChart(state.chartType, state.cols);
     state.data = initData(state.rows, totalCols);
     ensureRowColorsLength(state.rows);
+    ensureRowHeaderLabelsLength(state.rows, state.chartType);
+    ensureColHeaderColorsLength(totalCols);
+    ensureColHeaderTitlesLength(state.chartType === 'stackedBar' ? state.groupStructure.length : totalCols, state.chartType);
     state.csvFileName = null;
 
     updateCsvUi();
@@ -233,6 +233,9 @@ export function submitData() {
             ? normalizeMarkRatio(state.markRatio)
             : undefined,
         rowColors: ensureRowColorsLength(state.rows),
+        rowHeaderLabels: ensureRowHeaderLabelsLength(state.rows, state.chartType),
+        colColors: state.colHeaderColors,
+        markColorSource: 'row',
         assistLineVisible: state.assistLineVisible,
         assistLineEnabled: {
             min: state.assistLineEnabled.min,

@@ -8,39 +8,48 @@ import { traverse, findActualPropKey } from '../utils';
 export function collectColumns(node: SceneNode) {
     const cols: { node: SceneNode, index: number }[] = [];
     const seen = new Set<number>();
-    if (!("children" in node)) return cols;
-
-    const rootChildren = (node as SceneNode & ChildrenMixin).children;
-    const pushIfColumn = (child: SceneNode) => {
-        const match = MARK_NAME_PATTERNS.COL_ALL.exec(child.name);
+    const pushIfColumn = (candidate: SceneNode) => {
+        const match = MARK_NAME_PATTERNS.COL_ALL.exec(candidate.name);
         if (!match) return;
         const index = parseInt(match[1], 10);
         if (seen.has(index)) return;
         seen.add(index);
-        cols.push({ node: child, index });
+        cols.push({ node: candidate, index });
     };
 
-    // 1) 기존 구조: Graph -> col-N (직계)
-    for (const child of rootChildren) {
-        pushIfColumn(child);
-    }
-
-    // 2) 신규 구조: Graph -> col(container) -> col-N
-    for (const child of rootChildren) {
-        if (child.name !== 'col' || !("children" in child)) continue;
-        for (const nested of (child as SceneNode & ChildrenMixin).children) {
-            pushIfColumn(nested);
-        }
-    }
+    // 지원 구조:
+    // - Graph -> col-N
+    // - Graph -> col -> col-N
+    // - Graph -> ... -> col -> col-N (재귀)
+    traverse(node, (candidate) => {
+        if (candidate.id === node.id) return;
+        pushIfColumn(candidate);
+    });
 
     return cols.sort((a, b) => a.index - b.index);
 }
 
 export function getGraphHeight(node: FrameNode) {
-    let xh = 0;
+    const xEmptyHeight = getXEmptyHeight(node);
+    const chartLegendHeight = getChartLegendHeight(node);
+    return Math.max(0, node.height - xEmptyHeight - chartLegendHeight);
+}
+
+export function getXEmptyHeight(node: FrameNode): number {
     const xEmpty = node.findOne(n => n.name === "x-empty");
-    if (xEmpty) xh = xEmpty.height;
-    return node.height - xh;
+    if (!xEmpty) return 0;
+    return Math.max(0, xEmpty.height);
+}
+
+export function getChartLegendHeight(node: FrameNode): number {
+    let total = 0;
+    traverse(node, (candidate) => {
+        if (candidate.id === node.id) return;
+        if (candidate.name !== 'chart_legend') return;
+        if (!('height' in candidate) || typeof candidate.height !== 'number') return;
+        total += Math.max(0, candidate.height);
+    });
+    return total;
 }
 
 export function setVariantProperty(instance: InstanceNode, key: string, value: string): boolean {
@@ -56,29 +65,21 @@ export function setVariantProperty(instance: InstanceNode, key: string, value: s
 }
 
 export function setLayerVisibility(parent: SceneNode, namePrefix: string, count: number) {
+    if (namePrefix === 'col-') {
+        collectColumns(parent).forEach(({ node, index }) => {
+            node.visible = index <= count;
+        });
+        return;
+    }
+
     if (!("children" in parent)) return;
     const rootChildren = (parent as SceneNode & ChildrenMixin).children;
     const targets: SceneNode[] = [];
-
-    // 기본: 직계에서 prefix 매칭
     rootChildren.forEach((child: SceneNode) => {
         if (child.name.startsWith(namePrefix)) {
             targets.push(child);
         }
     });
-
-    // 컬럼 전용: Graph -> col(container) -> col-N 지원
-    if (namePrefix === 'col-') {
-        rootChildren.forEach((child: SceneNode) => {
-            if (child.name !== 'col' || !("children" in child)) return;
-            (child as SceneNode & ChildrenMixin).children.forEach((nested: SceneNode) => {
-                if (nested.name.startsWith(namePrefix)) {
-                    targets.push(nested);
-                }
-            });
-        });
-    }
-
     targets.forEach((child: SceneNode) => {
         const num = parseInt(child.name.replace(namePrefix, ""), 10);
         if (!Number.isFinite(num)) return;
@@ -227,6 +228,102 @@ export function applyColumnXEmptyLabels(graph: SceneNode, labels: string[]) {
         } catch {
             result.skipped += 1;
         }
+    });
+
+    return result;
+}
+
+export function applyLegendLabelsFromRowHeaders(
+    graph: SceneNode,
+    labels: string[],
+    markNum: number | number[] | undefined,
+    chartType: string
+) {
+    const result = {
+        containers: 0,
+        candidates: 0,
+        applied: 0,
+        skipped: 0,
+        errors: 0
+    };
+
+    if (chartType !== 'bar' && chartType !== 'line') {
+        return result;
+    }
+
+    const resolvedLabels = Array.isArray(labels)
+        ? labels.map((label) => (typeof label === 'string' ? label.trim() : ''))
+        : [];
+    const maxIndexFromMarkNum = typeof markNum === 'number' && Number.isFinite(markNum)
+        ? Math.max(0, Math.floor(markNum))
+        : null;
+
+    const legendContainers: SceneNode[] = [];
+    traverse(graph, (node) => {
+        if (node.id === graph.id) return;
+        if (MARK_NAME_PATTERNS.LEGEND_CONTAINER.test(node.name)) {
+            legendContainers.push(node);
+        }
+    });
+
+    result.containers = legendContainers.length;
+    if (legendContainers.length === 0) return result;
+
+    legendContainers.forEach((container) => {
+        if (!('children' in container)) return;
+        const legendElems: Array<{ node: SceneNode; index: number }> = [];
+        (container as SceneNode & ChildrenMixin).children.forEach((child) => {
+            const match = MARK_NAME_PATTERNS.LEGEND_ELEM.exec(child.name);
+            if (!match) return;
+            const index = Number.parseInt(match[1], 10);
+            if (!Number.isFinite(index) || index <= 0) return;
+            legendElems.push({ node: child, index });
+        });
+        legendElems.sort((a, b) => a.index - b.index);
+
+        legendElems.forEach(({ node, index }) => {
+            result.candidates += 1;
+
+            if (maxIndexFromMarkNum !== null && index > maxIndexFromMarkNum) {
+                result.skipped += 1;
+                return;
+            }
+
+            const label = resolvedLabels[index - 1];
+            if (!label) {
+                result.skipped += 1;
+                return;
+            }
+
+            if (node.type !== 'INSTANCE') {
+                result.skipped += 1;
+                return;
+            }
+
+            try {
+                const props = node.componentProperties;
+                const propKey =
+                    findActualPropKey(props, 'legend_label')
+                    || findActualPropKey(props, 'legend-label')
+                    || findActualPropKey(props, 'legendLabel')
+                    || findActualPropKey(props, 'Legend_label')
+                    || findActualPropKey(props, 'LegendLabel');
+
+                if (!propKey) {
+                    result.skipped += 1;
+                    return;
+                }
+
+                if (props[propKey]?.value !== label) {
+                    node.setProperties({ [propKey]: label });
+                    result.applied += 1;
+                } else {
+                    result.skipped += 1;
+                }
+            } catch {
+                result.errors += 1;
+            }
+        });
     });
 
     return result;

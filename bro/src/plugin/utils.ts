@@ -105,3 +105,13 @@ export function tryApplyStroke(node: SceneNode, hex: string) {
         return false;
     }
 }
+
+export function tryApplyDashPattern(node: SceneNode, pattern: number[]) {
+    if (!('dashPattern' in node)) return false;
+    try {
+        (node as SceneNode & GeometryMixin).dashPattern = [...pattern];
+        return true;
+    } catch {
+        return false;
+    }
+}

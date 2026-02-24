@@ -119,7 +119,8 @@ function getDraftLineStroke(target: 'cellBottom' | 'tabRight'): StrokeStyleSnaps
     const draft = target === 'cellBottom' ? state.styleInjectionDraft.cellBottom : state.styleInjectionDraft.tabRight;
     return {
         color: draft.color,
-        weight: draft.visible ? draft.thickness : 0
+        weight: draft.visible ? draft.thickness : 0,
+        dashPattern: draft.strokeStyle === 'dash' ? [4, 2] : []
     };
 }
 
@@ -129,41 +130,46 @@ function drawGridContainerBorder(g: any, w: number, h: number) {
     if (thickness <= 0) return;
 
     const color = grid.color;
+    const dashPattern = grid.strokeStyle === 'dash' ? '4,2' : null;
     if (grid.sides.top) {
-        g.append('line')
+        const line = g.append('line')
             .attr('x1', 0)
             .attr('x2', w)
             .attr('y1', 0)
             .attr('y2', 0)
             .attr('stroke', color)
             .attr('stroke-width', thickness);
+        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
     }
     if (grid.sides.right) {
-        g.append('line')
+        const line = g.append('line')
             .attr('x1', w)
             .attr('x2', w)
             .attr('y1', 0)
             .attr('y2', h)
             .attr('stroke', color)
             .attr('stroke-width', thickness);
+        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
     }
     if (grid.sides.bottom) {
-        g.append('line')
+        const line = g.append('line')
             .attr('x1', 0)
             .attr('x2', w)
             .attr('y1', h)
             .attr('y2', h)
             .attr('stroke', color)
             .attr('stroke-width', thickness);
+        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
     }
     if (grid.sides.left) {
-        g.append('line')
+        const line = g.append('line')
             .attr('x1', 0)
             .attr('x2', 0)
             .attr('y1', 0)
             .attr('y2', h)
             .attr('stroke', color)
             .attr('stroke-width', thickness);
+        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
     }
 }
 
@@ -172,6 +178,10 @@ function getSeriesColor(rowIndex: number, chartType: string) {
         return getRowColor(rowIndex + 1);
     }
     return getRowColor(rowIndex);
+}
+
+function getBarPreviewColor(rowIndex: number, _colIndex: number): string {
+    return getSeriesColor(rowIndex, 'bar');
 }
 
 function buildYTickValues(yMin: number, yMax: number, cellCount: number): number[] {
@@ -377,7 +387,7 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
                 .attr('y', yScale(val))
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
-                .attr('fill', getSeriesColor(r, 'bar'))
+                .attr('fill', getBarPreviewColor(r, c))
                 .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('data-base-opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('rx', 2);

@@ -1,7 +1,7 @@
 import { MARK_NAME_PATTERNS } from './constants';
 import { rgbToHex, findAllLineLayers, traverse } from './utils';
 import { collectColumns } from './drawing/shared';
-import type { CellStrokeStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
+import type { CellFillInjectionStyle, CellStrokeStyle, MarkInjectionStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 
 // ==========================================
 // STYLE EXTRACTION LOGIC
@@ -232,10 +232,162 @@ export function extractCellStrokeStyles(graph: SceneNode): CellStrokeStyle[] {
     return cellStyles;
 }
 
-export function extractChartContainerStrokeStyle(graph: SceneNode): StrokeStyleSnapshot | null {
-    if (!('children' in graph)) return null;
+export function extractCellFillStyle(graph: SceneNode): CellFillInjectionStyle | null {
+    const columns = collectColumns(graph);
+    for (const col of columns) {
+        let fillColor: string | null = null;
+        traverse(col.node, (node) => {
+            if (fillColor) return;
+            if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
+            if (!('fills' in node) || !Array.isArray(node.fills) || node.fills.length === 0) return;
+            const first = node.fills[0];
+            if (first.type === 'SOLID') {
+                fillColor = rgbToHex(first.color.r, first.color.g, first.color.b);
+            }
+        });
+        if (fillColor) return { color: fillColor };
+    }
+    return null;
+}
 
-    const col = (graph as SceneNode & ChildrenMixin).children.find((child) => child.name === 'col');
+function getSolidFillColor(node: SceneNode): string | null {
+    if (!('fills' in node) || !Array.isArray(node.fills) || node.fills.length === 0) return null;
+    const first = node.fills[0];
+    if (first.type !== 'SOLID') return null;
+    return rgbToHex(first.color.r, first.color.g, first.color.b);
+}
+
+function getSolidStrokeColor(node: SceneNode): string | null {
+    if (!('strokes' in node) || !Array.isArray(node.strokes) || node.strokes.length === 0) return null;
+    const first = node.strokes[0];
+    if (first.type !== 'SOLID') return null;
+    return rgbToHex(first.color.r, first.color.g, first.color.b);
+}
+
+function parseMarkSeriesIndex(name: string): number | null {
+    if (MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(name)) return 1;
+    const barMulti = MARK_NAME_PATTERNS.BAR_ITEM_MULTI.exec(name);
+    if (barMulti) {
+        const idx = Number(barMulti[1]);
+        return Number.isFinite(idx) && idx > 0 ? idx : null;
+    }
+    const stackedSeg = MARK_NAME_PATTERNS.STACKED_SEGMENT.exec(name);
+    if (stackedSeg) {
+        const idx = Number(stackedSeg[1]);
+        return Number.isFinite(idx) && idx > 0 ? idx : null;
+    }
+    const line = MARK_NAME_PATTERNS.LINE.exec(name);
+    if (line) {
+        const idx = Number(line[1] || 1);
+        return Number.isFinite(idx) && idx > 0 ? idx : 1;
+    }
+    return null;
+}
+
+function toMarkStyleSnapshot(node: SceneNode): MarkInjectionStyle | null {
+    const fillColor = getSolidFillColor(node);
+    const strokeColor = getSolidStrokeColor(node);
+    const thickness = 'strokeWeight' in node && typeof node.strokeWeight === 'number' ? node.strokeWeight : undefined;
+    const strokeStyle = 'dashPattern' in node && Array.isArray(node.dashPattern) && node.dashPattern.length > 0 ? 'dash' : 'solid';
+    if (!fillColor && !strokeColor && thickness === undefined) return null;
+    return {
+        fillColor: fillColor || undefined,
+        strokeColor: strokeColor || undefined,
+        thickness,
+        strokeStyle
+    };
+}
+
+function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
+    let found: MarkInjectionStyle | null = null;
+    traverse(node, (child) => {
+        if (found) return;
+        if (child.id === node.id || !child.visible) return;
+        const lower = child.name.toLowerCase();
+        const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+        const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
+        if (!isPointLike && !isVectorLike) return;
+        found = toMarkStyleSnapshot(child);
+    });
+    return found;
+}
+
+export function extractMarkStyles(graph: SceneNode): MarkInjectionStyle[] {
+    const columns = collectColumns(graph);
+    const byIndex = new Map<number, MarkInjectionStyle>();
+
+    columns.forEach((col) => {
+        traverse(col.node, (node) => {
+            if (!node.visible) return;
+            const idx = parseMarkSeriesIndex(node.name);
+            if (!idx || byIndex.has(idx)) return;
+
+            if (node.type === 'INSTANCE' && MARK_NAME_PATTERNS.LINE.test(node.name)) {
+                const lineStyle = toLineInstanceMarkStyle(node);
+                if (lineStyle) byIndex.set(idx, lineStyle);
+                return;
+            }
+
+            const markStyle = toMarkStyleSnapshot(node);
+            if (markStyle) byIndex.set(idx, markStyle);
+        });
+    });
+
+    return Array.from(byIndex.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([, style]) => style);
+}
+
+export function extractMarkStyle(graph: SceneNode): MarkInjectionStyle | null {
+    const styles = extractMarkStyles(graph);
+    if (styles.length > 0) return styles[0];
+    const columns = collectColumns(graph);
+    for (const col of columns) {
+        let found: MarkInjectionStyle | null = null;
+        traverse(col.node, (node) => {
+            if (found) return;
+            if (!node.visible) return;
+            const isBarLike =
+                MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(node.name)
+                || MARK_NAME_PATTERNS.BAR_ITEM_MULTI.test(node.name)
+                || MARK_NAME_PATTERNS.STACKED_SEGMENT.test(node.name);
+            const lower = node.name.toLowerCase();
+            const isLineOrPoint = MARK_NAME_PATTERNS.LINE.test(node.name) || lower.includes('point') || lower.includes('dot');
+            if (!isBarLike && !isLineOrPoint) return;
+
+            const fillColor = getSolidFillColor(node);
+            const strokeColor = getSolidStrokeColor(node);
+            const thickness = 'strokeWeight' in node && typeof node.strokeWeight === 'number' ? node.strokeWeight : undefined;
+            const strokeStyle = 'dashPattern' in node && Array.isArray(node.dashPattern) && node.dashPattern.length > 0 ? 'dash' : 'solid';
+
+            if (!fillColor && !strokeColor && thickness === undefined) return;
+            found = {
+                fillColor: fillColor || undefined,
+                strokeColor: strokeColor || undefined,
+                thickness,
+                strokeStyle
+            };
+        });
+        if (found) return found;
+    }
+    return null;
+}
+
+export function extractChartContainerStrokeStyle(graph: SceneNode): StrokeStyleSnapshot | null {
+    let colContainer: SceneNode | null = null;
+    let colFallback: SceneNode | null = null;
+    traverse(graph, (node) => {
+        if (colContainer) return;
+        if (node.id === graph.id) return;
+        if (node.name !== 'col' || !('children' in node)) return;
+        if (!colFallback) colFallback = node;
+        const hasChartContainer = (node as SceneNode & ChildrenMixin).children.some((child) => child.name === 'chart_container');
+        if (hasChartContainer) {
+            colContainer = node;
+        }
+    });
+
+    const col = colContainer || colFallback;
     if (!col || !('children' in col)) return null;
 
     const chartContainer = (col as SceneNode & ChildrenMixin).children.find((child) => child.name === 'chart_container');
@@ -450,6 +602,9 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
     }
 
     const colStrokeStyle = extractColStrokeStyle(node);
+    const cellFillStyle = extractCellFillStyle(node);
+    const markStyles = extractMarkStyles(node);
+    const markStyle = markStyles[0] || null;
     const chartContainerStrokeStyle = extractChartContainerStrokeStyle(node);
     const assistLineStrokeStyle = extractAssistLineStrokeStyle(node);
     const cellStrokeStyles = extractCellStrokeStyles(node);
@@ -461,6 +616,9 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
         markRatio,
         cornerRadius,
         strokeWidth,
+        cellFillStyle,
+        markStyle,
+        markStyles,
         colStrokeStyle,
         chartContainerStrokeStyle,
         assistLineStrokeStyle,

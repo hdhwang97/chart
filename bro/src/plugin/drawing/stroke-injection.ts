@@ -1,17 +1,20 @@
 import { MARK_NAME_PATTERNS } from '../constants';
 import type {
+    CellFillInjectionStyle,
     GridStrokeInjectionStyle,
+    MarkInjectionStyle,
     RowStrokeStyle,
     SideStrokeInjectionStyle,
     StrokeInjectionPayload,
     StrokeStyleSnapshot
 } from '../../shared/style-types';
-import { normalizeHexColor, traverse, tryApplyStroke } from '../utils';
+import { normalizeHexColor, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke } from '../utils';
 import { collectColumns } from './shared';
 
 type SideName = 'top' | 'right' | 'bottom' | 'left';
 
 type StrokeInjectionRuntimePayload = StrokeInjectionPayload & {
+    markNum?: number | number[];
     rowStrokeStyles?: RowStrokeStyle[];
     colStrokeStyle?: StrokeStyleSnapshot | null;
 };
@@ -20,6 +23,7 @@ type NormalizedSideStyle = {
     color?: string;
     thickness?: number;
     visible?: boolean;
+    strokeStyle?: 'solid' | 'dash';
 };
 
 type NormalizedGridStyle = NormalizedSideStyle & {
@@ -39,16 +43,53 @@ type ScopeResult = {
     errors: number;
 };
 
+type NormalizedMarkStyle = {
+    fillColor?: string;
+    strokeColor?: string;
+    thickness?: number;
+    strokeStyle?: 'solid' | 'dash';
+};
+
 export type StrokeInjectionResult = {
+    cellFill: ScopeResult;
+    mark: ScopeResult;
+    legend: ScopeResult;
     cellBottom: ScopeResult;
     tabRight: ScopeResult;
     gridContainer: ScopeResult;
     resolved: {
         cellBottom: boolean;
+        cellFill: boolean;
+        mark: boolean;
+        legend: boolean;
         tabRight: boolean;
         gridContainer: boolean;
     };
 };
+
+function normalizeCellFillStyle(input: unknown): { color?: string } | null {
+    if (!input || typeof input !== 'object') return null;
+    const source = input as CellFillInjectionStyle;
+    const color = normalizeHexColor(source.color);
+    if (!color) return null;
+    return { color };
+}
+
+function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
+    if (!input || typeof input !== 'object') return null;
+    const source = input as MarkInjectionStyle;
+    const fillColor = normalizeHexColor(source.fillColor);
+    const strokeColor = normalizeHexColor(source.strokeColor);
+    const thickness = normalizeThickness(source.thickness);
+    const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
+    if (!fillColor && !strokeColor && thickness === undefined && !strokeStyle) return null;
+    return {
+        fillColor: fillColor || undefined,
+        strokeColor: strokeColor || undefined,
+        thickness,
+        strokeStyle
+    };
+}
 
 type IndividualStrokeNode = SceneNode & IndividualStrokesMixin;
 type StrokeWeightNode = SceneNode & GeometryMixin;
@@ -75,9 +116,10 @@ function normalizeSideStyle(input: unknown): NormalizedSideStyle | null {
     const color = normalizeHexColor(source.color);
     const thickness = normalizeThickness(source.thickness);
     const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+    const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
 
-    if (!color && thickness === undefined && visible === undefined) return null;
-    return { color: color || undefined, thickness, visible };
+    if (!color && thickness === undefined && visible === undefined && !strokeStyle) return null;
+    return { color: color || undefined, thickness, visible, strokeStyle };
 }
 
 function normalizeGridStyle(input: unknown): NormalizedGridStyle | null {
@@ -121,9 +163,10 @@ function toSideStyleFromSnapshot(stroke: StrokeStyleSnapshot | null | undefined,
     const color = normalizeHexColor(stroke.color);
     const thickness = normalizeThickness(extractThicknessBySide(stroke, side));
     const visible = thickness === undefined ? undefined : thickness > 0;
+    const strokeStyle = Array.isArray(stroke.dashPattern) && stroke.dashPattern.length > 0 ? 'dash' : 'solid';
 
-    if (!color && thickness === undefined && visible === undefined) return null;
-    return { color: color || undefined, thickness, visible };
+    if (!color && thickness === undefined && visible === undefined && !strokeStyle) return null;
+    return { color: color || undefined, thickness, visible, strokeStyle };
 }
 
 function toGridStyleFromSnapshot(stroke: StrokeStyleSnapshot | null | undefined): NormalizedGridStyle | null {
@@ -135,12 +178,14 @@ function toGridStyleFromSnapshot(stroke: StrokeStyleSnapshot | null | undefined)
             : stroke.weightTop ?? stroke.weightRight ?? stroke.weightBottom ?? stroke.weightLeft
     );
     const visible = thickness === undefined ? undefined : thickness > 0;
+    const strokeStyle = Array.isArray(stroke.dashPattern) && stroke.dashPattern.length > 0 ? 'dash' : 'solid';
 
-    if (!color && thickness === undefined && visible === undefined) return null;
+    if (!color && thickness === undefined && visible === undefined && !strokeStyle) return null;
     return {
         color: color || undefined,
         thickness,
         visible,
+        strokeStyle,
         enableIndividualStroke: true,
         sides: {
             top: true,
@@ -151,6 +196,12 @@ function toGridStyleFromSnapshot(stroke: StrokeStyleSnapshot | null | undefined)
     };
 }
 
+function applyStrokeStyleMode(node: SceneNode, mode: 'solid' | 'dash' | undefined) {
+    if (!mode) return false;
+    if (mode === 'dash') return tryApplyDashPattern(node, [4, 2]);
+    return tryApplyDashPattern(node, []);
+}
+
 function resolveCellBottomStyle(payload: StrokeInjectionRuntimePayload): NormalizedSideStyle | null {
     const preferred = normalizeSideStyle(payload.cellBottomStyle);
     if (preferred) return preferred;
@@ -159,6 +210,27 @@ function resolveCellBottomStyle(payload: StrokeInjectionRuntimePayload): Normali
     if (rowZero) return rowZero;
 
     return toSideStyleFromSnapshot(payload.colStrokeStyle || null, 'bottom');
+}
+
+function resolveCellFillStyle(payload: StrokeInjectionRuntimePayload): { color?: string } | null {
+    const preferred = normalizeCellFillStyle(payload.cellFillStyle);
+    if (preferred) return preferred;
+    return null;
+}
+
+function resolveMarkStyle(payload: StrokeInjectionRuntimePayload): NormalizedMarkStyle | null {
+    return normalizeMarkStyle(payload.markStyle);
+}
+
+function resolveMarkStyles(payload: StrokeInjectionRuntimePayload): NormalizedMarkStyle[] {
+    const explicit = Array.isArray(payload.markStyles)
+        ? payload.markStyles
+            .map((item) => normalizeMarkStyle(item))
+            .filter((item): item is NormalizedMarkStyle => Boolean(item))
+        : [];
+    if (explicit.length > 0) return explicit;
+    const single = resolveMarkStyle(payload);
+    return single ? [single] : [];
 }
 
 function resolveTabRightStyle(payload: StrokeInjectionRuntimePayload): NormalizedSideStyle | null {
@@ -214,6 +286,10 @@ function applySideStrokeStyle(node: SceneNode, side: SideName, style: Normalized
         applied = true;
     }
 
+    if (applyStrokeStyleMode(node, style.strokeStyle)) {
+        applied = true;
+    }
+
     const targetThickness = style.visible === false ? 0 : style.thickness;
     if (typeof targetThickness === 'number') {
         if (hasIndividualStrokeWeights(node)) {
@@ -234,6 +310,9 @@ function applyGridStrokeStyle(node: SceneNode, style: NormalizedGridStyle): bool
 
     // Figma stroke color is shared across sides; apply it only when all sides are targeted.
     if (allSidesSelected && style.color && tryApplyStroke(node, style.color)) {
+        applied = true;
+    }
+    if (allSidesSelected && applyStrokeStyleMode(node, style.strokeStyle)) {
         applied = true;
     }
 
@@ -285,6 +364,202 @@ function applyCellBottomStroke(graph: SceneNode, style: NormalizedSideStyle): Sc
     return result;
 }
 
+function applyCellFill(graph: SceneNode, style: { color?: string }): ScopeResult {
+    const result = createScopeResult();
+    if (!style.color) return result;
+    const columns = collectColumns(graph);
+    columns.forEach((col) => {
+        traverse(col.node, (node) => {
+            if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
+            result.candidates += 1;
+            try {
+                if (tryApplyFill(node, style.color!)) result.applied += 1;
+                else result.skipped += 1;
+            } catch {
+                result.errors += 1;
+            }
+        });
+    });
+    return result;
+}
+
+function isBarLikeMarkName(name: string): boolean {
+    return (
+        MARK_NAME_PATTERNS.BAR_ITEM_MULTI.test(name)
+        || MARK_NAME_PATTERNS.STACKED_SEGMENT.test(name)
+    );
+}
+
+function parseMarkSeriesIndex(name: string): number | null {
+    const barMulti = MARK_NAME_PATTERNS.BAR_ITEM_MULTI.exec(name);
+    if (barMulti) {
+        const idx = Number(barMulti[1]);
+        return Number.isFinite(idx) && idx > 0 ? idx : null;
+    }
+    const stackedSeg = MARK_NAME_PATTERNS.STACKED_SEGMENT.exec(name);
+    if (stackedSeg) {
+        const idx = Number(stackedSeg[1]);
+        return Number.isFinite(idx) && idx > 0 ? idx : null;
+    }
+    const line = MARK_NAME_PATTERNS.LINE.exec(name);
+    if (line) {
+        const idx = Number(line[1] || 1);
+        return Number.isFinite(idx) && idx > 0 ? idx : 1;
+    }
+    return null;
+}
+
+function getMarkStyleBySeries(styles: NormalizedMarkStyle[], seriesIndex: number): NormalizedMarkStyle | null {
+    if (styles.length === 0) return null;
+    if (seriesIndex <= styles.length) return styles[seriesIndex - 1];
+    return styles[0];
+}
+
+function isLineLikeNode(node: SceneNode): boolean {
+    if (MARK_NAME_PATTERNS.LINE.test(node.name)) return true;
+    const lower = node.name.toLowerCase();
+    if (lower.includes('point') || lower.includes('dot')) return true;
+    return false;
+}
+
+function applyMarkStyleToNode(node: SceneNode, style: NormalizedMarkStyle): boolean {
+    let applied = false;
+    if (style.fillColor && tryApplyFill(node, style.fillColor)) applied = true;
+    if (style.strokeColor && tryApplyStroke(node, style.strokeColor)) applied = true;
+    if (applyStrokeStyleMode(node, style.strokeStyle)) applied = true;
+    if (typeof style.thickness === 'number' && hasStrokeWeight(node)) {
+        node.strokeWeight = style.thickness;
+        applied = true;
+    }
+    return applied;
+}
+
+function applyMarkStyles(graph: SceneNode, styles: NormalizedMarkStyle[]): ScopeResult {
+    const result = createScopeResult();
+    if (styles.length === 0) return result;
+    const columns = collectColumns(graph);
+    columns.forEach((col) => {
+        traverse(col.node, (node) => {
+            if (!node.visible) return;
+
+            const seriesIndex = parseMarkSeriesIndex(node.name);
+            if (isBarLikeMarkName(node.name) && seriesIndex) {
+                const style = getMarkStyleBySeries(styles, seriesIndex);
+                if (!style) return;
+                result.candidates += 1;
+                try {
+                    if (applyMarkStyleToNode(node, style)) result.applied += 1;
+                    else result.skipped += 1;
+                } catch {
+                    result.errors += 1;
+                }
+                return;
+            }
+
+            if (!isLineLikeNode(node) || !seriesIndex) return;
+            const style = getMarkStyleBySeries(styles, seriesIndex);
+            if (!style) return;
+            if (node.type === 'INSTANCE' || 'children' in node) {
+                traverse(node, (child) => {
+                    if (child.id === node.id || !child.visible) return;
+                    const lower = child.name.toLowerCase();
+                    const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+                    const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
+                    if (!isPointLike && !isVectorLike) return;
+                    result.candidates += 1;
+                    try {
+                        if (applyMarkStyleToNode(child, style)) result.applied += 1;
+                        else result.skipped += 1;
+                    } catch {
+                        result.errors += 1;
+                    }
+                });
+            }
+        });
+    });
+    return result;
+}
+
+function resolveLegendMarkCount(markNum: number | number[] | undefined): number | null {
+    if (Array.isArray(markNum)) return null;
+    const parsed = Number(markNum);
+    if (!Number.isFinite(parsed) || parsed < 1) return null;
+    return Math.floor(parsed);
+}
+
+function findLegendContainers(graph: SceneNode): SceneNode[] {
+    const results: SceneNode[] = [];
+    traverse(graph, (node) => {
+        if (node.id === graph.id) return;
+        if (!MARK_NAME_PATTERNS.LEGEND_CONTAINER.test(node.name)) return;
+        if (!('children' in node)) return;
+        results.push(node);
+    });
+    return results;
+}
+
+function collectLegendElems(container: SceneNode): Array<{ node: SceneNode; index: number }> {
+    if (!('children' in container)) return [];
+    const results: Array<{ node: SceneNode; index: number }> = [];
+    (container as SceneNode & ChildrenMixin).children.forEach((child) => {
+        const match = MARK_NAME_PATTERNS.LEGEND_ELEM.exec(child.name);
+        if (!match) return;
+        const index = Number(match[1]);
+        if (!Number.isFinite(index) || index < 1) return;
+        results.push({ node: child, index: Math.floor(index) });
+    });
+    return results.sort((a, b) => a.index - b.index);
+}
+
+function findLegendColorNode(legendElem: SceneNode): SceneNode | null {
+    if (!('children' in legendElem)) return null;
+    const direct = (legendElem as SceneNode & ChildrenMixin).children.find((child) => MARK_NAME_PATTERNS.LEGEND_COLOR.test(child.name));
+    return direct || null;
+}
+
+function applyLegendMarkSync(
+    graph: SceneNode,
+    styles: NormalizedMarkStyle[],
+    markNum: number | number[] | undefined
+): { result: ScopeResult; enabled: boolean } {
+    const result = createScopeResult();
+    const markCount = resolveLegendMarkCount(markNum);
+    if (markCount === null || styles.length === 0) {
+        return { result, enabled: false };
+    }
+
+    const containers = findLegendContainers(graph);
+    containers.forEach((container) => {
+        const elems = collectLegendElems(container);
+        elems.forEach(({ node, index }) => {
+            result.candidates += 1;
+            try {
+                node.visible = index <= markCount;
+                if (index > markCount) {
+                    result.applied += 1;
+                    return;
+                }
+
+                const style = getMarkStyleBySeries(styles, index);
+                const colorNode = findLegendColorNode(node);
+                if (!style || !style.fillColor || !colorNode) {
+                    result.skipped += 1;
+                    return;
+                }
+                if (tryApplyFill(colorNode, style.fillColor)) {
+                    result.applied += 1;
+                } else {
+                    result.skipped += 1;
+                }
+            } catch {
+                result.errors += 1;
+            }
+        });
+    });
+
+    return { result, enabled: true };
+}
+
 function applyTabRightStroke(graph: SceneNode, style: NormalizedSideStyle): ScopeResult {
     const result = createScopeResult();
     const columns = collectColumns(graph);
@@ -314,10 +589,19 @@ function applyTabRightStroke(graph: SceneNode, style: NormalizedSideStyle): Scop
 }
 
 function findColContainer(graph: SceneNode): SceneNode | null {
-    if (!('children' in graph)) return null;
-    const rootChildren = (graph as SceneNode & ChildrenMixin).children;
-    const direct = rootChildren.find((child) => child.name === 'col');
-    return direct || null;
+    let withChartContainer: SceneNode | null = null;
+    let fallback: SceneNode | null = null;
+    traverse(graph, (node) => {
+        if (withChartContainer) return;
+        if (node.id === graph.id) return;
+        if (node.name !== 'col' || !('children' in node)) return;
+        if (!fallback) fallback = node;
+        const hasChartContainer = (node as SceneNode & ChildrenMixin).children.some((child) => child.name === 'chart_container');
+        if (hasChartContainer) {
+            withChartContainer = node;
+        }
+    });
+    return withChartContainer || fallback;
 }
 
 function findDirectChildByName(parent: SceneNode, name: string): SceneNode | null {
@@ -359,15 +643,24 @@ function applyGridContainerStroke(graph: SceneNode, style: NormalizedGridStyle):
 }
 
 export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionRuntimePayload): StrokeInjectionResult {
+    const cellFillStyle = resolveCellFillStyle(payload);
+    const markStyles = resolveMarkStyles(payload);
+    const legendSync = applyLegendMarkSync(graph, markStyles, payload.markNum);
     const cellBottomStyle = resolveCellBottomStyle(payload);
     const tabRightStyle = resolveTabRightStyle(payload);
     const gridContainerStyle = resolveGridContainerStyle(payload);
 
     return {
+        cellFill: cellFillStyle ? applyCellFill(graph, cellFillStyle) : createScopeResult(),
+        mark: markStyles.length > 0 ? applyMarkStyles(graph, markStyles) : createScopeResult(),
+        legend: legendSync.result,
         cellBottom: cellBottomStyle ? applyCellBottomStroke(graph, cellBottomStyle) : createScopeResult(),
         tabRight: tabRightStyle ? applyTabRightStroke(graph, tabRightStyle) : createScopeResult(),
         gridContainer: gridContainerStyle ? applyGridContainerStroke(graph, gridContainerStyle) : createScopeResult(),
         resolved: {
+            cellFill: Boolean(cellFillStyle),
+            mark: markStyles.length > 0,
+            legend: legendSync.enabled,
             cellBottom: Boolean(cellBottomStyle),
             tabRight: Boolean(tabRightStyle),
             gridContainer: Boolean(gridContainerStyle)

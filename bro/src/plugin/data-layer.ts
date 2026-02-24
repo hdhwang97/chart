@@ -1,7 +1,7 @@
 import { PLUGIN_DATA_KEYS } from './constants';
 import { inferStructureFromGraph } from './init';
 import { normalizeHexColor } from './utils';
-import type { AssistLineInjectionStyle, GridStrokeInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
+import type { AssistLineInjectionStyle, CellFillInjectionStyle, GridStrokeInjectionStyle, MarkInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
 
 // ==========================================
 // DATA LAYER (저장/로드 핵심 로직)
@@ -36,6 +36,41 @@ function normalizeRowColors(value: any): string[] {
     return next;
 }
 
+function getDefaultRowHeaderLabel(index: number, chartType: string): string {
+    if (chartType === 'stackedBar' || chartType === 'stacked') {
+        if (index === 0) return 'All';
+        return `R${index}`;
+    }
+    return `R${index + 1}`;
+}
+
+function normalizeRowHeaderLabels(value: unknown, rowCount: number, chartType: string): string[] {
+    const source = Array.isArray(value) ? value : [];
+    const safeCount = Math.max(1, Number.isFinite(rowCount) ? Math.floor(rowCount) : 1);
+    const next: string[] = [];
+    for (let i = 0; i < safeCount; i++) {
+        const raw = typeof source[i] === 'string' ? source[i].trim() : '';
+        next.push(raw || getDefaultRowHeaderLabel(i, chartType));
+    }
+    return next;
+}
+
+function normalizeXAxisLabels(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const next: string[] = [];
+    value.forEach((item) => {
+        if (typeof item !== 'string') return;
+        const trimmed = item.trim();
+        if (!trimmed) return;
+        next.push(trimmed);
+    });
+    return next;
+}
+
+function normalizeMarkColorSource(value: unknown): 'row' | 'col' {
+    return value === 'col' ? 'col' : 'row';
+}
+
 function normalizeThickness(value: unknown): number | undefined {
     const n = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(n) || n < 0) return undefined;
@@ -48,12 +83,14 @@ function normalizeSideStrokeStyle(value: unknown): SideStrokeInjectionStyle | nu
     const color = normalizeHexColor(source.color);
     const thickness = normalizeThickness(source.thickness);
     const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+    const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
 
-    if (!color && thickness === undefined && visible === undefined) return null;
+    if (!color && thickness === undefined && visible === undefined && !strokeStyle) return null;
     return {
         color: color || undefined,
         thickness: visible === false ? 0 : thickness,
-        visible
+        visible,
+        strokeStyle
     };
 }
 
@@ -81,11 +118,44 @@ function normalizeAssistLineStyle(value: unknown): AssistLineInjectionStyle | nu
     const source = value as AssistLineInjectionStyle;
     const color = normalizeHexColor(source.color);
     const thickness = normalizeThickness(source.thickness);
-    if (!color && thickness === undefined) return null;
+    const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
+    if (!color && thickness === undefined && !strokeStyle) return null;
     return {
         color: color || undefined,
-        thickness
+        thickness,
+        strokeStyle
     };
+}
+
+function normalizeCellFillStyle(value: unknown): CellFillInjectionStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as CellFillInjectionStyle;
+    const color = normalizeHexColor(source.color);
+    if (!color) return null;
+    return { color };
+}
+
+function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as MarkInjectionStyle;
+    const fillColor = normalizeHexColor(source.fillColor);
+    const strokeColor = normalizeHexColor(source.strokeColor);
+    const thickness = normalizeThickness(source.thickness);
+    const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
+    if (!fillColor && !strokeColor && thickness === undefined && !strokeStyle) return null;
+    return {
+        fillColor: fillColor || undefined,
+        strokeColor: strokeColor || undefined,
+        thickness,
+        strokeStyle
+    };
+}
+
+function normalizeMarkStyles(value: unknown): MarkInjectionStyle[] {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((item) => normalizeMarkStyle(item))
+        .filter((item): item is MarkInjectionStyle => Boolean(item));
 }
 
 function isStackedChartType(chartType: string) {
@@ -135,6 +205,10 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(msg.markNum));
     }
     node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS,
+        JSON.stringify(normalizeXAxisLabels(msg.xAxisLabels))
+    );
+    node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED,
         JSON.stringify(normalizeAssistLineEnabled(msg.assistLineEnabled))
     );
@@ -145,6 +219,21 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_ROW_COLORS,
         JSON.stringify(normalizeRowColors(msg.rowColors))
+    );
+    const rowCount = Number.isFinite(Number(msg.rows))
+        ? Number(msg.rows)
+        : (Array.isArray(msg.rawValues) ? msg.rawValues.length : 1);
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS,
+        JSON.stringify(normalizeRowHeaderLabels(msg.rowHeaderLabels, rowCount, msg.type))
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_COL_COLORS,
+        JSON.stringify(normalizeRowColors(msg.colColors))
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE,
+        normalizeMarkColorSource(msg.markColorSource)
     );
 
     // UI에서 직접 넘어온 Stroke Width가 있다면 우선 저장
@@ -174,11 +263,18 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         }
     }
 
+    const cellFillStyle = normalizeCellFillStyle(msg.cellFillStyle);
     const cellBottomStyle = normalizeSideStrokeStyle(msg.cellBottomStyle);
     const tabRightStyle = normalizeSideStrokeStyle(msg.tabRightStyle);
     const gridContainerStyle = normalizeGridStrokeStyle(msg.gridContainerStyle);
     const assistLineStyle = normalizeAssistLineStyle(msg.assistLineStyle);
+    const markStyle = normalizeMarkStyle(msg.markStyle);
+    const markStyles = normalizeMarkStyles(msg.markStyles);
 
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_CELL_FILL_STYLE,
+        cellFillStyle ? JSON.stringify(cellFillStyle) : ''
+    );
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE,
         cellBottomStyle ? JSON.stringify(cellBottomStyle) : ''
@@ -194,6 +290,14 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE,
         assistLineStyle ? JSON.stringify(assistLineStyle) : ''
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_MARK_STYLE,
+        markStyle ? JSON.stringify(markStyle) : ''
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_MARK_STYLES,
+        markStyles.length > 0 ? JSON.stringify(markStyles) : ''
     );
 }
 

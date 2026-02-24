@@ -1,7 +1,7 @@
 import { VARIANT_MAPPING, PLUGIN_DATA_KEYS } from './constants';
 import { saveChartData } from './data-layer';
 import { extractStyleFromNode } from './style';
-import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, getGraphHeight, applyColumnXEmptyAlign, applyColumnXEmptyLabels } from './drawing/shared';
+import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, getChartLegendHeight, getGraphHeight, getXEmptyHeight, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
@@ -10,6 +10,7 @@ import { applyStrokeInjection } from './drawing/stroke-injection';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
 import { normalizeHexColor } from './utils';
+import { deleteStyleTemplate, loadStyleTemplates, renameStyleTemplate, saveStyleTemplate } from './template-store';
 
 // ==========================================
 // PLUGIN ENTRY POINT
@@ -162,11 +163,17 @@ figma.ui.onmessage = async (msg) => {
             strokeWidth,
             markRatio,
             rowColors,
+            colColors,
+            rowHeaderLabels,
+            markColorSource,
             rawYMaxAuto,
             assistLineVisible,
             assistLineEnabled,
             assistLineStyle,
+            markStyle,
+            markStyles,
             xAxisLabels,
+            cellFillStyle,
             rowStrokeStyles,
             colStrokeStyle,
             cellBottomStyle,
@@ -245,6 +252,18 @@ figma.ui.onmessage = async (msg) => {
 
         // 4. Draw Chart
         const H = getGraphHeight(targetNode as FrameNode);
+        const xEmptyHeight = getXEmptyHeight(targetNode as FrameNode);
+        const chartLegendHeight = getChartLegendHeight(targetNode as FrameNode);
+        if (type === 'bar') {
+            console.log('[chart-plugin][bar-height-debug][graph]', {
+                graphId: targetNode.id,
+                graphName: targetNode.name,
+                graphHeight: 'height' in targetNode ? targetNode.height : null,
+                xEmptyHeight,
+                chartLegendHeight,
+                computedH: H
+            });
+        }
         const drawConfig = {
             values,
             mode,
@@ -256,6 +275,8 @@ figma.ui.onmessage = async (msg) => {
             strokeWidth,
             markRatio,
             rowColors: normalizeRowColors(rowColors),
+            colColors: normalizeRowColors(colColors),
+            markColorSource: markColorSource === 'col' ? 'col' : 'row',
             assistLineVisible,
             assistLineEnabled,
             assistLineStyle
@@ -264,7 +285,7 @@ figma.ui.onmessage = async (msg) => {
         if (type === "bar") applyBar(drawConfig, H, targetNode);
         else if (type === "line") applyLine(drawConfig, H, targetNode);
         else if (type === "stackedBar" || type === "stacked") applyStackedBar(drawConfig, H, targetNode);
-        applyAssistLines(drawConfig, targetNode, H);
+        applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
 
         const xEmptyAlign: 'center' | 'right' =
             type === 'line'
@@ -277,11 +298,22 @@ figma.ui.onmessage = async (msg) => {
             Array.isArray(xAxisLabels) ? xAxisLabels : []
         );
         console.log('[chart-plugin][x-empty-label]', { type, ...xEmptyLabelResult });
+        const legendLabelResult = applyLegendLabelsFromRowHeaders(
+            targetNode,
+            Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
+            markNum,
+            type
+        );
+        console.log('[chart-plugin][legend-label]', { type, ...legendLabelResult });
 
         const strokeInjectionResult = applyStrokeInjection(targetNode, {
+            cellFillStyle,
             cellBottomStyle,
             tabRightStyle,
             gridContainerStyle,
+            markStyle,
+            markStyles,
+            markNum,
             rowStrokeStyles,
             colStrokeStyle
         });
@@ -310,10 +342,15 @@ figma.ui.onmessage = async (msg) => {
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
             rowColors: rowColorsForUi,
+            colColors: normalizeRowColors(colColors),
+            markColorSource: markColorSource === 'col' ? 'col' : 'row',
             assistLineVisible: Boolean(assistLineVisible),
             assistLineEnabled: assistLineEnabled || { min: false, max: false, avg: false },
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
+            cellFillStyle: styleInfo.cellFillStyle || null,
+            markStyle: styleInfo.markStyle || null,
+            markStyles: styleInfo.markStyles || [],
             colStrokeStyle: styleInfo.colStrokeStyle || null,
             chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
             assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
@@ -370,6 +407,15 @@ figma.ui.onmessage = async (msg) => {
             }
         }
         const rowColorsForUi = resolveRowColorsFromNode(node, chartType, rowCount, styleInfo.colors);
+        const colColorsRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLORS);
+        let colColorsForUi: string[] = [];
+        if (colColorsRaw) {
+            try {
+                const parsed = JSON.parse(colColorsRaw);
+                colColorsForUi = normalizeRowColors(parsed);
+            } catch { }
+        }
+        const markColorSource = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row';
         const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
         const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
         let assistLineEnabled = { min: false, max: false, avg: false };
@@ -393,10 +439,15 @@ figma.ui.onmessage = async (msg) => {
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
             rowColors: rowColorsForUi,
+            colColors: colColorsForUi,
+            markColorSource,
             assistLineVisible,
             assistLineEnabled,
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: resolveStrokeWidthForUi(node, undefined, styleInfo.strokeWidth),
+            cellFillStyle: styleInfo.cellFillStyle || null,
+            markStyle: styleInfo.markStyle || null,
+            markStyles: styleInfo.markStyles || [],
             colStrokeStyle: styleInfo.colStrokeStyle || null,
             chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
             assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
@@ -406,6 +457,34 @@ figma.ui.onmessage = async (msg) => {
 
         figma.ui.postMessage({ type: 'style_extracted', source: 'extract_style', payload: payload });
         figma.notify("Style Extracted!");
+    }
+    else if (msg.type === 'load_style_templates') {
+        const list = await loadStyleTemplates();
+        figma.ui.postMessage({ type: 'style_templates_loaded', list });
+    }
+    else if (msg.type === 'save_style_template') {
+        const result = await saveStyleTemplate(msg.name, msg.payload);
+        if (result.error) {
+            figma.ui.postMessage({ type: 'style_template_error', reason: result.error });
+            return;
+        }
+        figma.ui.postMessage({ type: 'style_template_saved', list: result.list || [] });
+    }
+    else if (msg.type === 'delete_style_template') {
+        const result = await deleteStyleTemplate(msg.id);
+        if (result.error) {
+            figma.ui.postMessage({ type: 'style_template_error', reason: result.error });
+            return;
+        }
+        figma.ui.postMessage({ type: 'style_template_deleted', id: msg.id, list: result.list || [] });
+    }
+    else if (msg.type === 'rename_style_template') {
+        const result = await renameStyleTemplate(msg.id, msg.name);
+        if (result.error) {
+            figma.ui.postMessage({ type: 'style_template_error', reason: result.error });
+            return;
+        }
+        figma.ui.postMessage({ type: 'style_template_renamed', id: msg.id, list: result.list || [] });
     }
 };
 

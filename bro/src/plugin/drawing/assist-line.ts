@@ -1,5 +1,5 @@
 import { collectColumns } from './shared';
-import { clamp, traverse, findActualPropKey, normalizeHexColor, tryApplyStroke } from '../utils';
+import { clamp, traverse, findActualPropKey, normalizeHexColor, tryApplyDashPattern, tryApplyStroke } from '../utils';
 
 type AssistMetricType = 'min' | 'max' | 'avg';
 
@@ -12,6 +12,7 @@ type AssistLineEnabled = {
 type AssistLineStyle = {
     color?: string;
     thickness?: number;
+    strokeStyle?: 'solid' | 'dash';
 };
 
 const DEFAULT_ASSIST_LINE_ENABLED: AssistLineEnabled = {
@@ -53,6 +54,15 @@ function resolveAssistLineNodes(graph: SceneNode): Record<AssistMetricType, Scen
         nodes[metric].push(node);
     });
 
+    return nodes;
+}
+
+function resolveChartContainerNodes(graph: SceneNode): SceneNode[] {
+    const nodes: SceneNode[] = [];
+    traverse(graph, (node) => {
+        if (node.name !== 'chart_container') return;
+        nodes.push(node);
+    });
     return nodes;
 }
 
@@ -131,10 +141,12 @@ function normalizeAssistLineStyle(value: unknown): AssistLineStyle | null {
     const color = normalizeHexColor(source.color);
     const thicknessRaw = typeof source.thickness === 'number' ? source.thickness : Number(source.thickness);
     const thickness = Number.isFinite(thicknessRaw) && thicknessRaw >= 0 ? thicknessRaw : undefined;
-    if (!color && thickness === undefined) return null;
+    const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
+    if (!color && thickness === undefined && !strokeStyle) return null;
     return {
         color: color || undefined,
-        thickness
+        thickness,
+        strokeStyle
     };
 }
 
@@ -143,6 +155,8 @@ function applyAssistLineVisualStyle(node: SceneNode, style: AssistLineStyle | nu
 
     const applyToNode = (target: SceneNode) => {
         if (style.color) tryApplyStroke(target, style.color);
+        if (style.strokeStyle === 'dash') tryApplyDashPattern(target, [4, 2]);
+        else if (style.strokeStyle === 'solid') tryApplyDashPattern(target, []);
         if (typeof style.thickness === 'number') {
             try {
                 if (
@@ -181,7 +195,11 @@ function applyAssistLineVisualStyle(node: SceneNode, style: AssistLineStyle | nu
     }
 }
 
-export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: number) {
+type AssistLineLayoutOptions = {
+    xEmptyHeight?: number;
+};
+
+export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: number, options?: AssistLineLayoutOptions) {
     const assistLineVisible = Boolean(config?.assistLineVisible);
     const enabled = normalizeAssistLineEnabled(config?.assistLineEnabled);
     const values = Array.isArray(config?.values) ? config.values : [];
@@ -189,8 +207,20 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
     const yMin = Number.isFinite(Number(config?.yMin)) ? Number(config.yMin) : 0;
     const yMax = Number.isFinite(Number(config?.yMax)) ? Number(config.yMax) : 100;
     const graphHeight = resolveReferenceHeight(graph, fallbackHeight);
+    const xEmptyHeight = Number.isFinite(Number(options?.xEmptyHeight)) ? Math.max(0, Number(options?.xEmptyHeight)) : 0;
     const nodesByMetric = resolveAssistLineNodes(graph);
+    const chartContainerNodes = resolveChartContainerNodes(graph);
     const assistLineStyle = normalizeAssistLineStyle(config?.assistLineStyle);
+
+    chartContainerNodes.forEach((node) => {
+        try {
+            if ('paddingBottom' in node) {
+                (node as SceneNode & { paddingBottom: number }).paddingBottom = xEmptyHeight;
+            }
+        } catch {
+            // no-op
+        }
+    });
 
     (['min', 'max', 'avg'] as AssistMetricType[]).forEach((metric) => {
         const metricNodes = nodesByMetric[metric];
@@ -210,6 +240,9 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
 
         metricNodes.forEach((node) => {
             try {
+                if ('paddingBottom' in node) {
+                    (node as SceneNode & { paddingBottom: number }).paddingBottom = xEmptyHeight;
+                }
                 node.visible = isEnabled;
                 if (!isEnabled) {
                     console.log('[chart-plugin][assist-line]', {
@@ -244,9 +277,11 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
                     enabled: isEnabled,
                     metricValue,
                     graphHeight,
+                    xEmptyHeight,
                     yMin,
                     yMax,
                     paddingTop,
+                    paddingBottom: xEmptyHeight,
                     nodeId: node.id,
                     nodeName: node.name,
                     dataApplied

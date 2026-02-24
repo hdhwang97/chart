@@ -2,7 +2,7 @@
 // STATE & CONSTANTS
 // ==========================================
 
-import type { CellStrokeStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
+import type { CellStrokeStyle, RowStrokeStyle, StrokeStyleSnapshot, StyleTemplateItem } from '../shared/style-types';
 
 export const MAX_SIZE = 25;
 export const DEFAULT_ROW_COLORS = [
@@ -14,11 +14,20 @@ export type StyleInjectionDraftItem = {
     color: string;
     thickness: number;
     visible: boolean;
+    strokeStyle: 'solid' | 'dash';
 };
 
 export type AssistLineStyleInjectionDraftItem = {
     color: string;
     thickness: number;
+    strokeStyle: 'solid' | 'dash';
+};
+
+export type MarkStyleInjectionDraftItem = {
+    fillColor: string;
+    strokeColor: string;
+    thickness: number;
+    strokeStyle: 'solid' | 'dash';
 };
 
 export type GridStyleInjectionDraftItem = StyleInjectionDraftItem & {
@@ -31,19 +40,25 @@ export type GridStyleInjectionDraftItem = StyleInjectionDraftItem & {
 };
 
 export type StyleInjectionDraft = {
+    cellFill: {
+        color: string;
+    };
     cellBottom: StyleInjectionDraftItem;
     tabRight: StyleInjectionDraftItem;
     gridContainer: GridStyleInjectionDraftItem;
     assistLine: AssistLineStyleInjectionDraftItem;
+    mark: MarkStyleInjectionDraftItem;
 };
 
 export const DEFAULT_STYLE_INJECTION_ITEM: StyleInjectionDraftItem = {
     color: '#E5E7EB',
     thickness: 1,
-    visible: true
+    visible: true,
+    strokeStyle: 'solid'
 };
 
 export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
+    cellFill: { color: '#FFFFFF' },
     cellBottom: { ...DEFAULT_STYLE_INJECTION_ITEM },
     tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
     gridContainer: {
@@ -52,7 +67,14 @@ export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
     },
     assistLine: {
         color: '#E5E7EB',
-        thickness: 1
+        thickness: 1,
+        strokeStyle: 'solid'
+    },
+    mark: {
+        fillColor: '#3B82F6',
+        strokeColor: '#3B82F6',
+        thickness: 1,
+        strokeStyle: 'solid'
     }
 };
 
@@ -73,12 +95,17 @@ export const state = {
     strokeWidth: 2,
     markRatio: 0.8,
     rowColors: DEFAULT_ROW_COLORS.slice(0, 3),
+    rowHeaderLabels: ['R1', 'R2', 'R3'] as string[],
+    colHeaderTitles: ['C1', 'C2', 'C3'] as string[],
+    colHeaderColors: [] as string[],
+    markColorSource: 'row' as 'row' | 'col',
     assistLineVisible: false,
     assistLineEnabled: { min: false, max: false, avg: false },
     colStrokeStyle: null as StrokeStyleSnapshot | null,
     cellStrokeStyles: [] as CellStrokeStyle[],
     rowStrokeStyles: [] as RowStrokeStyle[],
     styleInjectionDraft: {
+        cellFill: { color: '#FFFFFF' },
         cellBottom: { ...DEFAULT_STYLE_INJECTION_ITEM },
         tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
         gridContainer: {
@@ -87,10 +114,29 @@ export const state = {
         },
         assistLine: {
             color: '#E5E7EB',
-            thickness: 1
+            thickness: 1,
+            strokeStyle: 'solid'
+        },
+        mark: {
+            fillColor: '#3B82F6',
+            strokeColor: '#3B82F6',
+            thickness: 1,
+            strokeStyle: 'solid'
         }
     } as StyleInjectionDraft,
-    styleInjectionDirty: false
+    styleInjectionDirty: false,
+    markStylesDraft: [{
+        fillColor: '#3B82F6',
+        strokeColor: '#3B82F6',
+        thickness: 1,
+        strokeStyle: 'solid'
+    }] as MarkStyleInjectionDraftItem[],
+    activeMarkStyleIndex: 0,
+    styleTemplateMode: 'read' as 'read' | 'edit',
+    styleTemplates: [] as StyleTemplateItem[],
+    selectedStyleTemplateId: null as string | null,
+    editingTemplateId: null as string | null,
+    editingTemplateName: '' as string
 };
 
 export const CHART_ICONS: { [key: string]: string } = {
@@ -128,6 +174,21 @@ export function getDefaultRowColor(index: number): string {
     return DEFAULT_ROW_COLORS[index % DEFAULT_ROW_COLORS.length];
 }
 
+export function getDefaultRowHeaderLabel(rowIndex: number, chartType: string): string {
+    if (chartType === 'stackedBar') {
+        if (rowIndex === 0) return 'All';
+        return `R${rowIndex}`;
+    }
+    return `R${rowIndex + 1}`;
+}
+
+export function getDefaultColHeaderTitle(colIndex: number, chartType: string): string {
+    if (chartType === 'stackedBar') {
+        return `G${colIndex + 1}`;
+    }
+    return `C${colIndex + 1}`;
+}
+
 export function ensureRowColorsLength(rowCount: number) {
     const next: string[] = [];
     for (let i = 0; i < rowCount; i++) {
@@ -135,6 +196,49 @@ export function ensureRowColorsLength(rowCount: number) {
     }
     state.rowColors = next;
     return state.rowColors;
+}
+
+export function ensureColHeaderColorsLength(colCount: number) {
+    const next: string[] = [];
+    for (let i = 0; i < colCount; i++) {
+        next.push(normalizeHexColorInput(state.colHeaderColors[i]) || getDefaultRowColor(i));
+    }
+    state.colHeaderColors = next;
+    return state.colHeaderColors;
+}
+
+function normalizeColHeaderTitleInput(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return trimmed;
+}
+
+export function ensureColHeaderTitlesLength(colCount: number, chartType: string) {
+    const next: string[] = [];
+    for (let i = 0; i < colCount; i++) {
+        const normalized = normalizeColHeaderTitleInput(state.colHeaderTitles[i]);
+        next.push(normalized || getDefaultColHeaderTitle(i, chartType));
+    }
+    state.colHeaderTitles = next;
+    return state.colHeaderTitles;
+}
+
+function normalizeRowHeaderLabelInput(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return trimmed;
+}
+
+export function ensureRowHeaderLabelsLength(rowCount: number, chartType: string) {
+    const next: string[] = [];
+    for (let i = 0; i < rowCount; i++) {
+        const normalized = normalizeRowHeaderLabelInput(state.rowHeaderLabels[i]);
+        next.push(normalized || getDefaultRowHeaderLabel(i, chartType));
+    }
+    state.rowHeaderLabels = next;
+    return state.rowHeaderLabels;
 }
 
 export function applyIncomingRowColors(

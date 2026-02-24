@@ -155,7 +155,8 @@ function getDraftLineStroke(target: 'cellBottom' | 'tabRight'): StrokeStyleSnaps
     const draft = target === 'cellBottom' ? state.styleInjectionDraft.cellBottom : state.styleInjectionDraft.tabRight;
     return {
         color: draft.color,
-        weight: draft.visible ? draft.thickness : 0
+        weight: draft.visible ? draft.thickness : 0,
+        dashPattern: draft.strokeStyle === 'dash' ? [4, 2] : []
     };
 }
 
@@ -163,42 +164,47 @@ function drawGridContainerBorder(g: any, w: number, h: number) {
     const grid = state.styleInjectionDraft.gridContainer;
     const thickness = grid.visible ? grid.thickness : 0;
     if (thickness <= 0) return;
+    const dashPattern = grid.strokeStyle === 'dash' ? '4,2' : null;
 
     if (grid.sides.top) {
-        g.append('line')
+        const line = g.append('line')
             .attr('x1', 0)
             .attr('x2', w)
             .attr('y1', 0)
             .attr('y2', 0)
             .attr('stroke', grid.color)
             .attr('stroke-width', thickness);
+        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
     }
     if (grid.sides.right) {
-        g.append('line')
+        const line = g.append('line')
             .attr('x1', w)
             .attr('x2', w)
             .attr('y1', 0)
             .attr('y2', h)
             .attr('stroke', grid.color)
             .attr('stroke-width', thickness);
+        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
     }
     if (grid.sides.bottom) {
-        g.append('line')
+        const line = g.append('line')
             .attr('x1', 0)
             .attr('x2', w)
             .attr('y1', h)
             .attr('y2', h)
             .attr('stroke', grid.color)
             .attr('stroke-width', thickness);
+        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
     }
     if (grid.sides.left) {
-        g.append('line')
+        const line = g.append('line')
             .attr('x1', 0)
             .attr('x2', 0)
             .attr('y1', 0)
             .attr('y2', h)
             .attr('stroke', grid.color)
             .attr('stroke-width', thickness);
+        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
     }
 }
 

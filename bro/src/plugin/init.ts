@@ -11,9 +11,9 @@ import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
-import { getGraphHeight } from './drawing/shared';
+import { getGraphHeight, getXEmptyHeight } from './drawing/shared';
 import { resolveEffectiveYRange } from './drawing/y-range';
-import type { AssistLineInjectionStyle, GridStrokeInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
+import type { AssistLineInjectionStyle, CellFillInjectionStyle, GridStrokeInjectionStyle, MarkInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
 
 // ==========================================
 // COMPONENT DISCOVERY
@@ -93,6 +93,68 @@ function parseSavedAssistLineStyleFromNode(node: SceneNode, key: string): Assist
     }
 }
 
+function parseSavedCellFillStyleFromNode(node: SceneNode, key: string): CellFillInjectionStyle | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed as CellFillInjectionStyle;
+    } catch {
+        return null;
+    }
+}
+
+function parseSavedMarkStyleFromNode(node: SceneNode, key: string): MarkInjectionStyle | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed as MarkInjectionStyle;
+    } catch {
+        return null;
+    }
+}
+
+function parseSavedMarkStylesFromNode(node: SceneNode, key: string): MarkInjectionStyle[] | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return null;
+        return parsed.filter((item) => item && typeof item === 'object') as MarkInjectionStyle[];
+    } catch {
+        return null;
+    }
+}
+
+function parseSavedRowHeaderLabelsFromNode(node: SceneNode, key: string): string[] | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return null;
+        return parsed.map((item) => (typeof item === 'string' ? item.trim() : ''));
+    } catch {
+        return null;
+    }
+}
+
+function parseSavedXAxisLabelsFromNode(node: SceneNode, key: string): string[] | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return null;
+        return parsed
+            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+            .filter((item) => item.length > 0);
+    } catch {
+        return null;
+    }
+}
+
 const DEFAULT_ROW_COLORS = [
     '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE',
     '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#FB923C'
@@ -130,6 +192,22 @@ function resolveRowColorsFromNode(
         next.push(color);
     }
 
+    return next;
+}
+
+function resolveColColorsFromNode(node: SceneNode, colCount: number) {
+    const savedRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLORS);
+    let saved: any[] = [];
+    if (savedRaw) {
+        try {
+            const parsed = JSON.parse(savedRaw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: string[] = [];
+    for (let i = 0; i < colCount; i++) {
+        next.push(normalizeHexColor(saved[i]) || getDefaultRowColor(i));
+    }
     return next;
 }
 
@@ -215,6 +293,9 @@ export async function initPluginUI(
         const autoStyleInfo = extractStyleFromNode(node, chartType);
         const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
         const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, autoStyleInfo.colors);
+        const autoColCount = Array.isArray(valuesToUse) && valuesToUse.length > 0 && Array.isArray(valuesToUse[0]) ? valuesToUse[0].length : 0;
+        const colColors = resolveColColorsFromNode(node, Math.max(1, autoColCount));
+        const markColorSource = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row';
         const payload = {
             type: chartType,
             mode,
@@ -231,6 +312,8 @@ export async function initPluginUI(
                 ? resolveMarkRatioFromNode(node)
                 : undefined,
             rowColors,
+            colColors,
+            markColorSource,
             assistLineVisible,
             assistLineEnabled,
             assistLineStyle: parseSavedAssistLineStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE),
@@ -238,10 +321,11 @@ export async function initPluginUI(
         };
 
         const H = getGraphHeight(node as FrameNode);
+        const xEmptyHeight = getXEmptyHeight(node as FrameNode);
         if (chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
         else if (chartType === 'bar') applyBar(payload, H, node);
         else if (chartType === 'line') applyLine(payload, H, node);
-        applyAssistLines(payload, node, H);
+        applyAssistLines(payload, node, H, { xEmptyHeight });
         return;
     }
 
@@ -256,11 +340,21 @@ export async function initPluginUI(
     const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
     const savedCellBottomStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
+    const savedCellFillStyle = parseSavedCellFillStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_FILL_STYLE);
     const savedTabRightStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE);
     const savedGridContainerStyle = parseSavedGridStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE);
     const savedAssistLineStyle = parseSavedAssistLineStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE);
+    const savedMarkStyle = parseSavedMarkStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLE);
+    const savedMarkStyles = parseSavedMarkStylesFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLES);
+    const savedRowHeaderLabels = parseSavedRowHeaderLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS);
+    const savedXAxisLabels = parseSavedXAxisLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS);
     const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
     const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors);
+    const colCount = chartType === 'stackedBar' || chartType === 'stacked'
+        ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((a, b) => a + b, 0) : 0)
+        : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
+    const colColors = resolveColColorsFromNode(node, Math.max(1, colCount));
+    const markColorSource = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row';
 
     figma.ui.postMessage({
         type: 'init',
@@ -277,15 +371,25 @@ export async function initPluginUI(
 
         markColors: extractedColors,
         rowColors,
+        colColors,
+        markColorSource,
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
         markRatio,
         assistLineVisible,
         assistLineEnabled,
         savedCellBottomStyle,
+        savedCellFillStyle,
         savedTabRightStyle,
         savedGridContainerStyle,
         savedAssistLineStyle,
+        savedMarkStyle,
+        savedMarkStyles,
+        savedRowHeaderLabels,
+        savedXAxisLabels,
 
+        cellFillStyle: styleInfo.cellFillStyle || null,
+        markStyle: styleInfo.markStyle || null,
+        markStyles: styleInfo.markStyles || [],
         colStrokeStyle: styleInfo.colStrokeStyle || null,
         chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
         assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
