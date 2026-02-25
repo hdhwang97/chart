@@ -307,6 +307,8 @@ figma.ui.onmessage = async (msg) => {
         console.log('[chart-plugin][legend-label]', { type, ...legendLabelResult });
 
         const strokeInjectionResult = applyStrokeInjection(targetNode, {
+            chartType: type,
+            rowColors: normalizeRowColors(rowColors),
             cellFillStyle,
             cellBottomStyle,
             tabRightStyle,

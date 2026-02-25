@@ -203,12 +203,24 @@ export function deleteColumn(colIdx: number) {
         const removeCount = state.groupStructure[groupIndex];
         state.groupStructure.splice(groupIndex, 1);
         state.data.forEach(row => row.splice(removeStart, removeCount));
+        if (groupIndex >= 0 && groupIndex < state.colHeaderTitles.length) {
+            state.colHeaderTitles.splice(groupIndex, 1);
+        }
+        if (groupIndex >= 0 && groupIndex < state.colHeaderColors.length) {
+            state.colHeaderColors.splice(groupIndex, 1);
+        }
         state.cols = state.groupStructure.length;
         syncSegmentControlForStacked();
     } else {
         if (state.cols <= 1) return;
         state.cols--;
         state.data.forEach(row => row.splice(colIdx, 1));
+        if (colIdx >= 0 && colIdx < state.colHeaderTitles.length) {
+            state.colHeaderTitles.splice(colIdx, 1);
+        }
+        if (colIdx >= 0 && colIdx < state.colHeaderColors.length) {
+            state.colHeaderColors.splice(colIdx, 1);
+        }
     }
     ui.settingColInput.value = String(state.cols);
     ensureColHeaderColorsLength(getGridColsForChart(state.chartType, state.cols));

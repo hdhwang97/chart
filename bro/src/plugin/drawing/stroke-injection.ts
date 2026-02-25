@@ -14,6 +14,8 @@ import { collectColumns } from './shared';
 type SideName = 'top' | 'right' | 'bottom' | 'left';
 
 type StrokeInjectionRuntimePayload = StrokeInjectionPayload & {
+    chartType?: string;
+    rowColors?: string[];
     markNum?: number | number[];
     rowStrokeStyles?: RowStrokeStyle[];
     colStrokeStyle?: StrokeStyleSnapshot | null;
@@ -487,6 +489,15 @@ function resolveLegendMarkCount(markNum: number | number[] | undefined): number 
     return Math.floor(parsed);
 }
 
+function resolveLegendCountForStacked(rowColors: string[] | undefined): number | null {
+    if (!Array.isArray(rowColors) || rowColors.length <= 1) return null;
+    const normalized = rowColors
+        .map((value) => normalizeHexColor(value))
+        .filter((value): value is string => Boolean(value));
+    if (normalized.length <= 1) return null;
+    return Math.max(0, normalized.length - 1);
+}
+
 function findLegendContainers(graph: SceneNode): SceneNode[] {
     const results: SceneNode[] = [];
     traverse(graph, (node) => {
@@ -520,11 +531,26 @@ function findLegendColorNode(legendElem: SceneNode): SceneNode | null {
 function applyLegendMarkSync(
     graph: SceneNode,
     styles: NormalizedMarkStyle[],
-    markNum: number | number[] | undefined
+    markNum: number | number[] | undefined,
+    chartType: string | undefined,
+    rowColors: string[] | undefined
 ): { result: ScopeResult; enabled: boolean } {
     const result = createScopeResult();
-    const markCount = resolveLegendMarkCount(markNum);
-    if (markCount === null || styles.length === 0) {
+
+    const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
+    const markCount = isStacked
+        ? resolveLegendCountForStacked(rowColors)
+        : resolveLegendMarkCount(markNum);
+    if (markCount === null) return { result, enabled: false };
+
+    const normalizedRowColors = Array.isArray(rowColors)
+        ? rowColors.map((value) => normalizeHexColor(value))
+        : [];
+    const hasRowColorSeries = normalizedRowColors.some((value, index) => index > 0 && Boolean(value));
+    if (!isStacked && styles.length === 0) {
+        return { result, enabled: false };
+    }
+    if (isStacked && !hasRowColorSeries) {
         return { result, enabled: false };
     }
 
@@ -540,13 +566,15 @@ function applyLegendMarkSync(
                     return;
                 }
 
-                const style = getMarkStyleBySeries(styles, index);
                 const colorNode = findLegendColorNode(node);
-                if (!style || !style.fillColor || !colorNode) {
+                const colorHex = isStacked
+                    ? (normalizedRowColors[index] || null)
+                    : (getMarkStyleBySeries(styles, index)?.fillColor || null);
+                if (!colorHex || !colorNode) {
                     result.skipped += 1;
                     return;
                 }
-                if (tryApplyFill(colorNode, style.fillColor)) {
+                if (tryApplyFill(colorNode, colorHex)) {
                     result.applied += 1;
                 } else {
                     result.skipped += 1;
@@ -645,7 +673,7 @@ function applyGridContainerStroke(graph: SceneNode, style: NormalizedGridStyle):
 export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionRuntimePayload): StrokeInjectionResult {
     const cellFillStyle = resolveCellFillStyle(payload);
     const markStyles = resolveMarkStyles(payload);
-    const legendSync = applyLegendMarkSync(graph, markStyles, payload.markNum);
+    const legendSync = applyLegendMarkSync(graph, markStyles, payload.markNum, payload.chartType, payload.rowColors);
     const cellBottomStyle = resolveCellBottomStyle(payload);
     const tabRightStyle = resolveTabRightStyle(payload);
     const gridContainerStyle = resolveGridContainerStyle(payload);

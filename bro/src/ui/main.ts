@@ -23,6 +23,7 @@ import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountF
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, refreshExportPreview } from './export';
 import { bindStyleTabEvents, buildTemplatePayloadFromDraft, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
+import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
 
 // ==========================================
 // UI ENTRY POINT
@@ -466,6 +467,7 @@ function handlePluginMessage(msg: any) {
                 ui.settingMarkSelect.value = String(msg.savedMarkNum);
             }
         }
+        refreshGraphSettingTooltipContent();
 
         ui.backBtn.classList.add('hidden');
         updateModeButtonState();
@@ -492,7 +494,30 @@ function handlePluginMessage(msg: any) {
     }
 
     if (msg.type === 'style_extracted') {
+        const extractedDraftPayload = {
+            cellFillStyle: msg.payload?.cellFillStyle,
+            markStyle: msg.payload?.markStyle,
+            markStyles: msg.payload?.markStyles,
+            rowStrokeStyles: msg.payload?.rowStrokeStyles,
+            colStrokeStyle: msg.payload?.colStrokeStyle,
+            chartContainerStrokeStyle: msg.payload?.chartContainerStrokeStyle,
+            assistLineStrokeStyle: msg.payload?.assistLineStrokeStyle
+        };
+
         if (msg.source === 'extract_style') {
+            const wasDirty = state.styleInjectionDirty;
+            const syncApplied = syncStyleTabDraftFromExtracted(extractedDraftPayload);
+            if (syncApplied) {
+                syncAllHexPreviewsFromDom();
+                renderGrid();
+                renderPreview();
+                refreshExportPreview();
+            }
+            console.log('[ui][style-extracted]', {
+                source: msg.source,
+                dirty: wasDirty,
+                syncApplied
+            });
             handleStyleExtracted(msg.payload);
             return;
         }
@@ -527,15 +552,7 @@ function handlePluginMessage(msg: any) {
         state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
-        syncStyleTabDraftFromExtracted({
-            cellFillStyle: msg.payload?.cellFillStyle,
-            markStyle: msg.payload?.markStyle,
-            markStyles: msg.payload?.markStyles,
-            rowStrokeStyles: msg.payload?.rowStrokeStyles,
-            colStrokeStyle: msg.payload?.colStrokeStyle,
-            chartContainerStrokeStyle: msg.payload?.chartContainerStrokeStyle,
-            assistLineStrokeStyle: msg.payload?.assistLineStrokeStyle
-        });
+        syncStyleTabDraftFromExtracted(extractedDraftPayload);
         syncAllHexPreviewsFromDom();
         renderGrid();
         renderPreview();
@@ -721,6 +738,7 @@ function initializeUi() {
         console.warn('[ui][row-color] iro.js is not available. Falling back to HEX input only.');
     }
     bindUiEvents();
+    initGraphSettingTooltip();
     updateAssistLineToggleUi();
     setDataTabRenderer(() => {
         renderGrid();

@@ -126,18 +126,21 @@
             <div id="graph-setting-panel" class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
                 <div class="flex items-center gap-3">
                     <div class="flex flex-col gap-1 flex-1">
-                        <label id="label-col-input" class="text-xxs font-medium text-text-sub">Graph Col</label>
+                        <label id="label-col-input" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="graph-col" tabindex="0">Graph Col</label>
                         <input type="number" id="setting-col-input" value="3" min="1" max="12"
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
                     <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Cell Count</label>
+                        <label id="label-cell-count" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="cell-count" tabindex="0">Cell Count</label>
                         <input type="number" id="setting-cell-input" value="4" min="1" max="10"
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
                     <div class="flex flex-col gap-1 flex-1">
                         <div id="container-mark-wrapper">
-                            <label id="label-mark-position" class="text-xxs font-medium text-text-sub">Mark
+                            <label id="label-mark-position" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                                data-tooltip-key="mark-count" tabindex="0">Mark
                                 Count</label>
                             <div id="container-mark-normal" class="relative">
                                 <select id="setting-mark-select"
@@ -159,22 +162,27 @@
                 </div>
                 <div class="flex items-center gap-3 border-t border-border pt-2 mt-1">
                     <div id="container-mark-ratio" class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Column Width Ratio</label>
+                        <label id="label-column-width-ratio"
+                            class="text-xxs font-medium text-text-sub gs-tooltip-anchor" data-tooltip-key="column-width-ratio"
+                            tabindex="0">Column Width Ratio</label>
                         <input type="number" id="setting-mark-ratio-input" value="0.8" min="0.01" max="1" step="0.01"
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
                     <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Y Min</label>
+                        <label id="label-y-min" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="y-min" tabindex="0">Y Min</label>
                         <input type="number" id="setting-y-min" value="0"
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
                     <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xxs font-medium text-text-sub">Y Max</label>
+                        <label id="label-y-max" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="y-max" tabindex="0">Y Max</label>
                         <input type="number" id="setting-y-max" value="100"
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
                     <div id="container-stroke-width" class="flex flex-col gap-1 flex-1 hidden">
-                        <label class="text-xxs font-medium text-text-sub">Thickness</label>
+                        <label id="label-thickness" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="thickness" tabindex="0">Thickness</label>
                         <input type="number" id="setting-stroke-input" value="2" min="1" max="20"
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
@@ -623,6 +631,14 @@
         <div class="mt-2 flex justify-end">
             <button id="style-color-save-btn" type="button"
                 class="px-2 py-1 text-xxs font-semibold rounded border border-border text-primary hover:bg-blue-50 cursor-pointer">Save</button>
+        </div>
+    </div>
+
+    <div id="graph-setting-tooltip" class="gs-tooltip" role="tooltip" aria-hidden="true">
+        <img id="graph-setting-tooltip-image" class="gs-tooltip-image" src="./assets/tooltips/graph-col.svg" alt="">
+        <div class="gs-tooltip-content">
+            <div id="graph-setting-tooltip-title" class="gs-tooltip-title">그래프 열 수</div>
+            <p id="graph-setting-tooltip-body" class="gs-tooltip-body">가로 방향 데이터 열 개수를 설정합니다.</p>
         </div>
     </div>
 

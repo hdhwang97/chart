@@ -7,6 +7,7 @@ import { updateCsvUi } from './csv';
 import { getEffectiveYDomain } from './y-range';
 import { syncMarkCountFromRows } from './data-ops';
 import { hydrateStyleTab, readStyleTabDraft, setStyleInjectionDraft, toStrokeInjectionPayload, validateStyleTabDraft } from './style-tab';
+import { refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
 
 // ==========================================
 // STEP / TYPE SELECTION / SUBMISSION
@@ -90,6 +91,7 @@ export function selectType(type: string) {
         state.cols = 3;
         state.rows = 3;
     }
+    refreshGraphSettingTooltipContent();
 
     // Line chart stroke width
     if (type === 'line') {

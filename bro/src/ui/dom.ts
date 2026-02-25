@@ -26,6 +26,11 @@ export const ui = {
     get settingColInput() { return byId<HTMLInputElement>('setting-col-input'); },
     get settingCellInput() { return byId<HTMLInputElement>('setting-cell-input'); },
     get settingMarkSelect() { return byId<HTMLSelectElement>('setting-mark-select'); },
+    get graphSettingPanel() { return byId<HTMLElement>('graph-setting-panel'); },
+    get graphSettingTooltip() { return byId<HTMLElement>('graph-setting-tooltip'); },
+    get graphSettingTooltipImage() { return byId<HTMLImageElement>('graph-setting-tooltip-image'); },
+    get graphSettingTooltipTitle() { return byId<HTMLElement>('graph-setting-tooltip-title'); },
+    get graphSettingTooltipBody() { return byId<HTMLElement>('graph-setting-tooltip-body'); },
 
     get containerMarkWrapper() { return byId<HTMLElement>('container-mark-wrapper'); },
     get containerMarkNormal() { return byId<HTMLElement>('container-mark-normal'); },

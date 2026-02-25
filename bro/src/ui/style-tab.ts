@@ -681,7 +681,7 @@ export function buildDraftFromPayload(
     }));
     const resolvedMarkStylesRaw = savedMarks.length > 0
         ? savedMarks
-        : (rowHeaderDerivedMarks.length > 0 ? rowHeaderDerivedMarks : extractedMarks);
+        : (extractedMarks.length > 0 ? extractedMarks : rowHeaderDerivedMarks);
     const resolvedMarkStyles = ensureMarkDraftSeriesCount(
         resolvedMarkStylesRaw.length > 0
             ? resolvedMarkStylesRaw.map((item) => draftItemFromMarkStyle(item, DEFAULT_STYLE_INJECTION_DRAFT.mark))
@@ -1146,6 +1146,7 @@ export function bindStyleTabEvents() {
         ui.styleMarkStrokeColorInput.value = active.strokeColor;
         ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
         ui.styleMarkThicknessInput.value = String(active.thickness);
+        syncAllHexPreviewsFromDom();
         markStyleInjectionDirty();
         const normalized = validateStyleTabDraft(readStyleTabDraft());
         setStyleInjectionDraft(normalized.draft);
