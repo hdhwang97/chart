@@ -5,8 +5,10 @@ import { traverse, findActualPropKey } from '../utils';
 // SHARED DRAWING HELPERS
 // ==========================================
 
+export type ColRef = { node: SceneNode; index: number };
+
 export function collectColumns(node: SceneNode) {
-    const cols: { node: SceneNode, index: number }[] = [];
+    const cols: ColRef[] = [];
     const seen = new Set<number>();
     const pushIfColumn = (candidate: SceneNode) => {
         const match = MARK_NAME_PATTERNS.COL_ALL.exec(candidate.name);
@@ -64,9 +66,10 @@ export function setVariantProperty(instance: InstanceNode, key: string, value: s
     return false;
 }
 
-export function setLayerVisibility(parent: SceneNode, namePrefix: string, count: number) {
+export function setLayerVisibility(parent: SceneNode, namePrefix: string, count: number, precomputedCols?: ColRef[]) {
     if (namePrefix === 'col-') {
-        collectColumns(parent).forEach(({ node, index }) => {
+        const columns = precomputedCols ?? collectColumns(parent);
+        columns.forEach(({ node, index }) => {
             node.visible = index <= count;
         });
         return;
@@ -141,8 +144,8 @@ export function applyYAxis(node: SceneNode, cellCount: number, payload: any) {
     });
 }
 
-export function applyColumnXEmptyAlign(graph: SceneNode, align: 'center' | 'right') {
-    const columns = collectColumns(graph);
+export function applyColumnXEmptyAlign(graph: SceneNode, align: 'center' | 'right', precomputedCols?: ColRef[]) {
+    const columns = precomputedCols ?? collectColumns(graph);
     const result = { candidates: columns.length, applied: 0, skipped: 0 };
 
     columns.forEach((col) => {
@@ -188,8 +191,8 @@ function findColumnXEmptyInstance(colNode: SceneNode): InstanceNode | null {
     return target;
 }
 
-export function applyColumnXEmptyLabels(graph: SceneNode, labels: string[]) {
-    const columns = collectColumns(graph);
+export function applyColumnXEmptyLabels(graph: SceneNode, labels: string[], precomputedCols?: ColRef[]) {
+    const columns = precomputedCols ?? collectColumns(graph);
     const result = { candidates: columns.length, applied: 0, skipped: 0 };
 
     if (!Array.isArray(labels) || labels.length === 0) {

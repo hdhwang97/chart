@@ -11,6 +11,7 @@ import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
 import { normalizeHexColor } from './utils';
 import { deleteStyleTemplate, loadStyleTemplates, renameStyleTemplate, saveStyleTemplate } from './template-store';
+import { PerfTracker, shouldLogApplyPerf } from './perf';
 
 // ==========================================
 // PLUGIN ENTRY POINT
@@ -88,6 +89,10 @@ function normalizeStrokeWidth(value: unknown): number | null {
     const n = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(n) || n <= 0) return null;
     return n;
+}
+
+function isStackedType(chartType: string): boolean {
+    return chartType === 'stackedBar' || chartType === 'stacked';
 }
 
 function resolveStrokeWidthForUi(node: SceneNode, requestedStrokeWidth?: unknown, extractedStrokeWidth?: unknown): number {
@@ -181,28 +186,32 @@ figma.ui.onmessage = async (msg) => {
             gridContainerStyle
         } = msg.payload;
 
+        const perf = new PerfTracker();
+        const normalizedRowColors = normalizeRowColors(rowColors);
+        const normalizedColColors = normalizeRowColors(colColors);
         const nodes = figma.currentPage.selection;
-        let targetNode: FrameNode | ComponentNode | InstanceNode;
+        let targetNode: FrameNode | ComponentNode | InstanceNode | null = null;
 
-        if (msg.type === 'apply' && nodes.length > 0) {
-            const resolvedNode = resolveChartTargetFromSelection(nodes[0]);
-            if (!isRecognizedChartSelection(resolvedNode)) {
-                figma.notify("Please select a chart component instance.");
-                return;
+        targetNode = await perf.step('target-resolve', async () => {
+            if (msg.type === 'apply' && nodes.length > 0) {
+                const resolvedNode = resolveChartTargetFromSelection(nodes[0]);
+                if (!isRecognizedChartSelection(resolvedNode)) {
+                    figma.notify("Please select a chart component instance.");
+                    return null;
+                }
+                console.log('[chart-plugin][apply]', {
+                    selectedNodeId: nodes[0].id,
+                    targetNodeId: resolvedNode.id,
+                    selectedNodeName: nodes[0].name,
+                    targetNodeName: resolvedNode.name
+                });
+                return resolvedNode as FrameNode;
             }
-            targetNode = resolvedNode as FrameNode;
-            console.log('[chart-plugin][apply]', {
-                selectedNodeId: nodes[0].id,
-                targetNodeId: resolvedNode.id,
-                selectedNodeName: nodes[0].name,
-                targetNodeName: resolvedNode.name
-            });
-        } else {
-            // Generate new
+
             const component = await getOrImportComponent();
             if (!component) {
                 figma.notify(`Master Component '${(await import('./constants')).MASTER_COMPONENT_CONFIG.NAME}' not found.`);
-                return;
+                return null;
             }
 
             let instance;
@@ -210,14 +219,12 @@ figma.ui.onmessage = async (msg) => {
                 const defaultVar = component.defaultVariant;
                 if (!defaultVar) {
                     figma.notify("Error: Default Variant not found");
-                    return;
+                    return null;
                 }
                 instance = defaultVar.createInstance();
             } else {
                 instance = component.createInstance();
             }
-
-            targetNode = instance;
 
             const { x, y } = figma.viewport.center;
             instance.x = x - (instance.width / 2);
@@ -226,29 +233,35 @@ figma.ui.onmessage = async (msg) => {
             figma.currentPage.appendChild(instance);
             figma.viewport.scrollAndZoomIntoView([instance]);
             figma.currentPage.selection = [instance];
-        }
+            return instance;
+        });
+        if (!targetNode) return;
+        const columns = await perf.step('collect-columns', () => collectColumns(targetNode));
 
         // 2. Variant Setup
-        if (targetNode.type === "INSTANCE") {
-            const variantValue = VARIANT_MAPPING[type] || 'bar';
-            setVariantProperty(targetNode, "Type", variantValue);
-        }
+        await perf.step('variant-setup', () => {
+            if (targetNode.type === "INSTANCE") {
+                const variantValue = VARIANT_MAPPING[type] || 'bar';
+                setVariantProperty(targetNode, "Type", variantValue);
+            }
+        });
 
-        // 3. Basic Setup
-        const graphColCount = cols;
-        setLayerVisibility(targetNode, "col-", graphColCount);
-
-        const effectiveY = resolveEffectiveYRange({
+        const effectiveY = await perf.step('resolve-y-range', () => resolveEffectiveYRange({
             chartType: type,
             mode,
             values,
             yMin,
             yMax,
             rawYMaxAuto
-        });
+        }));
 
-        applyCells(targetNode, cellCount);
-        applyYAxis(targetNode, cellCount, { yMin: effectiveY.yMin, yMax: effectiveY.yMax });
+        // 3. Basic Setup
+        const graphColCount = cols;
+        await perf.step('basic-setup', () => {
+            setLayerVisibility(targetNode, "col-", graphColCount, columns);
+            applyCells(targetNode, cellCount);
+            applyYAxis(targetNode, cellCount, { yMin: effectiveY.yMin, yMax: effectiveY.yMax });
+        });
 
         // 4. Draw Chart
         const H = getGraphHeight(targetNode as FrameNode);
@@ -274,41 +287,46 @@ figma.ui.onmessage = async (msg) => {
             rawYMaxAuto: effectiveY.rawYMaxAuto,
             strokeWidth,
             markRatio,
-            rowColors: normalizeRowColors(rowColors),
-            colColors: normalizeRowColors(colColors),
+            rowColors: normalizedRowColors,
+            colColors: normalizedColColors,
             markColorSource: markColorSource === 'col' ? 'col' : 'row',
             assistLineVisible,
             assistLineEnabled,
             assistLineStyle
         };
 
-        if (type === "bar") applyBar(drawConfig, H, targetNode);
-        else if (type === "line") applyLine(drawConfig, H, targetNode);
-        else if (type === "stackedBar" || type === "stacked") applyStackedBar(drawConfig, H, targetNode);
-        applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
+        await perf.step('draw-chart', () => {
+            if (type === "bar") applyBar(drawConfig, H, targetNode);
+            else if (type === "line") applyLine(drawConfig, H, targetNode);
+            else if (isStackedType(type)) applyStackedBar(drawConfig, H, targetNode, columns);
+            applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
+        });
 
-        const xEmptyAlign: 'center' | 'right' =
-            type === 'line'
-                ? 'right'
-                : 'center';
-        const xEmptyAlignResult = applyColumnXEmptyAlign(targetNode, xEmptyAlign);
-        console.log('[chart-plugin][x-empty-align]', { type, align: xEmptyAlign, ...xEmptyAlignResult });
-        const xEmptyLabelResult = applyColumnXEmptyLabels(
-            targetNode,
-            Array.isArray(xAxisLabels) ? xAxisLabels : []
-        );
-        console.log('[chart-plugin][x-empty-label]', { type, ...xEmptyLabelResult });
-        const legendLabelResult = applyLegendLabelsFromRowHeaders(
-            targetNode,
-            Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
-            markNum,
-            type
-        );
-        console.log('[chart-plugin][legend-label]', { type, ...legendLabelResult });
+        await perf.step('post-draw-layout', () => {
+            const xEmptyAlign: 'center' | 'right' =
+                type === 'line'
+                    ? 'right'
+                    : 'center';
+            const xEmptyAlignResult = applyColumnXEmptyAlign(targetNode, xEmptyAlign, columns);
+            console.log('[chart-plugin][x-empty-align]', { type, align: xEmptyAlign, ...xEmptyAlignResult });
+            const xEmptyLabelResult = applyColumnXEmptyLabels(
+                targetNode,
+                Array.isArray(xAxisLabels) ? xAxisLabels : [],
+                columns
+            );
+            console.log('[chart-plugin][x-empty-label]', { type, ...xEmptyLabelResult });
+            const legendLabelResult = applyLegendLabelsFromRowHeaders(
+                targetNode,
+                Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
+                markNum,
+                type
+            );
+            console.log('[chart-plugin][legend-label]', { type, ...legendLabelResult });
+        });
 
-        const strokeInjectionResult = applyStrokeInjection(targetNode, {
+        const strokeInjectionResult = await perf.step('stroke-injection', () => applyStrokeInjection(targetNode, {
             chartType: type,
-            rowColors: normalizeRowColors(rowColors),
+            rowColors: normalizedRowColors,
             cellFillStyle,
             cellBottomStyle,
             tabRightStyle,
@@ -318,49 +336,69 @@ figma.ui.onmessage = async (msg) => {
             markNum,
             rowStrokeStyles,
             colStrokeStyle
-        });
+        }, columns));
         console.log('[chart-plugin][stroke-injection]', strokeInjectionResult);
 
         // 5. 스타일 자동 추출 및 전송
-        const styleInfo = extractStyleFromNode(targetNode, type);
+        const shouldUseFastStyleSync = msg.type === 'apply' && isStackedType(type);
+        const styleInfo = await perf.step('style-payload-build', () => extractStyleFromNode(
+            targetNode,
+            type,
+            {
+                columns,
+                fastPath: shouldUseFastStyleSync
+            }
+        ));
         const requestedRatio = (type === 'bar' || type === 'stackedBar' || type === 'stacked')
             ? normalizeMarkRatio(markRatio)
             : null;
-        const requestedRowColors = normalizeRowColors(rowColors);
+        const requestedRowColors = normalizedRowColors;
         const rowColorsForUi = requestedRowColors.length > 0
             ? requestedRowColors
             : resolveRowColorsFromNode(targetNode, type, rows, styleInfo.colors);
+        const colorsForUi = styleInfo.colors.length > 0
+            ? styleInfo.colors
+            : (isStackedType(type) ? rowColorsForUi.slice(1) : ['#3b82f6', '#9CA3AF']);
+        const savedCornerRadiusRaw = Number(targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_CORNER_RADIUS));
+        const cornerRadiusForUi = Number.isFinite(savedCornerRadiusRaw)
+            ? savedCornerRadiusRaw
+            : styleInfo.cornerRadius;
 
         // 차트 생성 후 데이터 및 스타일 저장
-        saveChartData(targetNode, msg.payload, styleInfo);
         const markRatioForUi = requestedRatio ?? resolveMarkRatioFromNode(targetNode, styleInfo.markRatio);
-
         const stylePayload = {
             chartType: type,
             markNum: markNum,
             yCount: cellCount,
             colCount: cols,
 
-            colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
+            colors: colorsForUi.length > 0 ? colorsForUi : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
             rowColors: rowColorsForUi,
-            colColors: normalizeRowColors(colColors),
+            colColors: normalizedColColors,
             markColorSource: markColorSource === 'col' ? 'col' : 'row',
             assistLineVisible: Boolean(assistLineVisible),
             assistLineEnabled: assistLineEnabled || { min: false, max: false, avg: false },
-            cornerRadius: styleInfo.cornerRadius,
+            cornerRadius: cornerRadiusForUi,
             strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
-            cellFillStyle: styleInfo.cellFillStyle || null,
-            markStyle: styleInfo.markStyle || null,
-            markStyles: styleInfo.markStyles || [],
-            colStrokeStyle: styleInfo.colStrokeStyle || null,
-            chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
+            cellFillStyle: cellFillStyle || styleInfo.cellFillStyle || null,
+            markStyle: markStyle || styleInfo.markStyle || null,
+            markStyles: Array.isArray(markStyles) && markStyles.length > 0 ? markStyles : (styleInfo.markStyles || []),
+            colStrokeStyle: colStrokeStyle || styleInfo.colStrokeStyle || null,
+            chartContainerStrokeStyle: colStrokeStyle || styleInfo.chartContainerStrokeStyle || null,
             assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
-            rowStrokeStyles: styleInfo.rowStrokeStyles || []
+            rowStrokeStyles: Array.isArray(rowStrokeStyles) ? rowStrokeStyles : (styleInfo.rowStrokeStyles || [])
         };
 
-        figma.ui.postMessage({ type: 'style_extracted', source: 'generate_apply', payload: stylePayload });
+        await perf.step('save-and-sync', () => {
+            saveChartData(targetNode, msg.payload, shouldUseFastStyleSync ? undefined : styleInfo);
+            figma.ui.postMessage({ type: 'style_extracted', source: 'generate_apply', payload: stylePayload });
+        });
+        const perfReport = perf.done();
+        if (shouldLogApplyPerf(msg.type, type)) {
+            console.log('[chart-plugin][perf][apply][stacked]', perfReport);
+        }
 
         if (msg.type === 'generate') {
             figma.notify("Chart Generated!");
@@ -391,7 +429,7 @@ figma.ui.onmessage = async (msg) => {
         const visibleCols = cols.filter(c => c.node.visible);
         const colCount = visibleCols.length > 0 ? visibleCols.length : 5;
 
-        const styleInfo = extractStyleFromNode(node, chartType);
+        const styleInfo = extractStyleFromNode(node, chartType, { columns: cols });
         const markRatioForUi = resolveMarkRatioFromNode(node, styleInfo.markRatio);
         let rowCount = 1;
         const savedValuesRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);

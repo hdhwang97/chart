@@ -9,7 +9,7 @@ import type {
     StrokeStyleSnapshot
 } from '../../shared/style-types';
 import { normalizeHexColor, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke } from '../utils';
-import { collectColumns } from './shared';
+import { collectColumns, type ColRef } from './shared';
 
 type SideName = 'top' | 'right' | 'bottom' | 'left';
 
@@ -346,9 +346,8 @@ function applyGridStrokeStyle(node: SceneNode, style: NormalizedGridStyle): bool
     return applied || sideApplied;
 }
 
-function applyCellBottomStroke(graph: SceneNode, style: NormalizedSideStyle): ScopeResult {
+function applyCellBottomStroke(columns: ColRef[], style: NormalizedSideStyle): ScopeResult {
     const result = createScopeResult();
-    const columns = collectColumns(graph);
 
     columns.forEach((col) => {
         traverse(col.node, (node) => {
@@ -366,10 +365,9 @@ function applyCellBottomStroke(graph: SceneNode, style: NormalizedSideStyle): Sc
     return result;
 }
 
-function applyCellFill(graph: SceneNode, style: { color?: string }): ScopeResult {
+function applyCellFill(columns: ColRef[], style: { color?: string }): ScopeResult {
     const result = createScopeResult();
     if (!style.color) return result;
-    const columns = collectColumns(graph);
     columns.forEach((col) => {
         traverse(col.node, (node) => {
             if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
@@ -436,10 +434,9 @@ function applyMarkStyleToNode(node: SceneNode, style: NormalizedMarkStyle): bool
     return applied;
 }
 
-function applyMarkStyles(graph: SceneNode, styles: NormalizedMarkStyle[]): ScopeResult {
+function applyMarkStyles(columns: ColRef[], styles: NormalizedMarkStyle[]): ScopeResult {
     const result = createScopeResult();
     if (styles.length === 0) return result;
-    const columns = collectColumns(graph);
     columns.forEach((col) => {
         traverse(col.node, (node) => {
             if (!node.visible) return;
@@ -588,9 +585,8 @@ function applyLegendMarkSync(
     return { result, enabled: true };
 }
 
-function applyTabRightStroke(graph: SceneNode, style: NormalizedSideStyle): ScopeResult {
+function applyTabRightStroke(columns: ColRef[], style: NormalizedSideStyle): ScopeResult {
     const result = createScopeResult();
-    const columns = collectColumns(graph);
     result.candidates = columns.length;
 
     columns.forEach((col) => {
@@ -670,24 +666,39 @@ function applyGridContainerStroke(graph: SceneNode, style: NormalizedGridStyle):
     return result;
 }
 
-export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionRuntimePayload): StrokeInjectionResult {
+function shouldSkipMarkStyleApply(payload: StrokeInjectionRuntimePayload, markStyles: NormalizedMarkStyle[]): boolean {
+    if (markStyles.length === 0) return true;
+    const isStacked = payload.chartType === 'stackedBar' || payload.chartType === 'stacked';
+    if (!isStacked) return false;
+    const hasEffectiveStyle = markStyles.some((style) => (
+        Boolean(style.fillColor)
+        || Boolean(style.strokeColor)
+        || typeof style.thickness === 'number'
+        || Boolean(style.strokeStyle)
+    ));
+    return !hasEffectiveStyle;
+}
+
+export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionRuntimePayload, precomputedCols?: ColRef[]): StrokeInjectionResult {
+    const columns = precomputedCols ?? collectColumns(graph);
     const cellFillStyle = resolveCellFillStyle(payload);
     const markStyles = resolveMarkStyles(payload);
     const legendSync = applyLegendMarkSync(graph, markStyles, payload.markNum, payload.chartType, payload.rowColors);
     const cellBottomStyle = resolveCellBottomStyle(payload);
     const tabRightStyle = resolveTabRightStyle(payload);
     const gridContainerStyle = resolveGridContainerStyle(payload);
+    const skipMarkStyleApply = shouldSkipMarkStyleApply(payload, markStyles);
 
     return {
-        cellFill: cellFillStyle ? applyCellFill(graph, cellFillStyle) : createScopeResult(),
-        mark: markStyles.length > 0 ? applyMarkStyles(graph, markStyles) : createScopeResult(),
+        cellFill: cellFillStyle ? applyCellFill(columns, cellFillStyle) : createScopeResult(),
+        mark: skipMarkStyleApply ? createScopeResult() : applyMarkStyles(columns, markStyles),
         legend: legendSync.result,
-        cellBottom: cellBottomStyle ? applyCellBottomStroke(graph, cellBottomStyle) : createScopeResult(),
-        tabRight: tabRightStyle ? applyTabRightStroke(graph, tabRightStyle) : createScopeResult(),
+        cellBottom: cellBottomStyle ? applyCellBottomStroke(columns, cellBottomStyle) : createScopeResult(),
+        tabRight: tabRightStyle ? applyTabRightStroke(columns, tabRightStyle) : createScopeResult(),
         gridContainer: gridContainerStyle ? applyGridContainerStroke(graph, gridContainerStyle) : createScopeResult(),
         resolved: {
             cellFill: Boolean(cellFillStyle),
-            mark: markStyles.length > 0,
+            mark: !skipMarkStyleApply,
             legend: legendSync.enabled,
             cellBottom: Boolean(cellBottomStyle),
             tabRight: Boolean(tabRightStyle),

@@ -62,6 +62,10 @@
 │  │  ├─ main.ts                # UI entry, 이벤트 바인딩, 메시지 처리
 │  │  ├─ index.html             # UI 마크업, CDN(tailwind/d3/iro)
 │  │  ├─ style.css              # UI 스타일
+│  │  ├─ assets
+│  │  │  └─ tooltips/*.svg      # Graph Setting 툴팁 카드 이미지 에셋
+│  │  ├─ components
+│  │  │  └─ graph-setting-tooltip.ts # Graph Setting 라벨 툴팁 컴포넌트
 │  │  ├─ state.ts               # 전역 상태 및 색상 유틸
 │  │  ├─ dom.ts                 # DOM accessor
 │  │  ├─ grid.ts                # 데이터 그리드 렌더
@@ -100,6 +104,10 @@
 - `src/ui/main.ts`
   - UI 초기화와 전체 이벤트 wiring.
   - Plugin 메시지(`init`, `style_extracted`) 수신 후 상태 동기화.
+- `src/ui/components/graph-setting-tooltip.ts`
+  - Graph Setting 라벨(`Graph Col`, `Cell Count`, `Mark Count/Segments`, `Column Width Ratio`, `Y Min`, `Y Max`, `Thickness`)의 툴팁 전담.
+  - 단일 tooltip 인스턴스 + `img/title/body` 콘텐츠 매핑 + 위치 자동 보정(우측 기본, 경계 시 좌/하).
+  - 트리거/종료: `hover + focus`, `mouseleave/focusout`, `Escape`, 외부 클릭.
 - `src/ui/steps.ts`
   - 생성/수정 submit payload 생성의 단일 진입점(`submitData`).
 - `src/ui/state.ts`
@@ -108,6 +116,9 @@
   - Export 탭 렌더 및 D3 코드 문자열 생성.
 - `src/ui/mode.ts`, `src/ui/y-range.ts`
   - Y축 관련 유효성/자동 최대값 처리.
+- `src/ui/style.css`
+  - 전역 UI 스타일 단일 관리 파일.
+  - Graph Setting 툴팁 스타일은 `gs-tooltip-*` 네이밍으로 같은 파일에서 중앙 관리.
 
 ## 5. PluginData 저장 키
 정의 위치: `src/plugin/constants.ts` -> `PLUGIN_DATA_KEYS`
@@ -156,6 +167,7 @@
 - 초기값/선택 동기화 문제: `src/plugin/init.ts`
 - 저장 데이터 스키마 변경: `src/plugin/constants.ts`, `src/plugin/data-layer.ts`
 - UI 입력/검증/전송 변경: `src/ui/steps.ts`, `src/ui/mode.ts`, `src/ui/main.ts`
+- Graph Setting 툴팁 동작/콘텐츠 변경: `src/ui/components/graph-setting-tooltip.ts`, `src/ui/index.html`, `src/ui/style.css`, `src/ui/assets/tooltips/*`
 - Export 코드 생성 변경: `src/ui/export.ts`
 
 ## 9. 참고 메모

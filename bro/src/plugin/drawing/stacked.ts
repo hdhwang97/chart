@@ -1,6 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM } from '../constants';
-import { collectColumns, setVariantProperty } from './shared';
-import { normalizeHexColor, tryApplyFill } from '../utils';
+import { collectColumns, setVariantProperty, type ColRef } from './shared';
+import { normalizeHexColor, rgbToHex, tryApplyFill } from '../utils';
 
 // ==========================================
 // STACKED BAR CHART DRAWING
@@ -60,7 +60,7 @@ function setMarkNumVariantWithFallback(instance: InstanceNode, value: number): b
 }
 
 function parseBarLayerIndex(name: string): number | null {
-    const match = /^bar[-_]?0*(\d+)$/.exec(name);
+    const match = MARK_NAME_PATTERNS.STACKED_SEGMENT.exec(name);
     if (!match) return null;
     const idx = Number(match[1]);
     return Number.isFinite(idx) && idx > 0 ? idx : null;
@@ -72,33 +72,61 @@ function findSegmentLayerByIndex(subBar: SceneNode, index: number): (SceneNode &
     return found ? (found as SceneNode & LayoutMixin) : null;
 }
 
-function findSubBarMarkLayer(subBar: SceneNode): (SceneNode & LayoutMixin) | null {
-    if (!('children' in subBar)) return null;
+function buildSegmentLayerMap(subBar: SceneNode): Map<number, SceneNode & LayoutMixin> {
+    const byIndex = new Map<number, SceneNode & LayoutMixin>();
+    if (!('children' in subBar)) return byIndex;
+    (subBar as SceneNode & ChildrenMixin).children.forEach((child) => {
+        const idx = parseBarLayerIndex(child.name);
+        if (idx === null) return;
+        byIndex.set(idx, child as SceneNode & LayoutMixin);
+    });
+    return byIndex;
+}
+
+function getVisibleSegmentLayers(subBar: SceneNode): Array<{ idx: number; node: SceneNode & LayoutMixin }> {
+    if (!('children' in subBar)) return [];
     const children = (subBar as SceneNode & ChildrenMixin).children;
+    return children
+        .map((node) => ({ node, idx: parseBarLayerIndex(node.name) }))
+        .filter((x): x is { node: SceneNode; idx: number } => x.idx !== null && x.node.visible)
+        .sort((a, b) => a.idx - b.idx)
+        .map((x) => ({ idx: x.idx, node: x.node as SceneNode & LayoutMixin }));
+}
 
-    // Preferred: direct `bar` node
-    const direct = children.find((n) => n.name === 'bar');
-    if (direct) return direct as SceneNode & LayoutMixin;
+function pickPrimaryVisibleSegment(subBar: SceneNode): (SceneNode & LayoutMixin) | null {
+    const visibleSegments = getVisibleSegmentLayers(subBar);
+    if (visibleSegments.length === 0) return null;
+    return visibleSegments[0].node;
+}
 
-    // Fallback: first bar-N style layer
-    const indexed = children
-        .map((n) => ({ node: n, idx: parseBarLayerIndex(n.name) }))
-        .filter((x): x is { node: SceneNode; idx: number } => x.idx !== null)
-        .sort((a, b) => a.idx - b.idx);
-    if (indexed.length > 0) return indexed[0].node as SceneNode & LayoutMixin;
+function setLayoutSizingHorizontalIfChanged(layer: SceneNode & LayoutMixin, value: 'FIXED' | 'HUG' | 'FILL') {
+    if (!('layoutSizingHorizontal' in layer)) return;
+    try {
+        const target = layer as SceneNode & { layoutSizingHorizontal: 'FIXED' | 'HUG' | 'FILL' };
+        if (target.layoutSizingHorizontal !== value) {
+            target.layoutSizingHorizontal = value;
+        }
+    } catch { }
+}
 
-    return null;
+function applySegmentResizeModes(subBar: SceneNode) {
+    const visibleSegments = getVisibleSegmentLayers(subBar);
+    if (visibleSegments.length === 0) return;
+
+    visibleSegments.forEach((segment, index) => {
+        if (index === 0) {
+            setLayoutSizingHorizontalIfChanged(segment.node, 'HUG');
+            return;
+        }
+        setLayoutSizingHorizontalIfChanged(segment.node, 'FILL');
+    });
 }
 
 function setLayerWidthWithCentering(layer: SceneNode & LayoutMixin, targetWidth: number, containerWidth: number) {
     const width = Math.max(1, targetWidth);
     const safeContainerWidth = Math.max(1, containerWidth);
 
-    if ('layoutSizingHorizontal' in layer) {
-        try {
-            (layer as SceneNode & { layoutSizingHorizontal: 'FIXED' | 'HUG' | 'FILL' }).layoutSizingHorizontal = 'FIXED';
-        } catch { }
-    }
+    setLayoutSizingHorizontalIfChanged(layer, 'FIXED');
 
     try {
         const anyLayer = layer as unknown as {
@@ -119,18 +147,27 @@ function setLayerWidthWithCentering(layer: SceneNode & LayoutMixin, targetWidth:
     } catch { }
 }
 
+function setVisibleIfChanged(node: SceneNode, visible: boolean) {
+    if (node.visible === visible) return;
+    node.visible = visible;
+}
+
+function hasSameSolidFill(node: SceneNode, targetHex: string): boolean {
+    if (!('fills' in node) || !Array.isArray(node.fills) || node.fills.length === 0) return false;
+    const first = node.fills[0];
+    if (first.type !== 'SOLID') return false;
+    const currentHex = rgbToHex(first.color.r, first.color.g, first.color.b);
+    return currentHex.toUpperCase() === targetHex.toUpperCase();
+}
+
 function applyStackedMarkRatioToSubBar(subBar: SceneNode, cellWidth: number, ratio: number, barCount: number) {
     const clusterLayout = computeClusterLayout(cellWidth, ratio, barCount);
     const targetSubBarWidth = clusterLayout.subBarW;
 
-    const markLayer = findSubBarMarkLayer(subBar);
+    const markLayer = pickPrimaryVisibleSegment(subBar);
     if (!markLayer) return;
 
-    if ('layoutSizingHorizontal' in markLayer) {
-        try {
-            (markLayer as SceneNode & { layoutSizingHorizontal: 'FIXED' | 'HUG' | 'FILL' }).layoutSizingHorizontal = 'HUG';
-        } catch { }
-    }
+    setLayoutSizingHorizontalIfChanged(markLayer, 'HUG');
 
     if (hasHorizontalPadding(markLayer)) {
         const nextPad = targetSubBarWidth / 2;
@@ -140,7 +177,7 @@ function applyStackedMarkRatioToSubBar(subBar: SceneNode, cellWidth: number, rat
     }
 
     // fallback: width/x approximation for nodes without padding support
-    const parentWidth = getNodeContentWidth(subBar) || safeCellWidth;
+    const parentWidth = Math.max(1, getNodeContentWidth(subBar));
     setLayerWidthWithCentering(markLayer, targetSubBarWidth, parentWidth);
 }
 
@@ -159,7 +196,7 @@ function forceGroupContainerHug(groupInstance: InstanceNode, itemSpacing: number
     }
 }
 
-export function applyStackedBar(config: any, H: number, graph: SceneNode) {
+export function applyStackedBar(config: any, H: number, graph: SceneNode, precomputedCols?: ColRef[]) {
     const { values, mode, markNum, markRatio } = config;
     if (!values || values.length === 0) return;
 
@@ -185,7 +222,7 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
         }
     }
 
-    const columns = collectColumns(graph);
+    const columns = precomputedCols ?? collectColumns(graph);
     let globalDataIdx = 0;
     const targetRatio = normalizeRatio(typeof markRatio === 'number' ? markRatio : null);
 
@@ -215,7 +252,7 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
         if (groupInstance && groupInstance.type === 'INSTANCE') {
             const clusterLayout = computeClusterLayout(cellWidth, targetRatio, currentGroupBarCount);
             forceGroupContainerHug(groupInstance, clusterLayout.gapPx);
-            let markNumChanged = setMarkNumVariantWithFallback(groupInstance, currentGroupBarCount);
+            const isVariantMarkNumUpdated = setMarkNumVariantWithFallback(groupInstance, currentGroupBarCount);
 
             const subBars = (groupInstance as any).children.filter((n: SceneNode) => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name));
             subBars.sort((a: SceneNode, b: SceneNode) => {
@@ -224,12 +261,14 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
                 return numA - numB;
             });
 
-            if (markNumChanged) {
+            if (isVariantMarkNumUpdated) {
                 subBars.forEach((subBar: SceneNode) => {
-                    subBar.visible = true;
+                    setVisibleIfChanged(subBar, true);
                     if ('children' in subBar) {
                         (subBar as SceneNode & ChildrenMixin).children.forEach((seg: SceneNode) => {
-                            if (/^bar[-_]?0*(\d+)$/.test(seg.name)) seg.visible = true;
+                            if (MARK_NAME_PATTERNS.STACKED_SEGMENT.test(seg.name)) {
+                                setVisibleIfChanged(seg, true);
+                            }
                         });
                     }
                 });
@@ -237,16 +276,18 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode) {
 
             subBars.forEach((subBar: SceneNode, subIdx: number) => {
                 if (subIdx >= currentGroupBarCount) {
-                    subBar.visible = false;
+                    setVisibleIfChanged(subBar, false);
                     return;
                 }
                 if (globalDataIdx < totalDataCols) {
-                    subBar.visible = true;
+                    setVisibleIfChanged(subBar, true);
+                    applySegmentResizeModes(subBar);
                     applyStackedMarkRatioToSubBar(subBar, cellWidth, targetRatio, currentGroupBarCount);
                     applySegmentsToBar(subBar, values, globalDataIdx, rowCount, H, globalMaxSum, mode, config.rowColors);
+                    applySegmentResizeModes(subBar);
                     globalDataIdx++;
                 } else {
-                    subBar.visible = false;
+                    setVisibleIfChanged(subBar, false);
                 }
             });
         }
@@ -264,20 +305,26 @@ export function applySegmentsToBar(
     rowColors?: string[]
 ) {
     if (!('children' in barInstance)) return;
+    const segmentByIndex = buildSegmentLayerMap(barInstance);
+    const normalizedRowColors = Array.isArray(rowColors)
+        ? rowColors.map((color) => normalizeHexColor(color))
+        : [];
 
     for (let r = 0; r < rowCount; r++) {
         const val = Number(values[r][colIndex]) || 0;
         const targetNum = r + 1;
-        const targetLayer = findSegmentLayerByIndex(barInstance, targetNum);
+        const targetLayer = segmentByIndex.get(targetNum) || findSegmentLayerByIndex(barInstance, targetNum);
 
         if (targetLayer) {
-            const rowColor = Array.isArray(rowColors) ? normalizeHexColor(rowColors[r + 1]) : null;
+            const rowColor = normalizedRowColors[r + 1] || null;
             if (val === 0) {
-                targetLayer.visible = false;
+                setVisibleIfChanged(targetLayer, false);
             } else {
-                targetLayer.visible = true;
+                setVisibleIfChanged(targetLayer, true);
                 if (rowColor) {
-                    tryApplyFill(targetLayer as SceneNode, rowColor);
+                    if (!hasSameSolidFill(targetLayer as SceneNode, rowColor)) {
+                        tryApplyFill(targetLayer as SceneNode, rowColor);
+                    }
                 }
                 let ratio = 0;
                 if (mode === 'raw') {
@@ -287,16 +334,19 @@ export function applySegmentsToBar(
                 }
                 const finalHeight = Math.round((H * ratio) * 10) / 10;
                 if ('paddingBottom' in targetLayer) {
-                    (targetLayer as any).paddingBottom = finalHeight;
+                    const currentPadding = Number((targetLayer as any).paddingBottom);
+                    if (!Number.isFinite(currentPadding) || Math.abs(currentPadding - finalHeight) >= 0.1) {
+                        (targetLayer as any).paddingBottom = finalHeight;
+                    }
                 }
             }
         }
     }
     (barInstance as any).children.forEach((child: SceneNode) => {
-        const match = /^bar[-_]?0*(\d+)$/.exec(child.name);
+        const match = MARK_NAME_PATTERNS.STACKED_SEGMENT.exec(child.name);
         if (match) {
             const layerNum = parseInt(match[1]);
-            if (layerNum > rowCount) child.visible = false;
+            if (layerNum > rowCount) setVisibleIfChanged(child, false);
         }
     });
 }

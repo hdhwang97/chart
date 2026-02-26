@@ -1,6 +1,6 @@
 import { MARK_NAME_PATTERNS } from './constants';
 import { rgbToHex, findAllLineLayers, traverse } from './utils';
-import { collectColumns } from './drawing/shared';
+import { collectColumns, type ColRef } from './drawing/shared';
 import type { CellFillInjectionStyle, CellStrokeStyle, MarkInjectionStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 
 // ==========================================
@@ -201,8 +201,8 @@ export function extractAssistLineStrokeStyle(graph: SceneNode): StrokeStyleSnaps
     return nestedStroke;
 }
 
-export function extractColStrokeStyle(graph: SceneNode): StrokeStyleSnapshot | null {
-    const columns = collectColumns(graph);
+export function extractColStrokeStyle(graph: SceneNode, precomputedCols?: ColRef[]): StrokeStyleSnapshot | null {
+    const columns = resolveColumns(graph, precomputedCols);
     for (const col of columns) {
         const target = findColumnStrokeNode(col.node);
         if (!target) continue;
@@ -212,8 +212,8 @@ export function extractColStrokeStyle(graph: SceneNode): StrokeStyleSnapshot | n
     return null;
 }
 
-export function extractCellStrokeStyles(graph: SceneNode): CellStrokeStyle[] {
-    const columns = collectColumns(graph);
+export function extractCellStrokeStyles(graph: SceneNode, precomputedCols?: ColRef[]): CellStrokeStyle[] {
+    const columns = resolveColumns(graph, precomputedCols);
     const cellStyles: CellStrokeStyle[] = [];
 
     columns.forEach((col, colIndex) => {
@@ -232,8 +232,8 @@ export function extractCellStrokeStyles(graph: SceneNode): CellStrokeStyle[] {
     return cellStyles;
 }
 
-export function extractCellFillStyle(graph: SceneNode): CellFillInjectionStyle | null {
-    const columns = collectColumns(graph);
+export function extractCellFillStyle(graph: SceneNode, precomputedCols?: ColRef[]): CellFillInjectionStyle | null {
+    const columns = resolveColumns(graph, precomputedCols);
     for (const col of columns) {
         let fillColor: string | null = null;
         traverse(col.node, (node) => {
@@ -312,8 +312,8 @@ function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
     return found;
 }
 
-export function extractMarkStyles(graph: SceneNode): MarkInjectionStyle[] {
-    const columns = collectColumns(graph);
+export function extractMarkStyles(graph: SceneNode, precomputedCols?: ColRef[]): MarkInjectionStyle[] {
+    const columns = resolveColumns(graph, precomputedCols);
     const byIndex = new Map<number, MarkInjectionStyle>();
 
     columns.forEach((col) => {
@@ -455,9 +455,9 @@ export function deriveRowStrokeStyles(cellStrokeStyles: CellStrokeStyle[], rowCo
     return result.sort((a, b) => a.row - b.row);
 }
 
-export function extractChartColors(graph: SceneNode, chartType: string): string[] {
+export function extractChartColors(graph: SceneNode, chartType: string, precomputedCols?: ColRef[]): string[] {
     const colors: string[] = [];
-    const columns = collectColumns(graph);
+    const columns = resolveColumns(graph, precomputedCols);
     if (columns.length === 0) return [];
 
     const firstCol = columns[0].node;
@@ -528,9 +528,9 @@ export function extractChartColors(graph: SceneNode, chartType: string): string[
 }
 
 // 노드에서 스타일 정보(비율, 라운드, 두께 등) 추출
-export function extractStyleFromNode(node: SceneNode, chartType: string) {
-    const cols = collectColumns(node);
-    const colors = extractChartColors(node, chartType);
+export function extractStyleFromNode(node: SceneNode, chartType: string, options: ExtractStyleOptions = {}) {
+    const cols = resolveColumns(node, options.columns);
+    const colors = extractChartColors(node, chartType, cols);
 
     let markRatio = 0.8;
     let cornerRadius = 0;
@@ -601,13 +601,30 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
         strokeWidth = 2;
     }
 
-    const colStrokeStyle = extractColStrokeStyle(node);
-    const cellFillStyle = extractCellFillStyle(node);
-    const markStyles = extractMarkStyles(node);
+    if (options.fastPath) {
+        return {
+            colors,
+            markRatio,
+            cornerRadius,
+            strokeWidth,
+            cellFillStyle: null,
+            markStyle: null,
+            markStyles: [],
+            colStrokeStyle: null,
+            chartContainerStrokeStyle: null,
+            assistLineStrokeStyle: null,
+            cellStrokeStyles: [],
+            rowStrokeStyles: []
+        };
+    }
+
+    const colStrokeStyle = extractColStrokeStyle(node, cols);
+    const cellFillStyle = extractCellFillStyle(node, cols);
+    const markStyles = extractMarkStyles(node, cols);
     const markStyle = markStyles[0] || null;
     const chartContainerStrokeStyle = extractChartContainerStrokeStyle(node);
     const assistLineStrokeStyle = extractAssistLineStrokeStyle(node);
-    const cellStrokeStyles = extractCellStrokeStyles(node);
+    const cellStrokeStyles = extractCellStrokeStyles(node, cols);
     const inferredRowCount = Math.max(0, ...cellStrokeStyles.map(c => c.row + 1));
     const rowStrokeStyles = deriveRowStrokeStyles(cellStrokeStyles, inferredRowCount, cols.length);
 
@@ -625,4 +642,12 @@ export function extractStyleFromNode(node: SceneNode, chartType: string) {
         cellStrokeStyles,
         rowStrokeStyles
     };
+}
+type ExtractStyleOptions = {
+    columns?: ColRef[];
+    fastPath?: boolean;
+};
+
+function resolveColumns(graph: SceneNode, precomputedCols?: ColRef[]): ColRef[] {
+    return precomputedCols ?? collectColumns(graph);
 }
