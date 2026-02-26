@@ -51,6 +51,7 @@ export const PLUGIN_DATA_KEYS = {
     LAST_BAR_PADDING: "lastBarPadding",
     LAST_ROW_COLORS: "lastRowColors",
     LAST_COL_COLORS: "lastColColors",
+    LAST_COL_COLOR_ENABLED: "lastColColorEnabled",
     LAST_MARK_COLOR_SOURCE: "lastMarkColorSource",
     LAST_CORNER_RADIUS: "lastCornerRadius",
     LAST_STROKE_WIDTH: "lastStrokeWidth",

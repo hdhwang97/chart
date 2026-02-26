@@ -238,9 +238,16 @@ export function applyColumnXEmptyLabels(graph: SceneNode, labels: string[], prec
 
 export function applyLegendLabelsFromRowHeaders(
     graph: SceneNode,
-    labels: string[],
-    markNum: number | number[] | undefined,
-    chartType: string
+    options: {
+        chartType: string;
+        rowHeaderLabels: string[];
+        markNum: number | number[] | undefined;
+        xAxisLabels?: string[];
+        rowColors?: string[];
+        colColors?: string[];
+        colColorEnabled?: boolean[];
+        columns?: ColRef[];
+    }
 ) {
     const result = {
         containers: 0,
@@ -250,16 +257,62 @@ export function applyLegendLabelsFromRowHeaders(
         errors: 0
     };
 
+    const chartType = options.chartType;
     if (chartType !== 'bar' && chartType !== 'line') {
         return result;
     }
 
-    const resolvedLabels = Array.isArray(labels)
-        ? labels.map((label) => (typeof label === 'string' ? label.trim() : ''))
+    const columns = options.columns ?? collectColumns(graph);
+    const visibleColIndices = columns
+        .filter((col) => col.node.visible)
+        .map((col) => Math.max(0, col.index - 1));
+    const colColorEnabled = Array.isArray(options.colColorEnabled)
+        ? options.colColorEnabled.map((v) => Boolean(v))
         : [];
-    const maxIndexFromMarkNum = typeof markNum === 'number' && Number.isFinite(markNum)
-        ? Math.max(0, Math.floor(markNum))
-        : null;
+    const allVisibleColsEnabled = chartType === 'bar'
+        && visibleColIndices.length > 0
+        && visibleColIndices.every((idx) => Boolean(colColorEnabled[idx]));
+
+    const resolvedRowLabels = Array.isArray(options.rowHeaderLabels)
+        ? options.rowHeaderLabels.map((label) => (typeof label === 'string' ? label.trim() : ''))
+        : [];
+    const rowLabelLimit = typeof options.markNum === 'number' && Number.isFinite(options.markNum)
+        ? Math.max(0, Math.floor(options.markNum))
+        : resolvedRowLabels.length;
+
+    const resolvedLabels: string[] = [];
+    if (!allVisibleColsEnabled) {
+        for (let i = 0; i < rowLabelLimit; i++) {
+            const fallback = `R${i + 1}`;
+            resolvedLabels.push(resolvedRowLabels[i] || fallback);
+        }
+    }
+
+    if (chartType === 'bar') {
+        visibleColIndices.forEach((colIndex) => {
+            if (!colColorEnabled[colIndex]) return;
+            const colRef = columns.find((col) => col.index - 1 === colIndex);
+            const xEmptyTarget = colRef ? findColumnXEmptyInstance(colRef.node) : null;
+            let xEmptyLabel = '';
+            if (xEmptyTarget && xEmptyTarget.type === 'INSTANCE') {
+                try {
+                    const props = xEmptyTarget.componentProperties;
+                    const propKey =
+                        findActualPropKey(props, 'x-label')
+                        || findActualPropKey(props, 'x_label')
+                        || findActualPropKey(props, 'X-label')
+                        || findActualPropKey(props, 'X_label');
+                    xEmptyLabel = propKey ? String(props[propKey]?.value || '').trim() : '';
+                } catch {
+                    // Keep fallback chain (xAxis label -> Cn) when x-label read fails.
+                }
+            }
+            const explicitLabel = Array.isArray(options.xAxisLabels)
+                ? String(options.xAxisLabels[colIndex] || '').trim()
+                : '';
+            resolvedLabels.push(xEmptyLabel || explicitLabel || `C${colIndex + 1}`);
+        });
+    }
 
     const legendContainers: SceneNode[] = [];
     traverse(graph, (node) => {
@@ -287,8 +340,20 @@ export function applyLegendLabelsFromRowHeaders(
         legendElems.forEach(({ node, index }) => {
             result.candidates += 1;
 
-            if (maxIndexFromMarkNum !== null && index > maxIndexFromMarkNum) {
-                result.skipped += 1;
+            if (index > resolvedLabels.length) {
+                try {
+                    node.visible = false;
+                    result.applied += 1;
+                } catch {
+                    result.errors += 1;
+                }
+                return;
+            }
+
+            try {
+                node.visible = true;
+            } catch {
+                result.errors += 1;
                 return;
             }
 

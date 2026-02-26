@@ -1,6 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM, PLUGIN_DATA_KEYS } from '../constants';
 import { collectColumns, setVariantProperty } from './shared';
-import { normalizeHexColor, tryApplyFill } from '../utils';
+import { normalizeHexColor, tryApplyFill, tryApplyStroke, traverse } from '../utils';
 
 // ==========================================
 // BAR CHART DRAWING
@@ -129,9 +129,31 @@ function findBarLayerByIndex(layerPool: ReadonlyArray<SceneNode>, index: number)
     return found ? (found as SceneNode & LayoutMixin) : null;
 }
 
-function getBarRowColor(config: any, rowIndex: number) {
+function getBarColor(config: any, rowIndex: number, colIndex: number) {
+    const colEnabled = Array.isArray(config?.colColorEnabled)
+        ? Boolean(config.colColorEnabled[colIndex])
+        : false;
+    if (colEnabled && Array.isArray(config?.colColors)) {
+        const colColor = normalizeHexColor(config.colColors[colIndex]);
+        if (colColor) return colColor;
+    }
     if (!Array.isArray(config?.rowColors)) return null;
     return normalizeHexColor(config.rowColors[rowIndex]);
+}
+
+function applyBarMarkColor(target: SceneNode, color: string) {
+    let applied = false;
+    if (tryApplyFill(target, color)) applied = true;
+    if (tryApplyStroke(target, color)) applied = true;
+    if (applied) return true;
+
+    // bar 레이어가 인스턴스/래퍼일 때 내부 실제 도형까지 색상 전파
+    traverse(target, (child) => {
+        if (child.id === target.id || !child.visible) return;
+        if (tryApplyFill(child, color)) applied = true;
+        if (tryApplyStroke(child, color)) applied = true;
+    });
+    return applied;
 }
 
 export function applyBar(config: any, H: number, graph: SceneNode) {
@@ -226,9 +248,9 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                 const barLayer = findBarLayerByIndex(barLayerPool, targetNum);
 
                 if (barLayer) {
-                    const rowColor = getBarRowColor(config, m);
-                    if (rowColor) {
-                        tryApplyFill(barLayer as SceneNode, rowColor);
+                    const markColor = getBarColor(config, m, cIdx);
+                    if (markColor) {
+                        applyBarMarkColor(barLayer as SceneNode, markColor);
                     }
                     if (measureWidth > 0) {
                         try {

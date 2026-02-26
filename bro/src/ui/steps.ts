@@ -1,4 +1,4 @@
-import { state, CHART_ICONS, initData, getTotalStackedCols, ensureColHeaderColorsLength, ensureColHeaderTitlesLength, ensureRowColorsLength, ensureRowHeaderLabelsLength, getGridColsForChart } from './state';
+import { state, CHART_ICONS, initData, getTotalStackedCols, ensureColHeaderColorEnabledLength, ensureColHeaderColorsLength, ensureColHeaderTitlesLength, ensureRowColorsLength, ensureRowHeaderLabelsLength, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -104,9 +104,11 @@ export function selectType(type: string) {
 
     const totalCols = type === 'stackedBar' ? getTotalStackedCols() : getGridColsForChart(type, state.cols);
     state.data = initData(state.rows, totalCols);
+    state.colHeaderColorEnabled = [];
     ensureRowColorsLength(state.rows);
     ensureRowHeaderLabelsLength(state.rows, state.chartType);
     ensureColHeaderColorsLength(totalCols);
+    ensureColHeaderColorEnabledLength(totalCols);
     ensureColHeaderTitlesLength(type === 'stackedBar' ? state.groupStructure.length : totalCols, state.chartType);
     state.markColorSource = 'row';
     syncMarkCountFromRows();
@@ -130,6 +132,7 @@ export function resetData() {
     ensureRowColorsLength(state.rows);
     ensureRowHeaderLabelsLength(state.rows, state.chartType);
     ensureColHeaderColorsLength(totalCols);
+    ensureColHeaderColorEnabledLength(totalCols);
     ensureColHeaderTitlesLength(state.chartType === 'stackedBar' ? state.groupStructure.length : totalCols, state.chartType);
     state.csvFileName = null;
 
@@ -237,7 +240,8 @@ export function submitData() {
         rowColors: ensureRowColorsLength(state.rows),
         rowHeaderLabels: ensureRowHeaderLabelsLength(state.rows, state.chartType),
         colColors: state.colHeaderColors,
-        markColorSource: 'row',
+        colColorEnabled: ensureColHeaderColorEnabledLength(getGridColsForChart(state.chartType, state.cols)),
+        markColorSource: state.markColorSource,
         assistLineVisible: state.assistLineVisible,
         assistLineEnabled: {
             min: state.assistLineEnabled.min,

@@ -98,6 +98,7 @@ export const state = {
     rowHeaderLabels: ['R1', 'R2', 'R3'] as string[],
     colHeaderTitles: ['C1', 'C2', 'C3'] as string[],
     colHeaderColors: [] as string[],
+    colHeaderColorEnabled: [] as boolean[],
     markColorSource: 'row' as 'row' | 'col',
     assistLineVisible: false,
     assistLineEnabled: { min: false, max: false, avg: false },
@@ -201,10 +202,19 @@ export function ensureRowColorsLength(rowCount: number) {
 export function ensureColHeaderColorsLength(colCount: number) {
     const next: string[] = [];
     for (let i = 0; i < colCount; i++) {
-        next.push(normalizeHexColorInput(state.colHeaderColors[i]) || getDefaultRowColor(i));
+        next.push(normalizeHexColorInput(state.colHeaderColors[i]) || getRowColor(0));
     }
     state.colHeaderColors = next;
     return state.colHeaderColors;
+}
+
+export function ensureColHeaderColorEnabledLength(colCount: number) {
+    const next: boolean[] = [];
+    for (let i = 0; i < colCount; i++) {
+        next.push(Boolean(state.colHeaderColorEnabled[i]));
+    }
+    state.colHeaderColorEnabled = next;
+    return state.colHeaderColorEnabled;
 }
 
 function normalizeColHeaderTitleInput(value: unknown): string | null {

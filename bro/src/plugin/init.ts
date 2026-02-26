@@ -211,6 +211,22 @@ function resolveColColorsFromNode(node: SceneNode, colCount: number) {
     return next;
 }
 
+function resolveColColorEnabledFromNode(node: SceneNode, colCount: number) {
+    const savedRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLOR_ENABLED);
+    let saved: any[] = [];
+    if (savedRaw) {
+        try {
+            const parsed = JSON.parse(savedRaw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: boolean[] = [];
+    for (let i = 0; i < colCount; i++) {
+        next.push(Boolean(saved[i]));
+    }
+    return next;
+}
+
 export async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode | null> {
     const { KEY, NAME } = MASTER_COMPONENT_CONFIG;
 
@@ -295,6 +311,7 @@ export async function initPluginUI(
         const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, autoStyleInfo.colors);
         const autoColCount = Array.isArray(valuesToUse) && valuesToUse.length > 0 && Array.isArray(valuesToUse[0]) ? valuesToUse[0].length : 0;
         const colColors = resolveColColorsFromNode(node, Math.max(1, autoColCount));
+        const colColorEnabled = resolveColColorEnabledFromNode(node, Math.max(1, autoColCount));
         const markColorSource = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row';
         const payload = {
             type: chartType,
@@ -313,6 +330,7 @@ export async function initPluginUI(
                 : undefined,
             rowColors,
             colColors,
+            colColorEnabled,
             markColorSource,
             assistLineVisible,
             assistLineEnabled,
@@ -356,6 +374,7 @@ export async function initPluginUI(
         ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((a, b) => a + b, 0) : 0)
         : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
     const colColors = resolveColColorsFromNode(node, Math.max(1, colCount));
+    const colColorEnabled = resolveColColorEnabledFromNode(node, Math.max(1, colCount));
     const markColorSource = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row';
 
     figma.ui.postMessage({
@@ -374,6 +393,7 @@ export async function initPluginUI(
         markColors: extractedColors,
         rowColors,
         colColors,
+        colColorEnabled,
         markColorSource,
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
         markRatio,

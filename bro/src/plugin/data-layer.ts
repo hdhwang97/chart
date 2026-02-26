@@ -71,6 +71,16 @@ function normalizeMarkColorSource(value: unknown): 'row' | 'col' {
     return value === 'col' ? 'col' : 'row';
 }
 
+function normalizeColColorEnabled(value: unknown, colCount: number): boolean[] {
+    const source = Array.isArray(value) ? value : [];
+    const safeCount = Math.max(1, Number.isFinite(colCount) ? Math.floor(colCount) : 1);
+    const next: boolean[] = [];
+    for (let i = 0; i < safeCount; i++) {
+        next.push(Boolean(source[i]));
+    }
+    return next;
+}
+
 function normalizeThickness(value: unknown): number | undefined {
     const n = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(n) || n < 0) return undefined;
@@ -230,6 +240,13 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_COL_COLORS,
         JSON.stringify(normalizeRowColors(msg.colColors))
+    );
+    const msgCols = Number.isFinite(Number(msg.cols)) ? Number(msg.cols) : 0;
+    const xAxisCount = Array.isArray(msg.xAxisLabels) ? msg.xAxisLabels.length : 0;
+    const colCount = Math.max(1, msgCols, xAxisCount);
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_COL_COLOR_ENABLED,
+        JSON.stringify(normalizeColColorEnabled(msg.colColorEnabled, colCount))
     );
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE,

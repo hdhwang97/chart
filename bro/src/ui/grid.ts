@@ -1,4 +1,4 @@
-import { state, ensureColHeaderTitlesLength, ensureRowHeaderLabelsLength, getDefaultColHeaderTitle, getTotalStackedCols, getRowColor, getGridColsForChart } from './state';
+import { state, ensureColHeaderColorEnabledLength, ensureColHeaderTitlesLength, ensureRowHeaderLabelsLength, getDefaultColHeaderTitle, getTotalStackedCols, getRowColor, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { deleteRow, deleteColumn, addBarToGroup, removeBarFromGroupAt, clearAllData, getGroupStartIndex, flatIndexFromGroupBar } from './data-ops';
 import { checkCtaValidation, getAutoFillValue, getStackedOverflowState, syncYMaxValidationUi } from './mode';
@@ -32,6 +32,13 @@ export function renderGrid() {
     // Row header rendering
     const headerCont = ui.rowHeaderContainer;
     headerCont.innerHTML = '';
+
+    const isRowColorDisabledByColOverrides = (() => {
+        if (state.chartType !== 'bar') return false;
+        const colCount = getGridColsForChart(state.chartType, state.cols);
+        const enabled = ensureColHeaderColorEnabledLength(colCount);
+        return colCount > 0 && enabled.every((flag) => Boolean(flag));
+    })();
 
     // ===== COLUMN HEADERS =====
     if (isStacked) {
@@ -128,6 +135,36 @@ export function renderGrid() {
             const labelSpan = document.createElement('span');
             labelSpan.className = 'truncate';
             labelSpan.textContent = label;
+            if (state.chartType === 'bar' && state.mode !== 'read') {
+                const swatch = document.createElement('button');
+                swatch.type = 'button';
+                swatch.className = 'col-color-swatch w-3.5 h-3.5 rounded-[2px] border border-border shrink-0 mr-1 cursor-pointer';
+                const colColor = state.colHeaderColorEnabled[c]
+                    ? (state.colHeaderColors[c] || getRowColor(0))
+                    : getRowColor(0);
+                swatch.style.backgroundColor = colColor;
+                swatch.title = colColor;
+                swatch.dataset.col = String(c);
+                swatch.addEventListener('click', (evt) => {
+                    evt.stopPropagation();
+                    const anchor = evt.currentTarget as HTMLElement;
+                    const rect = anchor.getBoundingClientRect();
+                    document.dispatchEvent(new CustomEvent('col-color-swatch-click', {
+                        detail: {
+                            col: c,
+                            anchorRect: {
+                                left: rect.left,
+                                top: rect.top,
+                                right: rect.right,
+                                bottom: rect.bottom,
+                                width: rect.width,
+                                height: rect.height
+                            }
+                        }
+                    }));
+                });
+                hCell.appendChild(swatch);
+            }
             if (state.mode !== 'read') {
                 labelSpan.classList.add('cursor-text');
                 labelSpan.title = 'Click to edit';
@@ -168,9 +205,11 @@ export function renderGrid() {
             swatch.type = 'button';
             swatch.className = 'row-color-swatch w-3.5 h-3.5 rounded-[2px] border border-border shrink-0';
             swatch.style.backgroundColor = rowColor;
-            swatch.title = rowColor;
+            swatch.title = isRowColorDisabledByColOverrides
+                ? '모든 컬럼 색상이 지정되어 Row 색상은 비활성화됨'
+                : rowColor;
             swatch.dataset.row = String(r);
-            if (state.mode === 'read') {
+            if (state.mode === 'read' || isRowColorDisabledByColOverrides) {
                 swatch.disabled = true;
                 swatch.classList.add('opacity-60', 'cursor-not-allowed');
             } else {

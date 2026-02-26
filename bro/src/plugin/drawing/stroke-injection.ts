@@ -16,6 +16,10 @@ type SideName = 'top' | 'right' | 'bottom' | 'left';
 type StrokeInjectionRuntimePayload = StrokeInjectionPayload & {
     chartType?: string;
     rowColors?: string[];
+    colColors?: string[];
+    colColorEnabled?: boolean[];
+    rowHeaderLabels?: string[];
+    xAxisLabels?: string[];
     markNum?: number | number[];
     rowStrokeStyles?: RowStrokeStyle[];
     colStrokeStyle?: StrokeStyleSnapshot | null;
@@ -310,11 +314,10 @@ function applyGridStrokeStyle(node: SceneNode, style: NormalizedGridStyle): bool
     let applied = false;
     const allSidesSelected = style.sides.top && style.sides.right && style.sides.bottom && style.sides.left;
 
-    // Figma stroke color is shared across sides; apply it only when all sides are targeted.
-    if (allSidesSelected && style.color && tryApplyStroke(node, style.color)) {
+    if (style.color && tryApplyStroke(node, style.color)) {
         applied = true;
     }
-    if (allSidesSelected && applyStrokeStyleMode(node, style.strokeStyle)) {
+    if (applyStrokeStyleMode(node, style.strokeStyle)) {
         applied = true;
     }
 
@@ -444,10 +447,14 @@ function isLineLikeNode(node: SceneNode): boolean {
     return false;
 }
 
-function applyMarkStyleToNode(node: SceneNode, style: NormalizedMarkStyle): boolean {
+function applyMarkStyleToNode(
+    node: SceneNode,
+    style: NormalizedMarkStyle,
+    options?: { skipFill?: boolean; skipStrokeColor?: boolean }
+): boolean {
     let applied = false;
-    if (style.fillColor && tryApplyFill(node, style.fillColor)) applied = true;
-    if (style.strokeColor && tryApplyStroke(node, style.strokeColor)) applied = true;
+    if (!options?.skipFill && style.fillColor && tryApplyFill(node, style.fillColor)) applied = true;
+    if (!options?.skipStrokeColor && style.strokeColor && tryApplyStroke(node, style.strokeColor)) applied = true;
     if (applyStrokeStyleMode(node, style.strokeStyle)) applied = true;
     if (typeof style.thickness === 'number' && hasStrokeWeight(node)) {
         node.strokeWeight = style.thickness;
@@ -456,10 +463,16 @@ function applyMarkStyleToNode(node: SceneNode, style: NormalizedMarkStyle): bool
     return applied;
 }
 
-function applyMarkStyles(columns: ColRef[], styles: NormalizedMarkStyle[]): ScopeResult {
+function applyMarkStyles(
+    columns: ColRef[],
+    styles: NormalizedMarkStyle[],
+    options?: { chartType?: string; colColorEnabled?: boolean[] }
+): ScopeResult {
     const result = createScopeResult();
     if (styles.length === 0) return result;
     columns.forEach((col) => {
+        const colIndex = Math.max(0, col.index - 1);
+        const skipColorForColumn = options?.chartType === 'bar' && Boolean(options?.colColorEnabled?.[colIndex]);
         traverse(col.node, (node) => {
             if (!node.visible) return;
 
@@ -469,7 +482,10 @@ function applyMarkStyles(columns: ColRef[], styles: NormalizedMarkStyle[]): Scop
                 if (!style) return;
                 result.candidates += 1;
                 try {
-                    if (applyMarkStyleToNode(node, style)) result.applied += 1;
+                    if (applyMarkStyleToNode(node, style, {
+                        skipFill: skipColorForColumn,
+                        skipStrokeColor: skipColorForColumn
+                    })) result.applied += 1;
                     else result.skipped += 1;
                 } catch {
                     result.errors += 1;
@@ -550,27 +566,58 @@ function findLegendColorNode(legendElem: SceneNode): SceneNode | null {
 function applyLegendMarkSync(
     graph: SceneNode,
     styles: NormalizedMarkStyle[],
+    payload: StrokeInjectionRuntimePayload,
     markNum: number | number[] | undefined,
     chartType: string | undefined,
-    rowColors: string[] | undefined
+    rowColors: string[] | undefined,
+    precomputedCols?: ColRef[]
 ): { result: ScopeResult; enabled: boolean } {
     const result = createScopeResult();
 
     const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
+    const isBar = chartType === 'bar';
     const markCount = isStacked
         ? resolveLegendCountForStacked(rowColors)
-        : resolveLegendMarkCount(markNum);
-    if (markCount === null) return { result, enabled: false };
+        : (isBar ? null : resolveLegendMarkCount(markNum));
+    if (!isBar && markCount === null) return { result, enabled: false };
 
     const normalizedRowColors = Array.isArray(rowColors)
         ? rowColors.map((value) => normalizeHexColor(value))
         : [];
     const hasRowColorSeries = normalizedRowColors.some((value, index) => index > 0 && Boolean(value));
-    if (!isStacked && styles.length === 0) {
+    if (!isStacked && !isBar && styles.length === 0) {
         return { result, enabled: false };
     }
     if (isStacked && !hasRowColorSeries) {
         return { result, enabled: false };
+    }
+    const columns = precomputedCols ?? collectColumns(graph);
+    const visibleColIndices = columns
+        .filter((col) => col.node.visible)
+        .map((col) => Math.max(0, col.index - 1));
+    const colColorEnabled = Array.isArray(payload.colColorEnabled)
+        ? payload.colColorEnabled.map((v) => Boolean(v))
+        : [];
+    const enabledColIndices = visibleColIndices.filter((index) => Boolean(colColorEnabled[index]));
+    const allVisibleColsEnabled = isBar
+        && visibleColIndices.length > 0
+        && visibleColIndices.every((index) => Boolean(colColorEnabled[index]));
+    const normalizedColColors = Array.isArray(payload.colColors)
+        ? payload.colColors.map((value) => normalizeHexColor(value))
+        : [];
+    const rowCount = typeof markNum === 'number' && Number.isFinite(markNum)
+        ? Math.max(0, Math.floor(markNum))
+        : (Array.isArray(payload.rowHeaderLabels) ? payload.rowHeaderLabels.length : 0);
+    const barLegendColors: string[] = [];
+    if (isBar) {
+        if (!allVisibleColsEnabled) {
+            for (let i = 0; i < rowCount; i++) {
+                barLegendColors.push(normalizedRowColors[i] || '#3B82F6');
+            }
+        }
+        enabledColIndices.forEach((colIndex) => {
+            barLegendColors.push(normalizedColColors[colIndex] || normalizedRowColors[0] || '#3B82F6');
+        });
     }
 
     const containers = findLegendContainers(graph);
@@ -579,8 +626,9 @@ function applyLegendMarkSync(
         elems.forEach(({ node, index }) => {
             result.candidates += 1;
             try {
-                node.visible = index <= markCount;
-                if (index > markCount) {
+                const visibleCount = isBar ? barLegendColors.length : (markCount ?? 0);
+                node.visible = index <= visibleCount;
+                if (index > visibleCount) {
                     result.applied += 1;
                     return;
                 }
@@ -588,7 +636,9 @@ function applyLegendMarkSync(
                 const colorNode = findLegendColorNode(node);
                 const colorHex = isStacked
                     ? (normalizedRowColors[index] || null)
-                    : (getMarkStyleBySeries(styles, index)?.fillColor || null);
+                    : (isBar
+                        ? (barLegendColors[index - 1] || null)
+                        : (getMarkStyleBySeries(styles, index)?.fillColor || null));
                 if (!colorHex || !colorNode) {
                     result.skipped += 1;
                     return;
@@ -705,7 +755,7 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
     const columns = precomputedCols ?? collectColumns(graph);
     const cellFillStyle = resolveCellFillStyle(payload);
     const markStyles = resolveMarkStyles(payload);
-    const legendSync = applyLegendMarkSync(graph, markStyles, payload.markNum, payload.chartType, payload.rowColors);
+    const legendSync = applyLegendMarkSync(graph, markStyles, payload, payload.markNum, payload.chartType, payload.rowColors, columns);
     const cellTopStyle = resolveCellTopStyle(payload);
     const tabRightStyle = resolveTabRightStyle(payload);
     const gridContainerStyle = resolveGridContainerStyle(payload);
@@ -713,7 +763,12 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
 
     return {
         cellFill: cellFillStyle ? applyCellFill(columns, cellFillStyle) : createScopeResult(),
-        mark: skipMarkStyleApply ? createScopeResult() : applyMarkStyles(columns, markStyles),
+        mark: skipMarkStyleApply
+            ? createScopeResult()
+            : applyMarkStyles(columns, markStyles, {
+                chartType: payload.chartType,
+                colColorEnabled: payload.colColorEnabled
+            }),
         legend: legendSync.result,
         cellTop: cellTopStyle ? applyCellTopStroke(columns, cellTopStyle) : createScopeResult(),
         tabRight: tabRightStyle ? applyTabRightStroke(columns, tabRightStyle) : createScopeResult(),

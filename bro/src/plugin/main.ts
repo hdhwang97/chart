@@ -169,6 +169,7 @@ figma.ui.onmessage = async (msg) => {
             markRatio,
             rowColors,
             colColors,
+            colColorEnabled,
             rowHeaderLabels,
             markColorSource,
             rawYMaxAuto,
@@ -190,6 +191,9 @@ figma.ui.onmessage = async (msg) => {
         const perf = new PerfTracker();
         const normalizedRowColors = normalizeRowColors(rowColors);
         const normalizedColColors = normalizeRowColors(colColors);
+        const normalizedColColorEnabled = Array.isArray(colColorEnabled)
+            ? colColorEnabled.map((v: unknown) => Boolean(v))
+            : [];
         const nodes = figma.currentPage.selection;
         let targetNode: FrameNode | ComponentNode | InstanceNode | null = null;
 
@@ -290,6 +294,7 @@ figma.ui.onmessage = async (msg) => {
             markRatio,
             rowColors: normalizedRowColors,
             colColors: normalizedColColors,
+            colColorEnabled: normalizedColColorEnabled,
             markColorSource: markColorSource === 'col' ? 'col' : 'row',
             assistLineVisible,
             assistLineEnabled,
@@ -318,9 +323,16 @@ figma.ui.onmessage = async (msg) => {
             console.log('[chart-plugin][x-empty-label]', { type, ...xEmptyLabelResult });
             const legendLabelResult = applyLegendLabelsFromRowHeaders(
                 targetNode,
-                Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
-                markNum,
-                type
+                {
+                    chartType: type,
+                    rowHeaderLabels: Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
+                    rowColors: normalizedRowColors,
+                    markNum,
+                    xAxisLabels: Array.isArray(xAxisLabels) ? xAxisLabels : [],
+                    colColors: normalizedColColors,
+                    colColorEnabled: normalizedColColorEnabled,
+                    columns
+                }
             );
             console.log('[chart-plugin][legend-label]', { type, ...legendLabelResult });
         });
@@ -328,6 +340,10 @@ figma.ui.onmessage = async (msg) => {
         const strokeInjectionResult = await perf.step('stroke-injection', () => applyStrokeInjection(targetNode, {
             chartType: type,
             rowColors: normalizedRowColors,
+            colColors: normalizedColColors,
+            colColorEnabled: normalizedColColorEnabled,
+            rowHeaderLabels: Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
+            xAxisLabels: Array.isArray(xAxisLabels) ? xAxisLabels : [],
             cellFillStyle,
             cellTopStyle: cellTopStyle ?? cellBottomStyle,
             tabRightStyle,
@@ -377,6 +393,7 @@ figma.ui.onmessage = async (msg) => {
             markRatio: markRatioForUi,
             rowColors: rowColorsForUi,
             colColors: normalizedColColors,
+            colColorEnabled: normalizedColColorEnabled,
             markColorSource: markColorSource === 'col' ? 'col' : 'row',
             assistLineVisible: Boolean(assistLineVisible),
             assistLineEnabled: assistLineEnabled || { min: false, max: false, avg: false },
@@ -456,6 +473,16 @@ figma.ui.onmessage = async (msg) => {
                 colColorsForUi = normalizeRowColors(parsed);
             } catch { }
         }
+        const colColorEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLOR_ENABLED);
+        let colColorEnabledForUi: boolean[] = [];
+        if (colColorEnabledRaw) {
+            try {
+                const parsed = JSON.parse(colColorEnabledRaw);
+                if (Array.isArray(parsed)) {
+                    colColorEnabledForUi = parsed.map((v: unknown) => Boolean(v));
+                }
+            } catch { }
+        }
         const markColorSource = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row';
         const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
         const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
@@ -481,6 +508,7 @@ figma.ui.onmessage = async (msg) => {
             markRatio: markRatioForUi,
             rowColors: rowColorsForUi,
             colColors: colColorsForUi,
+            colColorEnabled: colColorEnabledForUi,
             markColorSource,
             assistLineVisible,
             assistLineEnabled,

@@ -1,4 +1,4 @@
-import { state, MAX_SIZE, ensureColHeaderColorsLength, ensureColHeaderTitlesLength, ensureRowColorsLength, ensureRowHeaderLabelsLength, getGridColsForChart } from './state';
+import { state, MAX_SIZE, ensureColHeaderColorEnabledLength, ensureColHeaderColorsLength, ensureColHeaderTitlesLength, ensureRowColorsLength, ensureRowHeaderLabelsLength, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -174,6 +174,7 @@ export function addColumn() {
     }
     ui.settingColInput.value = String(state.cols);
     ensureColHeaderColorsLength(getGridColsForChart(state.chartType, state.cols));
+    ensureColHeaderColorEnabledLength(getGridColsForChart(state.chartType, state.cols));
     ensureColHeaderTitlesLength(
         state.chartType === 'stackedBar' ? state.groupStructure.length : getGridColsForChart(state.chartType, state.cols),
         state.chartType
@@ -209,6 +210,9 @@ export function deleteColumn(colIdx: number) {
         if (groupIndex >= 0 && groupIndex < state.colHeaderColors.length) {
             state.colHeaderColors.splice(groupIndex, 1);
         }
+        if (groupIndex >= 0 && groupIndex < state.colHeaderColorEnabled.length) {
+            state.colHeaderColorEnabled.splice(groupIndex, 1);
+        }
         state.cols = state.groupStructure.length;
         syncSegmentControlForStacked();
     } else {
@@ -221,9 +225,13 @@ export function deleteColumn(colIdx: number) {
         if (colIdx >= 0 && colIdx < state.colHeaderColors.length) {
             state.colHeaderColors.splice(colIdx, 1);
         }
+        if (colIdx >= 0 && colIdx < state.colHeaderColorEnabled.length) {
+            state.colHeaderColorEnabled.splice(colIdx, 1);
+        }
     }
     ui.settingColInput.value = String(state.cols);
     ensureColHeaderColorsLength(getGridColsForChart(state.chartType, state.cols));
+    ensureColHeaderColorEnabledLength(getGridColsForChart(state.chartType, state.cols));
     ensureColHeaderTitlesLength(
         state.chartType === 'stackedBar' ? state.groupStructure.length : getGridColsForChart(state.chartType, state.cols),
         state.chartType
@@ -334,6 +342,7 @@ export function updateGridSize(newCols: number, newRows: number) {
     ensureRowColorsLength(state.rows);
     ensureRowHeaderLabelsLength(state.rows, state.chartType);
     ensureColHeaderColorsLength(getGridColsForChart(state.chartType, state.cols));
+    ensureColHeaderColorEnabledLength(getGridColsForChart(state.chartType, state.cols));
     ensureColHeaderTitlesLength(
         state.chartType === 'stackedBar' ? state.groupStructure.length : getGridColsForChart(state.chartType, state.cols),
         state.chartType

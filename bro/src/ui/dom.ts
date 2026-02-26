@@ -86,6 +86,7 @@ export const ui = {
     get rowColorPreview() { return byId<HTMLElement>('row-color-preview'); },
     get rowColorWheel() { return byId<HTMLElement>('row-color-wheel'); },
     get rowColorHexInput() { return byId<HTMLInputElement>('row-color-hex-input'); },
+    get rowColorResetBtn() { return byId<HTMLButtonElement>('row-color-reset-btn'); },
     get rowColorSaveBtn() { return byId<HTMLButtonElement>('row-color-save-btn'); },
     get styleColorPopover() { return byId<HTMLElement>('style-color-popover'); },
     get styleColorPopoverTitle() { return byId<HTMLElement>('style-color-popover-title'); },
