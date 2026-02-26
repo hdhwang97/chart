@@ -115,8 +115,8 @@ function getRowStroke(row: number): StrokeStyleSnapshot | null {
     return found ? found.stroke : null;
 }
 
-function getDraftLineStroke(target: 'cellBottom' | 'tabRight'): StrokeStyleSnapshot | null {
-    const draft = target === 'cellBottom' ? state.styleInjectionDraft.cellBottom : state.styleInjectionDraft.tabRight;
+function getDraftLineStroke(target: 'cellTop' | 'tabRight'): StrokeStyleSnapshot | null {
+    const draft = target === 'cellTop' ? state.styleInjectionDraft.cellTop : state.styleInjectionDraft.tabRight;
     return {
         color: draft.color,
         weight: draft.visible ? draft.thickness : 0,
@@ -244,7 +244,7 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
 
 function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount: number, xGuidePositions?: number[]) {
     const tabRightStroke = getDraftLineStroke('tabRight') || state.colStrokeStyle;
-    const cellBottomStroke = getDraftLineStroke('cellBottom');
+    const cellTopStroke = getDraftLineStroke('cellTop');
 
     if (tabRightStroke && totalCols > 0) {
         if (xGuidePositions && xGuidePositions.length > 0) {
@@ -274,7 +274,7 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
     if (yCellCount > 0) {
         const step = h / yCellCount;
         for (let r = 0; r <= yCellCount; r++) {
-            const stroke = cellBottomStroke || getRowStroke(r);
+            const stroke = cellTopStroke || getRowStroke(r);
             const line = g.append('line')
                 .attr('x1', 0)
                 .attr('x2', w)

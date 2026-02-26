@@ -264,7 +264,7 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
     }
 
     const cellFillStyle = normalizeCellFillStyle(msg.cellFillStyle);
-    const cellBottomStyle = normalizeSideStrokeStyle(msg.cellBottomStyle);
+    const cellTopStyle = normalizeSideStrokeStyle(msg.cellTopStyle ?? msg.cellBottomStyle);
     const tabRightStyle = normalizeSideStrokeStyle(msg.tabRightStyle);
     const gridContainerStyle = normalizeGridStrokeStyle(msg.gridContainerStyle);
     const assistLineStyle = normalizeAssistLineStyle(msg.assistLineStyle);
@@ -276,8 +276,13 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         cellFillStyle ? JSON.stringify(cellFillStyle) : ''
     );
     node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE,
+        cellTopStyle ? JSON.stringify(cellTopStyle) : ''
+    );
+    // Legacy compatibility for previously-saved charts.
+    node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE,
-        cellBottomStyle ? JSON.stringify(cellBottomStyle) : ''
+        cellTopStyle ? JSON.stringify(cellTopStyle) : ''
     );
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE,

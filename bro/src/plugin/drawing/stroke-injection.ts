@@ -56,11 +56,11 @@ export type StrokeInjectionResult = {
     cellFill: ScopeResult;
     mark: ScopeResult;
     legend: ScopeResult;
-    cellBottom: ScopeResult;
+    cellTop: ScopeResult;
     tabRight: ScopeResult;
     gridContainer: ScopeResult;
     resolved: {
-        cellBottom: boolean;
+        cellTop: boolean;
         cellFill: boolean;
         mark: boolean;
         legend: boolean;
@@ -204,14 +204,14 @@ function applyStrokeStyleMode(node: SceneNode, mode: 'solid' | 'dash' | undefine
     return tryApplyDashPattern(node, []);
 }
 
-function resolveCellBottomStyle(payload: StrokeInjectionRuntimePayload): NormalizedSideStyle | null {
-    const preferred = normalizeSideStyle(payload.cellBottomStyle);
+function resolveCellTopStyle(payload: StrokeInjectionRuntimePayload): NormalizedSideStyle | null {
+    const preferred = normalizeSideStyle(payload.cellTopStyle ?? payload.cellBottomStyle);
     if (preferred) return preferred;
 
-    const rowZero = toSideStyleFromSnapshot(resolveRowZeroStroke(payload.rowStrokeStyles), 'bottom');
+    const rowZero = toSideStyleFromSnapshot(resolveRowZeroStroke(payload.rowStrokeStyles), 'top');
     if (rowZero) return rowZero;
 
-    return toSideStyleFromSnapshot(payload.colStrokeStyle || null, 'bottom');
+    return toSideStyleFromSnapshot(payload.colStrokeStyle || null, 'top');
 }
 
 function resolveCellFillStyle(payload: StrokeInjectionRuntimePayload): { color?: string } | null {
@@ -346,15 +346,37 @@ function applyGridStrokeStyle(node: SceneNode, style: NormalizedGridStyle): bool
     return applied || sideApplied;
 }
 
-function applyCellBottomStroke(columns: ColRef[], style: NormalizedSideStyle): ScopeResult {
+function applyCellTopStroke(columns: ColRef[], style: NormalizedSideStyle): ScopeResult {
     const result = createScopeResult();
 
     columns.forEach((col) => {
+        const lastVisibleCellIndex = (() => {
+            let maxIndex: number | null = null;
+            traverse(col.node, (node) => {
+                if (!node.visible) return;
+                const match = MARK_NAME_PATTERNS.CEL.exec(node.name);
+                if (!match) return;
+                const idx = Number.parseInt(match[1], 10);
+                if (!Number.isFinite(idx)) return;
+                if (maxIndex === null || idx > maxIndex) {
+                    maxIndex = idx;
+                }
+            });
+            return maxIndex;
+        })();
+
         traverse(col.node, (node) => {
-            if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
+            const match = MARK_NAME_PATTERNS.CEL.exec(node.name);
+            if (!match) return;
             result.candidates += 1;
             try {
-                if (applySideStrokeStyle(node, 'bottom', style)) result.applied += 1;
+                const idx = Number.parseInt(match[1], 10);
+                const isLastVisibleCell = Number.isFinite(idx) && lastVisibleCellIndex !== null && idx === lastVisibleCellIndex;
+                const effectiveStyle = isLastVisibleCell
+                    ? { ...style, visible: false, thickness: 0 }
+                    : style;
+
+                if (applySideStrokeStyle(node, 'top', effectiveStyle)) result.applied += 1;
                 else result.skipped += 1;
             } catch {
                 result.errors += 1;
@@ -684,7 +706,7 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
     const cellFillStyle = resolveCellFillStyle(payload);
     const markStyles = resolveMarkStyles(payload);
     const legendSync = applyLegendMarkSync(graph, markStyles, payload.markNum, payload.chartType, payload.rowColors);
-    const cellBottomStyle = resolveCellBottomStyle(payload);
+    const cellTopStyle = resolveCellTopStyle(payload);
     const tabRightStyle = resolveTabRightStyle(payload);
     const gridContainerStyle = resolveGridContainerStyle(payload);
     const skipMarkStyleApply = shouldSkipMarkStyleApply(payload, markStyles);
@@ -693,14 +715,14 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
         cellFill: cellFillStyle ? applyCellFill(columns, cellFillStyle) : createScopeResult(),
         mark: skipMarkStyleApply ? createScopeResult() : applyMarkStyles(columns, markStyles),
         legend: legendSync.result,
-        cellBottom: cellBottomStyle ? applyCellBottomStroke(columns, cellBottomStyle) : createScopeResult(),
+        cellTop: cellTopStyle ? applyCellTopStroke(columns, cellTopStyle) : createScopeResult(),
         tabRight: tabRightStyle ? applyTabRightStroke(columns, tabRightStyle) : createScopeResult(),
         gridContainer: gridContainerStyle ? applyGridContainerStroke(graph, gridContainerStyle) : createScopeResult(),
         resolved: {
             cellFill: Boolean(cellFillStyle),
             mark: !skipMarkStyleApply,
             legend: legendSync.enabled,
-            cellBottom: Boolean(cellBottomStyle),
+            cellTop: Boolean(cellTopStyle),
             tabRight: Boolean(tabRightStyle),
             gridContainer: Boolean(gridContainerStyle)
         }

@@ -422,7 +422,7 @@ function handlePluginMessage(msg: any) {
                 savedCellFillStyle: msg.savedCellFillStyle,
                 savedMarkStyle: msg.savedMarkStyle,
                 savedMarkStyles: msg.savedMarkStyles,
-                savedCellBottomStyle: msg.savedCellBottomStyle,
+                savedCellTopStyle: msg.savedCellTopStyle,
                 savedTabRightStyle: msg.savedTabRightStyle,
                 savedGridContainerStyle: msg.savedGridContainerStyle,
                 savedAssistLineStyle: msg.savedAssistLineStyle

@@ -63,6 +63,8 @@ export type GridStrokeInjectionStyle = {
 
 export type StrokeInjectionPayload = {
     cellFillStyle?: CellFillInjectionStyle;
+    cellTopStyle?: SideStrokeInjectionStyle;
+    /** @deprecated legacy alias. Use `cellTopStyle`. */
     cellBottomStyle?: SideStrokeInjectionStyle;
     tabRightStyle?: SideStrokeInjectionStyle;
     gridContainerStyle?: GridStrokeInjectionStyle;

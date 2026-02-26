@@ -105,7 +105,7 @@ function normalizePayload(value: unknown): StyleTemplatePayload | null {
     const payload: StyleTemplatePayload = {};
 
     const cellFillStyle = normalizeCellFillStyle(source.cellFillStyle);
-    const cellBottomStyle = normalizeSideStyle(source.cellBottomStyle);
+    const cellTopStyle = normalizeSideStyle(source.cellTopStyle || source.cellBottomStyle);
     const tabRightStyle = normalizeSideStyle(source.tabRightStyle);
     const gridContainerStyle = normalizeGridStyle(source.gridContainerStyle);
     const assistLineStyle = normalizeAssistLineStyle(source.assistLineStyle);
@@ -113,7 +113,7 @@ function normalizePayload(value: unknown): StyleTemplatePayload | null {
     const markStyles = normalizeMarkStyles(source.markStyles);
 
     if (cellFillStyle) payload.cellFillStyle = cellFillStyle;
-    if (cellBottomStyle) payload.cellBottomStyle = cellBottomStyle;
+    if (cellTopStyle) payload.cellTopStyle = cellTopStyle;
     if (tabRightStyle) payload.tabRightStyle = tabRightStyle;
     if (gridContainerStyle) payload.gridContainerStyle = gridContainerStyle;
     if (assistLineStyle) payload.assistLineStyle = assistLineStyle;

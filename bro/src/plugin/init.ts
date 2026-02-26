@@ -339,7 +339,9 @@ export async function initPluginUI(
     const markRatio = resolveMarkRatioFromNode(node, styleInfo.markRatio);
     const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
-    const savedCellBottomStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
+    const savedCellTopStyle =
+        parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE)
+        || parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
     const savedCellFillStyle = parseSavedCellFillStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_FILL_STYLE);
     const savedTabRightStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE);
     const savedGridContainerStyle = parseSavedGridStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE);
@@ -377,7 +379,7 @@ export async function initPluginUI(
         markRatio,
         assistLineVisible,
         assistLineEnabled,
-        savedCellBottomStyle,
+        savedCellTopStyle,
         savedCellFillStyle,
         savedTabRightStyle,
         savedGridContainerStyle,

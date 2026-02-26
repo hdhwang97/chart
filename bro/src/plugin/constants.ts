@@ -61,6 +61,7 @@ export const PLUGIN_DATA_KEYS = {
     LAST_MARK_STYLES: "lastMarkStyles",
     LAST_ROW_HEADER_LABELS: "lastRowHeaderLabels",
     LAST_CELL_FILL_STYLE: "lastCellFillStyle",
+    LAST_CELL_TOP_STYLE: "lastCellTopStyle",
     LAST_CELL_BOTTOM_STYLE: "lastCellBottomStyle",
     LAST_TAB_RIGHT_STYLE: "lastTabRightStyle",
     LAST_GRID_CONTAINER_STYLE: "lastGridContainerStyle"

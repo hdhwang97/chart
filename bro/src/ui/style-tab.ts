@@ -32,7 +32,7 @@ const MAX_STYLE_TEMPLATES = 20;
 
 type SavedStylePayload = {
     savedCellFillStyle?: unknown;
-    savedCellBottomStyle?: unknown;
+    savedCellTopStyle?: unknown;
     savedTabRightStyle?: unknown;
     savedGridContainerStyle?: unknown;
     savedAssistLineStyle?: unknown;
@@ -77,7 +77,7 @@ function clampThickness(value: unknown, fallback: number): number {
 function cloneDraft(draft: StyleInjectionDraft): StyleInjectionDraft {
     return {
         cellFill: { ...draft.cellFill },
-        cellBottom: { ...draft.cellBottom },
+        cellTop: { ...draft.cellTop },
         tabRight: { ...draft.tabRight },
         gridContainer: {
             ...draft.gridContainer,
@@ -385,7 +385,7 @@ function resolveStyleColorLabel(input: HTMLInputElement): string {
     if (input === ui.styleCellFillColorInput) return 'Cell Fill';
     if (input === ui.styleMarkFillColorInput) return 'Mark Fill';
     if (input === ui.styleMarkStrokeColorInput) return 'Mark Stroke';
-    if (input === ui.styleCellBottomColorInput) return 'Cell Bottom';
+    if (input === ui.styleCellTopColorInput) return 'Cell Top';
     if (input === ui.styleTabRightColorInput) return 'Tab Right';
     if (input === ui.styleGridColorInput) return 'Grid';
     if (input === ui.styleAssistLineColorInput) return 'Assist Line';
@@ -394,7 +394,7 @@ function resolveStyleColorLabel(input: HTMLInputElement): string {
 
 function getHexPreviewFallback(input: HTMLInputElement): string {
     if (input === ui.styleCellFillColorInput) return state.styleInjectionDraft.cellFill.color;
-    if (input === ui.styleCellBottomColorInput) return state.styleInjectionDraft.cellBottom.color;
+    if (input === ui.styleCellTopColorInput) return state.styleInjectionDraft.cellTop.color;
     if (input === ui.styleTabRightColorInput) return state.styleInjectionDraft.tabRight.color;
     if (input === ui.styleGridColorInput) return state.styleInjectionDraft.gridContainer.color;
     if (input === ui.styleMarkFillColorInput) return state.styleInjectionDraft.mark.fillColor;
@@ -405,7 +405,7 @@ function getHexPreviewFallback(input: HTMLInputElement): string {
 
 function getHexPreviewElement(input: HTMLInputElement): HTMLElement | null {
     if (input === ui.styleCellFillColorInput) return ui.styleCellFillColorPreview;
-    if (input === ui.styleCellBottomColorInput) return ui.styleCellBottomColorPreview;
+    if (input === ui.styleCellTopColorInput) return ui.styleCellTopColorPreview;
     if (input === ui.styleTabRightColorInput) return ui.styleTabRightColorPreview;
     if (input === ui.styleGridColorInput) return ui.styleGridColorPreview;
     if (input === ui.styleMarkFillColorInput) return ui.styleMarkFillColorPreview;
@@ -423,7 +423,7 @@ function updateHexPreview(input: HTMLInputElement, swatch: HTMLElement, fallback
 export function syncAllHexPreviewsFromDom() {
     const colorInputs = [
         ui.styleCellFillColorInput,
-        ui.styleCellBottomColorInput,
+        ui.styleCellTopColorInput,
         ui.styleTabRightColorInput,
         ui.styleGridColorInput,
         ui.styleMarkFillColorInput,
@@ -619,7 +619,7 @@ function toSavedStylePayload(payload: StyleTemplatePayload): SavedStylePayload {
         savedCellFillStyle: payload.cellFillStyle,
         savedMarkStyle: payload.markStyle,
         savedMarkStyles: payload.markStyles,
-        savedCellBottomStyle: payload.cellBottomStyle,
+        savedCellTopStyle: payload.cellTopStyle,
         savedTabRightStyle: payload.tabRightStyle,
         savedGridContainerStyle: payload.gridContainerStyle,
         savedAssistLineStyle: payload.assistLineStyle
@@ -660,7 +660,7 @@ export function buildDraftFromPayload(
     const assistLineStroke = asStrokeSnapshot(extracted.assistLineStrokeStyle);
     const rowZeroStroke = resolveRowZeroStroke(rowStrokeStyles);
 
-    const extractedCellBottom = sideStyleFromSnapshot(rowZeroStroke, 'bottom');
+    const extractedCellTop = sideStyleFromSnapshot(rowZeroStroke, 'top');
     const extractedTabRight = sideStyleFromSnapshot(colStroke, 'right');
     const extractedGrid = gridStyleFromSnapshot(chartContainerStroke || colStroke);
     const extractedAssistLine = assistLineStyleFromSnapshot(assistLineStroke);
@@ -668,7 +668,7 @@ export function buildDraftFromPayload(
     const savedCellFill = normalizeCellFillStyle(saved.savedCellFillStyle);
     const savedMark = normalizeMarkStyle(saved.savedMarkStyle);
     const savedMarks = normalizeMarkStyles(saved.savedMarkStyles);
-    const savedCellBottom = normalizeSideStyle(saved.savedCellBottomStyle);
+    const savedCellTop = normalizeSideStyle(saved.savedCellTopStyle);
     const savedTabRight = normalizeSideStyle(saved.savedTabRightStyle);
     const savedGrid = normalizeGridStyle(saved.savedGridContainerStyle);
     const savedAssistLine = normalizeAssistLineStyle(saved.savedAssistLineStyle);
@@ -693,7 +693,7 @@ export function buildDraftFromPayload(
     return {
         cellFill: { color: (savedCellFill?.color || extractedCellFill?.color || DEFAULT_STYLE_INJECTION_DRAFT.cellFill.color) as string },
         mark: { ...getActiveMarkDraft() },
-        cellBottom: draftItemFromSideStyle(savedCellBottom || extractedCellBottom, DEFAULT_STYLE_INJECTION_DRAFT.cellBottom),
+        cellTop: draftItemFromSideStyle(savedCellTop || extractedCellTop, DEFAULT_STYLE_INJECTION_DRAFT.cellTop),
         tabRight: draftItemFromSideStyle(savedTabRight || extractedTabRight, DEFAULT_STYLE_INJECTION_DRAFT.tabRight),
         gridContainer: draftItemFromGridStyle(savedGrid || extractedGrid, DEFAULT_STYLE_INJECTION_DRAFT.gridContainer),
         assistLine: draftItemFromAssistLineStyle(savedAssistLine || extractedAssistLine, DEFAULT_STYLE_INJECTION_DRAFT.assistLine)
@@ -708,10 +708,10 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleMarkStrokeColorInput.value = activeMark.strokeColor;
     ui.styleMarkStrokeStyleInput.value = activeMark.strokeStyle;
     ui.styleMarkThicknessInput.value = String(activeMark.thickness);
-    ui.styleCellBottomColorInput.value = draft.cellBottom.color;
-    ui.styleCellBottomStrokeStyleInput.value = draft.cellBottom.strokeStyle;
-    ui.styleCellBottomThicknessInput.value = String(draft.cellBottom.thickness);
-    ui.styleCellBottomVisibleInput.checked = draft.cellBottom.visible;
+    ui.styleCellTopColorInput.value = draft.cellTop.color;
+    ui.styleCellTopStrokeStyleInput.value = draft.cellTop.strokeStyle;
+    ui.styleCellTopThicknessInput.value = String(draft.cellTop.thickness);
+    ui.styleCellTopVisibleInput.checked = draft.cellTop.visible;
 
     ui.styleTabRightColorInput.value = draft.tabRight.color;
     ui.styleTabRightStrokeStyleInput.value = draft.tabRight.strokeStyle;
@@ -740,12 +740,12 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
 export function readStyleTabDraft(): StyleInjectionDraft {
     const cellFillColor = normalizeHexColorInput(ui.styleCellFillColorInput.value)
         || state.styleInjectionDraft.cellFill.color;
-    const cellBottom = normalizeFromDom(
-        ui.styleCellBottomColorInput,
-        ui.styleCellBottomStrokeStyleInput,
-        ui.styleCellBottomThicknessInput,
-        ui.styleCellBottomVisibleInput,
-        state.styleInjectionDraft.cellBottom
+    const cellTop = normalizeFromDom(
+        ui.styleCellTopColorInput,
+        ui.styleCellTopStrokeStyleInput,
+        ui.styleCellTopThicknessInput,
+        ui.styleCellTopVisibleInput,
+        state.styleInjectionDraft.cellTop
     ).item;
 
     const tabRight = normalizeFromDom(
@@ -794,7 +794,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
     return {
         cellFill: { color: cellFillColor },
         mark: { ...mark },
-        cellBottom,
+        cellTop,
         tabRight,
         gridContainer,
         assistLine: normalizeColorThicknessFromDom(
@@ -812,12 +812,12 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     const markStrokeValid = Boolean(normalizeHexColorInput(ui.styleMarkStrokeColorInput.value));
     const markThicknessRaw = Number(ui.styleMarkThicknessInput.value);
     const markThicknessValid = Number.isFinite(markThicknessRaw) && Number.isInteger(markThicknessRaw) && markThicknessRaw >= THICKNESS_MIN && markThicknessRaw <= THICKNESS_MAX;
-    const cellBottomNorm = normalizeFromDom(
-        ui.styleCellBottomColorInput,
-        ui.styleCellBottomStrokeStyleInput,
-        ui.styleCellBottomThicknessInput,
-        ui.styleCellBottomVisibleInput,
-        draft.cellBottom
+    const cellTopNorm = normalizeFromDom(
+        ui.styleCellTopColorInput,
+        ui.styleCellTopStrokeStyleInput,
+        ui.styleCellTopThicknessInput,
+        ui.styleCellTopVisibleInput,
+        draft.cellTop
     );
     const tabRightNorm = normalizeFromDom(
         ui.styleTabRightColorInput,
@@ -853,8 +853,8 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     setInputError(ui.styleMarkFillColorInput, !markFillValid);
     setInputError(ui.styleMarkStrokeColorInput, !markStrokeValid);
     setInputError(ui.styleMarkThicknessInput, !markThicknessValid);
-    setInputError(ui.styleCellBottomColorInput, !cellBottomNorm.colorValid);
-    setInputError(ui.styleCellBottomThicknessInput, !cellBottomNorm.thicknessValid);
+    setInputError(ui.styleCellTopColorInput, !cellTopNorm.colorValid);
+    setInputError(ui.styleCellTopThicknessInput, !cellTopNorm.thicknessValid);
     setInputError(ui.styleTabRightColorInput, !tabRightNorm.colorValid);
     setInputError(ui.styleTabRightThicknessInput, !tabRightNorm.thicknessValid);
     setInputError(ui.styleGridColorInput, !gridNorm.colorValid);
@@ -862,12 +862,12 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     setInputError(ui.styleAssistLineColorInput, !assistLineNorm.colorValid);
     setInputError(ui.styleAssistLineThicknessInput, !assistLineNorm.thicknessValid);
 
-    const isValid = cellBottomNorm.colorValid
+    const isValid = cellTopNorm.colorValid
         && cellFillValid
         && markFillValid
         && markStrokeValid
         && markThicknessValid
-        && cellBottomNorm.thicknessValid
+        && cellTopNorm.thicknessValid
         && tabRightNorm.colorValid
         && tabRightNorm.thicknessValid
         && gridNorm.colorValid
@@ -884,7 +884,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
                 thickness: markThicknessValid ? markThicknessRaw : clampThickness(markThicknessRaw, draft.mark.thickness),
                 strokeStyle: ui.styleMarkStrokeStyleInput.value === 'dash' ? 'dash' : 'solid'
             },
-            cellBottom: cellBottomNorm.item,
+            cellTop: cellTopNorm.item,
             tabRight: tabRightNorm.item,
             gridContainer: normalizedGrid,
             assistLine: assistLineNorm.item
@@ -910,11 +910,11 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
             thickness: item.thickness,
             strokeStyle: item.strokeStyle
         })),
-        cellBottomStyle: {
-            color: draft.cellBottom.color,
-            thickness: draft.cellBottom.thickness,
-            visible: draft.cellBottom.visible,
-            strokeStyle: draft.cellBottom.strokeStyle
+        cellTopStyle: {
+            color: draft.cellTop.color,
+            thickness: draft.cellTop.thickness,
+            visible: draft.cellTop.visible,
+            strokeStyle: draft.cellTop.strokeStyle
         },
         tabRightStyle: {
             color: draft.tabRight.color,
@@ -965,7 +965,7 @@ function renderTemplateCard(item: StyleTemplateItem): string {
     const swatches = [
         item.payload.cellFillStyle?.color || '#FFFFFF',
         item.payload.markStyle?.fillColor || '#3B82F6',
-        item.payload.cellBottomStyle?.color || '#E5E7EB',
+        item.payload.cellTopStyle?.color || '#E5E7EB',
         item.payload.tabRightStyle?.color || '#E5E7EB',
         item.payload.gridContainerStyle?.color || '#E5E7EB',
         item.payload.assistLineStyle?.color || '#E5E7EB'
@@ -1115,10 +1115,10 @@ export function bindStyleTabEvents() {
         ui.styleMarkStrokeColorInput,
         ui.styleMarkStrokeStyleInput,
         ui.styleMarkThicknessInput,
-        ui.styleCellBottomColorInput,
-        ui.styleCellBottomStrokeStyleInput,
-        ui.styleCellBottomThicknessInput,
-        ui.styleCellBottomVisibleInput,
+        ui.styleCellTopColorInput,
+        ui.styleCellTopStrokeStyleInput,
+        ui.styleCellTopThicknessInput,
+        ui.styleCellTopVisibleInput,
         ui.styleTabRightColorInput,
         ui.styleTabRightStrokeStyleInput,
         ui.styleTabRightThicknessInput,
@@ -1153,7 +1153,7 @@ export function bindStyleTabEvents() {
         emitStyleDraftUpdated();
     });
 
-    [ui.styleCellFillColorInput, ui.styleMarkFillColorInput, ui.styleMarkStrokeColorInput, ui.styleCellBottomColorInput, ui.styleTabRightColorInput, ui.styleGridColorInput, ui.styleAssistLineColorInput].forEach((input) => {
+    [ui.styleCellFillColorInput, ui.styleMarkFillColorInput, ui.styleMarkStrokeColorInput, ui.styleCellTopColorInput, ui.styleTabRightColorInput, ui.styleGridColorInput, ui.styleAssistLineColorInput].forEach((input) => {
         input.addEventListener('focus', () => openStyleColorPopover(input));
         input.addEventListener('click', () => openStyleColorPopover(input));
     });
@@ -1185,7 +1185,7 @@ export function bindStyleTabEvents() {
             ui.styleCellFillColorInput,
             ui.styleMarkFillColorInput,
             ui.styleMarkStrokeColorInput,
-            ui.styleCellBottomColorInput,
+            ui.styleCellTopColorInput,
             ui.styleTabRightColorInput,
             ui.styleGridColorInput,
             ui.styleAssistLineColorInput

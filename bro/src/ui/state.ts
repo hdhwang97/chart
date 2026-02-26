@@ -43,7 +43,7 @@ export type StyleInjectionDraft = {
     cellFill: {
         color: string;
     };
-    cellBottom: StyleInjectionDraftItem;
+    cellTop: StyleInjectionDraftItem;
     tabRight: StyleInjectionDraftItem;
     gridContainer: GridStyleInjectionDraftItem;
     assistLine: AssistLineStyleInjectionDraftItem;
@@ -59,7 +59,7 @@ export const DEFAULT_STYLE_INJECTION_ITEM: StyleInjectionDraftItem = {
 
 export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
     cellFill: { color: '#FFFFFF' },
-    cellBottom: { ...DEFAULT_STYLE_INJECTION_ITEM },
+    cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
     tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
     gridContainer: {
         ...DEFAULT_STYLE_INJECTION_ITEM,
@@ -106,7 +106,7 @@ export const state = {
     rowStrokeStyles: [] as RowStrokeStyle[],
     styleInjectionDraft: {
         cellFill: { color: '#FFFFFF' },
-        cellBottom: { ...DEFAULT_STYLE_INJECTION_ITEM },
+        cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
         tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
         gridContainer: {
             ...DEFAULT_STYLE_INJECTION_ITEM,

@@ -181,6 +181,7 @@ figma.ui.onmessage = async (msg) => {
             cellFillStyle,
             rowStrokeStyles,
             colStrokeStyle,
+            cellTopStyle,
             cellBottomStyle,
             tabRightStyle,
             gridContainerStyle
@@ -328,7 +329,7 @@ figma.ui.onmessage = async (msg) => {
             chartType: type,
             rowColors: normalizedRowColors,
             cellFillStyle,
-            cellBottomStyle,
+            cellTopStyle: cellTopStyle ?? cellBottomStyle,
             tabRightStyle,
             gridContainerStyle,
             markStyle,
