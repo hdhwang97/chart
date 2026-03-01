@@ -203,11 +203,15 @@ function findSingleDescendantChartTarget(root: SceneNode): SceneNode | null {
 }
 
 function resolveChartTargetFromSelection(node: SceneNode): SceneNode {
-    // If the selected node already owns persisted chart data, prefer it.
-    // This protects direct selection of the original chart instance (2번).
-    if (hasSavedChartData(node)) return node;
-
     const descendantTarget = findSingleDescendantChartTarget(node);
+    // If both selected node and descendant own data, prefer descendant.
+    // This keeps 4번 -> 2번 resolution working, while still supporting direct 2번 selection.
+    if (hasSavedChartData(node)) {
+        if (descendantTarget && descendantTarget.id !== node.id && hasSavedChartData(descendantTarget)) {
+            return descendantTarget;
+        }
+        return node;
+    }
     if (descendantTarget) return descendantTarget;
 
     let current: BaseNode | null = node;
