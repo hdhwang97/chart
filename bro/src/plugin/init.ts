@@ -373,7 +373,7 @@ export async function getOrImportComponent(): Promise<ComponentNode | ComponentS
 export async function initPluginUI(
     node: SceneNode,
     autoApply = false,
-    opts?: { reason?: 'selection' | 'auto-resize' }
+    opts?: { reason?: 'selection' | 'auto-resize'; isCType?: boolean }
 ) {
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
     const chartData = await loadChartData(node, chartType);
@@ -648,6 +648,7 @@ export async function initPluginUI(
         rowStrokeStyles: effectiveUiSnapshot.rowStrokeStyles || styleInfo.rowStrokeStyles || [],
         isInstanceTarget,
         isTemplateMasterTarget: node.type === 'COMPONENT',
+        isCType: Boolean(opts?.isCType),
         extractedStyleSnapshot: {
             rowColors: extractedRowColors,
             rowColorModes: Array.from({ length: Math.max(1, rowColorCount) }, () => 'hex' as ColorMode),

@@ -236,6 +236,73 @@ function hasSavedChartData(node: SceneNode) {
     return Boolean(node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES));
 }
 
+function isDescendantOfNode(node: SceneNode, ancestor: SceneNode): boolean {
+    let current: BaseNode | null = node.parent;
+    while (current && current.type !== 'PAGE') {
+        if (current.id === ancestor.id) return true;
+        current = current.parent;
+    }
+    return false;
+}
+
+function detectCTypeSelection(selectedNode: SceneNode, resolvedNode: SceneNode): boolean {
+    if (selectedNode.type !== 'COMPONENT') return false;
+    if (selectedNode.id === resolvedNode.id) return false;
+    if (resolvedNode.type !== 'INSTANCE') return false;
+    return isDescendantOfNode(resolvedNode, selectedNode);
+}
+
+function findNamedNodeInTree(root: SceneNode, name: string): SceneNode | null {
+    if (root.name === name) return root;
+    if (!('findOne' in root)) return null;
+    return (root as SceneNode & ChildrenMixin).findOne((node) => node.name === name) as SceneNode | null;
+}
+
+function setNodeLayoutSizing(
+    node: SceneNode | null,
+    horizontal?: 'FILL' | 'FIXED',
+    vertical?: 'FILL' | 'FIXED'
+): boolean {
+    if (!node) return false;
+    const target = node as SceneNode & {
+        layoutSizingHorizontal?: 'FIXED' | 'HUG' | 'FILL';
+        layoutSizingVertical?: 'FIXED' | 'HUG' | 'FILL';
+    };
+    try {
+        let changed = false;
+        if (horizontal && 'layoutSizingHorizontal' in target && target.layoutSizingHorizontal !== horizontal) {
+            target.layoutSizingHorizontal = horizontal;
+            changed = true;
+        }
+        if (vertical && 'layoutSizingVertical' in target && target.layoutSizingVertical !== vertical) {
+            target.layoutSizingVertical = vertical;
+            changed = true;
+        }
+        return changed;
+    } catch {
+        return false;
+    }
+}
+
+function applyCTypeResizeRules(root: SceneNode): number {
+    const firstChild =
+        'children' in root && (root as SceneNode & ChildrenMixin).children.length > 0
+            ? (root as SceneNode & ChildrenMixin).children[0] as SceneNode
+            : null;
+    const chartNode = findNamedNodeInTree(root, 'chart');
+    const chartMainNode = findNamedNodeInTree(root, 'chart_main');
+    const chartLegendNode =
+        findNamedNodeInTree(root, 'chart_legend') || findNamedNodeInTree(root, 'chart_legned');
+
+    let updated = 0;
+    if (setNodeLayoutSizing(root, 'FIXED', 'FIXED')) updated += 1;
+    if (setNodeLayoutSizing(firstChild, 'FILL', 'FILL')) updated += 1;
+    if (setNodeLayoutSizing(chartNode, 'FILL', 'FILL')) updated += 1;
+    if (setNodeLayoutSizing(chartMainNode, 'FILL', 'FILL')) updated += 1;
+    if (setNodeLayoutSizing(chartLegendNode, 'FILL')) updated += 1;
+    return updated;
+}
+
 function findSingleDescendantChartTarget(root: SceneNode): SceneNode | null {
     const candidates: Array<{ node: SceneNode; depth: number; score: number }> = [];
     const visit = (node: SceneNode, depth: number) => {
@@ -1199,19 +1266,30 @@ figma.on("selectionchange", () => {
     if (selection.length === 1) {
         const node = selection[0];
         const resolvedNode = resolveChartTargetFromSelection(node);
+        const isCType = detectCTypeSelection(node, resolvedNode);
+        if (isCType) {
+            const resizedCount = applyCTypeResizeRules(node);
+            if (resizedCount > 0) {
+                console.log('[chart-plugin][ctype-resize-fill]', {
+                    selectedNodeId: node.id,
+                    resizedCount
+                });
+            }
+        }
         logSelectionRecognition(resolvedNode);
         console.log('[chart-plugin][selection-resolve]', {
             selectedNodeId: node.id,
             resolvedNodeId: resolvedNode.id,
             selectedNodeName: node.name,
-            resolvedNodeName: resolvedNode.name
+            resolvedNodeName: resolvedNode.name,
+            isCType
         });
         if (!isRecognizedChartSelection(resolvedNode)) {
             currentSelectionId = null;
             figma.ui.postMessage({ type: 'init', chartType: null });
             return;
         }
-        initPluginUI(resolvedNode);
+        initPluginUI(resolvedNode, false, { reason: 'selection', isCType });
 
         if (resolvedNode.id !== currentSelectionId) {
             currentSelectionId = resolvedNode.id;
