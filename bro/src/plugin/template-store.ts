@@ -99,6 +99,20 @@ function normalizeMarkStyles(value: unknown): MarkInjectionStyle[] | undefined {
     return next.length > 0 ? next : undefined;
 }
 
+function normalizeColorArray(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const next = value
+        .map((item) => normalizeHexColor(item))
+        .filter((item): item is string => Boolean(item));
+    return next.length > 0 ? next : undefined;
+}
+
+function normalizeBooleanArray(value: unknown): boolean[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const next = value.map((item) => Boolean(item));
+    return next.length > 0 ? next : undefined;
+}
+
 function normalizePayload(value: unknown): StyleTemplatePayload | null {
     if (!value || typeof value !== 'object') return null;
     const source = value as StyleTemplatePayload;
@@ -111,6 +125,8 @@ function normalizePayload(value: unknown): StyleTemplatePayload | null {
     const assistLineStyle = normalizeAssistLineStyle(source.assistLineStyle);
     const markStyle = normalizeMarkStyle(source.markStyle);
     const markStyles = normalizeMarkStyles(source.markStyles);
+    const colColors = normalizeColorArray((source as any).colColors);
+    const colColorEnabled = normalizeBooleanArray((source as any).colColorEnabled);
 
     if (cellFillStyle) payload.cellFillStyle = cellFillStyle;
     if (cellTopStyle) payload.cellTopStyle = cellTopStyle;
@@ -119,6 +135,8 @@ function normalizePayload(value: unknown): StyleTemplatePayload | null {
     if (assistLineStyle) payload.assistLineStyle = assistLineStyle;
     if (markStyle) payload.markStyle = markStyle;
     if (markStyles) payload.markStyles = markStyles;
+    if (colColors) payload.colColors = colColors;
+    if (colColorEnabled) payload.colColorEnabled = colColorEnabled;
 
     const hasAnyField = Object.keys(payload).length > 0;
     return hasAnyField ? payload : null;

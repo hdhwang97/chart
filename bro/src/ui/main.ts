@@ -735,6 +735,7 @@ function bindUiEvents() {
         }
     });
     document.addEventListener('style-draft-updated', () => {
+        renderGrid();
         renderPreview();
         refreshExportPreview();
     });

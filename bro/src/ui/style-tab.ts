@@ -7,6 +7,11 @@ import {
     type MarkStyleInjectionDraftItem,
     type StyleInjectionDraft,
     type StyleInjectionDraftItem,
+    ensureColHeaderColorEnabledLength,
+    ensureColHeaderColorsLength,
+    getGridColsForChart,
+    getRowColor,
+    getTotalStackedCols,
     state,
     normalizeHexColorInput
 } from './state';
@@ -894,6 +899,11 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
 }
 
 export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInjectionPayload {
+    const totalCols = state.chartType === 'stackedBar'
+        ? getTotalStackedCols()
+        : getGridColsForChart(state.chartType, state.cols);
+    const normalizedColColors = ensureColHeaderColorsLength(totalCols).slice(0, totalCols);
+    const normalizedColEnabled = ensureColHeaderColorEnabledLength(totalCols).slice(0, totalCols);
     return {
         cellFillStyle: {
             color: draft.cellFill.color
@@ -939,7 +949,9 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
             color: draft.assistLine.color,
             thickness: draft.assistLine.thickness,
             strokeStyle: draft.assistLine.strokeStyle
-        }
+        },
+        colColors: normalizedColColors,
+        colColorEnabled: normalizedColEnabled
     };
 }
 
@@ -951,6 +963,23 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
     const nextDraft = buildDraftFromPayload(toSavedStylePayload(template.payload), {});
     setStyleInjectionDraft(nextDraft);
     hydrateStyleTab(nextDraft);
+    const totalCols = state.chartType === 'stackedBar'
+        ? getTotalStackedCols()
+        : getGridColsForChart(state.chartType, state.cols);
+    ensureColHeaderColorsLength(totalCols);
+    ensureColHeaderColorEnabledLength(totalCols);
+    if (Array.isArray(template.payload.colColors)) {
+        state.colHeaderColors = template.payload.colColors
+            .map((color) => normalizeHexColorInput(color) || getRowColor(0))
+            .slice(0, totalCols);
+        ensureColHeaderColorsLength(totalCols);
+    }
+    if (Array.isArray(template.payload.colColorEnabled)) {
+        state.colHeaderColorEnabled = template.payload.colColorEnabled
+            .map((flag) => Boolean(flag))
+            .slice(0, totalCols);
+        ensureColHeaderColorEnabledLength(totalCols);
+    }
     markStyleInjectionDirty();
     state.selectedStyleTemplateId = template.id;
     emitStyleDraftUpdated();

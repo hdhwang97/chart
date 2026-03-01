@@ -181,6 +181,11 @@ function getSeriesColor(rowIndex: number, chartType: string) {
 }
 
 function getBarPreviewColor(rowIndex: number, _colIndex: number): string {
+    const colIndex = _colIndex;
+    const isColOverride = state.chartType === 'bar' && Boolean(state.colHeaderColorEnabled[colIndex]);
+    if (isColOverride) {
+        return state.colHeaderColors[colIndex] || getRowColor(0);
+    }
     return getSeriesColor(rowIndex, 'bar');
 }
 
@@ -400,7 +405,10 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
                 restoreMarkOpacityFromBase();
             });
 
-            applyStroke(rect, getRowStroke(r) || state.colStrokeStyle, 'none', 0);
+            const resolvedColor = getBarPreviewColor(r, c);
+            const rowStroke = getRowStroke(r) || state.colStrokeStyle;
+            const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedColor } : { color: resolvedColor, weight: 1 };
+            applyStroke(rect, syncedStroke, resolvedColor, 1);
         }
     }
 }

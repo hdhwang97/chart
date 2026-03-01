@@ -20,6 +20,9 @@ function buildPreviewStyleFromState() {
         colCount: state.cols,
         markRatio: state.markRatio,
         rowColors: state.rowColors,
+        colColors: state.colHeaderColors,
+        colColorEnabled: state.colHeaderColorEnabled,
+        markColorSource: state.markColorSource,
         strokeWidth: state.strokeWidth,
         colStrokeStyle: state.colStrokeStyle || null,
         rowStrokeStyles: state.rowStrokeStyles || [],
@@ -86,6 +89,26 @@ function getSeriesColor(rowColors: string[], rowIndex: number, chartType: string
         return rowColors[rowIndex + 1] || getRowColor(rowIndex + 1);
     }
     return rowColors[rowIndex] || getRowColor(rowIndex);
+}
+
+function resolveBarColorOverride(style: any, colIndex: number) {
+    const styleColColors = Array.isArray(style?.colColors) ? style.colColors : [];
+    const stateColColors = Array.isArray(state.colHeaderColors) ? state.colHeaderColors : [];
+    const colColors = styleColColors.length > 0 ? styleColColors : stateColColors;
+
+    const styleColEnabled = Array.isArray(style?.colColorEnabled) ? style.colColorEnabled : [];
+    const stateColEnabled = Array.isArray(state.colHeaderColorEnabled) ? state.colHeaderColorEnabled : [];
+    const colEnabled = styleColEnabled.length > 0 ? styleColEnabled : stateColEnabled;
+
+    const enabled = Boolean(colEnabled[colIndex]);
+    const color = normalizeHexColorInput(colColors[colIndex]);
+    return { enabled, color };
+}
+
+function getBarSeriesColor(style: any, rowColors: string[], rowIndex: number, colIndex: number) {
+    const override = resolveBarColorOverride(style, colIndex);
+    if (override.enabled && override.color) return override.color;
+    return getSeriesColor(rowColors, rowIndex, 'bar');
 }
 
 function buildXAxisLabels(totalCols: number): string[] {
@@ -427,9 +450,12 @@ function renderD3Preview(style: any) {
                     .attr('y', yScale(val))
                     .attr('width', clusterLayout.subBarW)
                     .attr('height', h - yScale(val))
-                    .attr('fill', getSeriesColor(rowColors, r, 'bar'))
+                    .attr('fill', getBarSeriesColor(style, rowColors, r, c))
                     .attr('rx', cornerRadius);
-                applyStroke(rect, getRowStroke(r, rowStrokeStyles) || colStrokeStyle, 'none', 0);
+                const resolvedColor = getBarSeriesColor(style, rowColors, r, c);
+                const rowStroke = getRowStroke(r, rowStrokeStyles) || colStrokeStyle;
+                const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedColor } : { color: resolvedColor, weight: 1 };
+                applyStroke(rect, syncedStroke, resolvedColor, 1);
             }
         }
     } else if (chartType === 'line') {
