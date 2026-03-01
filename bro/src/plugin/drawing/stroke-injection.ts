@@ -505,7 +505,7 @@ function applyMarkStyles(
                     if (!isPointLike && !isVectorLike) return;
                     result.candidates += 1;
                     try {
-                        if (applyMarkStyleToNode(child, style)) result.applied += 1;
+                        if (applyMarkStyleToNode(child, style, { skipFill: true })) result.applied += 1;
                         else result.skipped += 1;
                     } catch {
                         result.errors += 1;
@@ -559,8 +559,19 @@ function collectLegendElems(container: SceneNode): Array<{ node: SceneNode; inde
 
 function findLegendColorNode(legendElem: SceneNode): SceneNode | null {
     if (!('children' in legendElem)) return null;
-    const direct = (legendElem as SceneNode & ChildrenMixin).children.find((child) => MARK_NAME_PATTERNS.LEGEND_COLOR.test(child.name));
-    return direct || null;
+    const isLegendColorName = (name: string) => (
+        MARK_NAME_PATTERNS.LEGEND_COLOR.test(name)
+        || /^legned_color$/i.test(name)
+    );
+    const direct = (legendElem as SceneNode & ChildrenMixin).children.find((child) => isLegendColorName(child.name));
+    if (direct) return direct;
+
+    let nested: SceneNode | null = null;
+    traverse(legendElem, (child) => {
+        if (nested || child.id === legendElem.id) return;
+        if (isLegendColorName(child.name)) nested = child;
+    });
+    return nested;
 }
 
 function applyLegendMarkSync(
@@ -584,8 +595,9 @@ function applyLegendMarkSync(
     const normalizedRowColors = Array.isArray(rowColors)
         ? rowColors.map((value) => normalizeHexColor(value))
         : [];
+    const hasAnyRowColor = normalizedRowColors.some((value) => Boolean(value));
     const hasRowColorSeries = normalizedRowColors.some((value, index) => index > 0 && Boolean(value));
-    if (!isStacked && !isBar && styles.length === 0) {
+    if (!isStacked && !isBar && styles.length === 0 && !hasAnyRowColor) {
         return { result, enabled: false };
     }
     if (isStacked && !hasRowColorSeries) {
@@ -621,6 +633,16 @@ function applyLegendMarkSync(
     }
 
     const containers = findLegendContainers(graph);
+    const debugEntries: Array<{
+        containerId: string;
+        legendNodeId: string;
+        legendIndex: number;
+        colorNodeId: string | null;
+        colorNodeName: string | null;
+        resolvedColor: string | null;
+        source: 'stacked-rowColors' | 'bar-computed' | 'line-markStroke' | 'line-rowColor' | 'line-markFill' | 'none';
+        applied: boolean;
+    }> = [];
     containers.forEach((container) => {
         const elems = collectLegendElems(container);
         elems.forEach(({ node, index }) => {
@@ -634,16 +656,55 @@ function applyLegendMarkSync(
                 }
 
                 const colorNode = findLegendColorNode(node);
-                const colorHex = isStacked
-                    ? (normalizedRowColors[index] || null)
-                    : (isBar
-                        ? (barLegendColors[index - 1] || null)
-                        : (getMarkStyleBySeries(styles, index)?.fillColor || null));
+                let colorHex: string | null = null;
+                let colorSource: 'stacked-rowColors' | 'bar-computed' | 'line-markStroke' | 'line-rowColor' | 'line-markFill' | 'none' = 'none';
+                if (isStacked) {
+                    colorHex = normalizedRowColors[index] || null;
+                    colorSource = colorHex ? 'stacked-rowColors' : 'none';
+                } else if (isBar) {
+                    colorHex = barLegendColors[index - 1] || null;
+                    colorSource = colorHex ? 'bar-computed' : 'none';
+                } else {
+                    const style = getMarkStyleBySeries(styles, index);
+                    colorHex = style?.strokeColor || null;
+                    if (colorHex) {
+                        colorSource = 'line-markStroke';
+                    } else {
+                        colorHex = normalizedRowColors[index - 1] || null;
+                        if (colorHex) {
+                            colorSource = 'line-rowColor';
+                        } else {
+                            colorHex = style?.fillColor || null;
+                            colorSource = colorHex ? 'line-markFill' : 'none';
+                        }
+                    }
+                }
                 if (!colorHex || !colorNode) {
+                    debugEntries.push({
+                        containerId: container.id,
+                        legendNodeId: node.id,
+                        legendIndex: index,
+                        colorNodeId: colorNode ? colorNode.id : null,
+                        colorNodeName: colorNode ? colorNode.name : null,
+                        resolvedColor: colorHex,
+                        source: colorSource,
+                        applied: false
+                    });
                     result.skipped += 1;
                     return;
                 }
-                if (tryApplyFill(colorNode, colorHex)) {
+                const applied = tryApplyFill(colorNode, colorHex);
+                debugEntries.push({
+                    containerId: container.id,
+                    legendNodeId: node.id,
+                    legendIndex: index,
+                    colorNodeId: colorNode.id,
+                    colorNodeName: colorNode.name,
+                    resolvedColor: colorHex,
+                    source: colorSource,
+                    applied
+                });
+                if (applied) {
                     result.applied += 1;
                 } else {
                     result.skipped += 1;
@@ -653,6 +714,17 @@ function applyLegendMarkSync(
             }
         });
     });
+
+    if (!isStacked && !isBar) {
+        console.log('[chart-plugin][legend-sync][line]', {
+            chartType,
+            markCount,
+            extractedStrokeColors: styles.map((style) => style.strokeColor || null),
+            extractedFillColors: styles.map((style) => style.fillColor || null),
+            inputRowColors: normalizedRowColors,
+            resolvedLegendColors: debugEntries
+        });
+    }
 
     return { result, enabled: true };
 }
