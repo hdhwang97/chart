@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart Data Setting</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#18A0FB',
+                        'primary-hover': '#0D86D8',
+                        surface: '#F9F9F9',
+                        border: '#E0E0E0',
+                        'border-strong': '#BDBDBD',
+                        danger: '#F24822',
+                        text: '#333333',
+                        'text-sub': '#888888',
+                        'chart-gray-400': '#9CA3AF',
+                        'chart-gray-500': '#6B7280',
+                        'chart-highlight': '#0EA5E9'
+                    },
+                    fontSize: {
+                        xxs: '10px',
+                        xs: '11px',
+                        sm: '12px'
+                    },
+                    boxShadow: {
+                        'left-scroll': '-4px 0 12px -4px rgba(0, 0, 0, 0.1)',
+                        'top-scroll': '0 -4px 12px -4px rgba(0, 0, 0, 0.1)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <link rel="stylesheet" href="./style.css">
+</head>
+
+<body class="bg-white text-text flex flex-col h-screen box-border text-xs overflow-hidden">
+
+    <header class="flex justify-between items-center h-12 shrink-0 px-3 border-b border-border bg-white z-50">
+        <div class="flex items-center">
+            <button id="back-btn"
+                class="hidden text-text-sub hover:text-text bg-transparent border-0 cursor-pointer p-1 mr-1"
+                title="Back">
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                </svg>
+            </button>
+
+            <h1 class="text-sm font-semibold flex items-center gap-2 m-0">
+                차트 데이터
+                <div id="chart-type-wrapper"
+                    class="hidden flex items-center gap-1.5 bg-surface border border-border px-2 py-0.5 rounded text-text-sub">
+                    <span id="chart-type-icon" class="flex items-center justify-center"></span>
+                    <span id="chart-type-display" class="text-xxs font-medium uppercase tracking-wide">Bar</span>
+                </div>
+            </h1>
+
+            <div class="flex bg-surface rounded p-0.5 border border-border ml-4">
+                <button id="tab-data"
+                    class="px-3 py-0.5 text-xs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer"
+                    onclick="switchTab('data')">Data</button>
+                <button id="tab-style"
+                    class="px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer"
+                    onclick="switchTab('style')">Style</button>
+                <button id="tab-export"
+                    class="px-3 py-0.5 text-xs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer"
+                    onclick="switchTab('export')">Export</button>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button id="edit-mode-btn"
+                class="hidden bg-transparent border-0 text-primary hover:text-primary-hover font-semibold text-xs cursor-pointer transition-colors min-w-[40px]">Save</button>
+            <button id="main-cta" disabled
+                class="bg-primary text-white px-3 py-1.5 rounded font-semibold text-xs cursor-pointer transition-colors hover:bg-primary-hover disabled:bg-surface disabled:text-text-sub disabled:border disabled:border-border disabled:cursor-not-allowed">Apply
+                to Figma</button>
+        </div>
+    </header>
+
+    <div id="template-mode-banner"
+        class="hidden shrink-0 px-3 py-2 border-b border-border bg-amber-50 text-[11px] font-medium text-amber-800">
+        Template Mode: Graph Setting/Style만 적용되고 Data는 저장/전파되지 않습니다.
+    </div>
+
+    <div id="step-1" class="step active flex-col gap-3 w-full p-3">
+        <div class="border border-border rounded-md p-3 bg-white flex flex-col gap-2">
+            <h2 class="text-xs font-semibold text-text-sub m-0 mb-1">Select Chart Type</h2>
+            <div class="grid grid-cols-2 gap-3 mt-2">
+                <button
+                    class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm"
+                    onclick="selectType('bar')">
+                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24">
+                        <path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z" />
+                    </svg>
+                    <span class="font-semibold text-text">Bar Chart</span>
+                </button>
+                <button
+                    class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm"
+                    onclick="selectType('line')">
+                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24">
+                        <path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z" />
+                    </svg>
+                    <span class="font-semibold text-text">Line Chart</span>
+                </button>
+                <button
+                    class="bg-white border border-border rounded-md py-6 px-3 flex flex-col items-center justify-center cursor-pointer transition-all hover:border-primary hover:bg-blue-50 hover:shadow-sm"
+                    onclick="selectType('stackedBar')">
+                    <svg class="w-8 h-8 fill-primary mb-2" viewBox="0 0 24 24">
+                        <path
+                            d="M4 19h4v-4H4v4zm0-5h4v-3H4v3zm0-4h4V7H4v3zm6 9h4v-8h-4v8zm0-9h4V7h-4v3zm0-4h4V7h-4v3zm0-4h4V2h-4v4zm6 13h4v-6h-4v6zm0-7h4V7h-4v3zm0-4h4V2h-4v4z" />
+                    </svg>
+                    <span class="font-semibold text-text">Stacked Bar</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="step-2" class="step flex-col w-full h-full overflow-hidden bg-surface">
+        <div class="px-3 pt-3 pb-1 shrink-0 flex flex-col gap-1.5">
+            <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Graph Setting</h2>
+            <div id="graph-setting-panel" class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
+                <div class="flex items-center gap-3">
+                    <div class="flex flex-col gap-1 flex-1">
+                        <label id="label-col-input" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="graph-col" tabindex="0">Graph Col</label>
+                        <input type="number" id="setting-col-input" value="3" min="1" max="12"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                    </div>
+                    <div class="flex flex-col gap-1 flex-1">
+                        <label id="label-cell-count" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="cell-count" tabindex="0">Cell Count</label>
+                        <input type="number" id="setting-cell-input" value="4" min="1" max="10"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                    </div>
+                    <div class="flex flex-col gap-1 flex-1">
+                        <div id="container-mark-wrapper">
+                            <label id="label-mark-position" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                                data-tooltip-key="mark-count" tabindex="0">Mark
+                                Count</label>
+                            <div id="container-mark-normal" class="relative">
+                                <select id="setting-mark-select"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none appearance-none bg-white cursor-pointer hover:border-text-sub transition-colors">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                </select>
+                                <div
+                                    class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-sub">
+                                    <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
+                                        <path d="M7 10l5 5 5-5z" />
+                                    </svg></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 border-t border-border pt-2 mt-1">
+                    <div id="container-mark-ratio" class="flex flex-col gap-1 flex-1">
+                        <label id="label-column-width-ratio"
+                            class="text-xxs font-medium text-text-sub gs-tooltip-anchor" data-tooltip-key="column-width-ratio"
+                            tabindex="0">Column Width Ratio</label>
+                        <input type="number" id="setting-mark-ratio-input" value="0.8" min="0.01" max="1" step="0.01"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                    </div>
+                    <div class="flex flex-col gap-1 flex-1">
+                        <label id="label-y-min" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="y-min" tabindex="0">Y Min</label>
+                        <input type="number" id="setting-y-min" value="0"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                    </div>
+                    <div class="flex flex-col gap-1 flex-1">
+                        <label id="label-y-max" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="y-max" tabindex="0">Y Max</label>
+                        <input type="number" id="setting-y-max" value="100"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                    </div>
+                    <div id="container-stroke-width" class="flex flex-col gap-1 flex-1 hidden">
+                        <label id="label-thickness" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
+                            data-tooltip-key="thickness" tabindex="0">Thickness</label>
+                        <input type="number" id="setting-stroke-input" value="2" min="1" max="20"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
+                    </div>
+                    <div id="spacer-stroke" class="flex-1"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-3 py-1 flex-1 flex flex-col gap-1.5 overflow-hidden pb-3">
+            <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Data Setting</h2>
+            <div class="flex flex-col gap-2 h-full">
+                <div id="preview-section"
+                    class="bg-white border border-border rounded-md p-2 shadow-sm shrink-0 flex flex-col gap-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
+                        <span class="text-xxs text-text-sub">* Hover grid headers to highlight</span>
+                    </div>
+                    <div id="chart-preview-container"
+                        class="w-full h-52 bg-surface rounded border border-border flex items-center justify-center overflow-hidden relative">
+                        <span class="text-text-sub text-xs">Generating Preview...</span>
+                    </div>
+                </div>
+                <div id="csv-panel"
+                    class="bg-white border border-border rounded-md px-3 py-2 shadow-sm shrink-0 flex items-center justify-between">
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <span class="text-xs font-semibold text-text-sub shrink-0">CSV</span>
+                        <div class="w-[1px] h-3 bg-border shrink-0"></div>
+                        <span id="csv-status-text" class="text-xs text-text-sub truncate">csv를 업로드해주세요.</span>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button id="csv-delete-btn"
+                            class="hidden w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 hover:bg-danger hover:text-white text-gray-500 transition-colors cursor-pointer"
+                            title="Remove CSV"><svg class="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                                <path
+                                    d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                            </svg></button>
+                        <button id="csv-export-btn"
+                            class="text-text-sub hover:text-primary p-1 rounded transition-colors"
+                            title="Export CSV"><svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+                            </svg></button>
+                        <label for="csv-upload"
+                            class="bg-white border border-border rounded px-2 py-1 text-xxs font-medium text-text cursor-pointer hover:border-text-sub hover:bg-gray-50 transition-all whitespace-nowrap">Upload</label>
+                        <input type="file" id="csv-upload" accept=".csv" class="hidden">
+                    </div>
+                </div>
+                <div id="editor-card"
+                    class="bg-white border border-border rounded-md shadow-sm flex flex-col flex-1 overflow-hidden">
+                    <div class="px-3 border-b border-border flex justify-between items-center bg-white shrink-0 h-9">
+                        <button id="reset-btn"
+                            class="text-text-sub hover:text-primary hover:bg-surface border border-transparent hover:border-border rounded px-1.5 py-0.5 text-xxs font-medium transition-all flex items-center gap-1 cursor-pointer">
+                            <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                                <path
+                                    d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                            </svg>
+                            초기화
+                        </button>
+                        <div class="flex items-center gap-1.5">
+                            <div id="assist-line-control" class="relative flex items-center gap-1.5">
+                                <button id="assist-line-label-btn"
+                                    class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer"
+                                    type="button">보조선</button>
+                                <button id="assist-line-toggle"
+                                    class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
+                                    type="button">OFF</button>
+                                <div id="assist-line-popover"
+                                    class="hidden absolute top-6 left-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="assist-line-min-check" type="checkbox" class="cursor-pointer">
+                                        <span>min</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="assist-line-max-check" type="checkbox" class="cursor-pointer">
+                                        <span>max</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="assist-line-avg-check" type="checkbox" class="cursor-pointer">
+                                        <span>avg</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="assist-line-ctr-check" type="checkbox" class="cursor-pointer">
+                                        <span>ctr</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="mode-toggle-container"
+                                class="flex bg-surface rounded p-0.5 border border-border relative transition-colors duration-200">
+                                <button id="mode-raw"
+                                    class="px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all"
+                                    onclick="setMode('raw')">Raw</button>
+                                <button id="mode-percent"
+                                    class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all"
+                                    onclick="setMode('percent')">%</button>
+                            </div>
+                            <div class="relative tooltip-trigger cursor-help">
+                                <svg class="w-3.5 h-3.5 fill-text-sub hover:fill-primary transition-colors"
+                                    viewBox="0 0 24 24">
+                                    <path
+                                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+                                </svg>
+                                <div id="main-tooltip"
+                                    class="tooltip-content hidden absolute right-0 mt-2 w-52 bg-gray-800 text-white text-xxs rounded p-2 z-50 shadow-lg text-left leading-relaxed">
+                                    <div id="tooltip-normal">
+                                        <p class="mb-1"><strong class="text-primary-hover">Raw:</strong> 입력값의 제한이 없습니다.
+                                        </p>
+                                        <p><strong class="text-primary-hover">%:</strong> 0~100 사이의 비율값으로 보여집니다.</p>
+                                        <p id="tooltip-stacked-hint"
+                                            class="hidden text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-600">
+                                            * Stacked Bar: Group Count는 그룹 칼럼 수(G1..Gn), Segments는 각 그룹 내부 바 수(B1..Bm)입니다.
+                                            Column Width Ratio는 stacked에서 그룹 폭 기준으로 적용됩니다.
+                                            첫 데이터 행(All)은 총합 행이며 직접 입력 가능, 비어있으면 합계로 보정됩니다.
+                                            열에서 R 셀이 1개만 비면 남은 값을 반투명으로 제안하며 Enter로 확정됩니다.
+                                            All보다 합계가 크면 붉은 배경 에러로 표시되고 Apply가 비활성화됩니다.</p>
+                                    </div>
+                                    <div id="tooltip-warning" class="hidden text-danger font-medium">⚠️ % 모드에서는 0~100
+                                        사이의 값만 입력할 수 있습니다.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="grid-container-wrapper" class="flex flex-1 relative overflow-hidden bg-white">
+                        <div
+                            class="flex flex-col border-t border-border z-10 shadow-left-scroll bg-surface shrink min-w-[72px]">
+                            <div id="header-corner-tl"
+                                class="h-6 border-r border-b border-border-strong bg-surface shrink-0"></div>
+                            <div id="row-header-container" class="overflow-hidden flex-col no-scrollbar pb-10"></div>
+                        </div>
+                        <div id="grid-scroll-area" class="flex-1 overflow-auto relative scroll-smooth">
+                            <div id="data-grid" class="grid gap-0 border-t border-l border-border w-fit"></div>
+                        </div>
+                        <div
+                            class="w-8 shrink-0 border-l border-b border-t border-border bg-white flex flex-col z-20 shadow-left-scroll">
+                            <div id="header-corner-tr"
+                                class="h-6 border-b border-border-strong bg-surface flex items-center justify-center shrink-0">
+                                <svg class="w-3 h-3 fill-text-sub" viewBox="0 0 0 24">
+                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                                </svg></div>
+                            <button id="add-col-fixed-btn"
+                                class="flex-1 w-full text-primary hover:bg-surface flex items-center justify-center cursor-pointer font-medium text-lg focus:outline-none active:bg-blue-50 transition-colors"
+                                title="Add Column / Group">+</button>
+                        </div>
+                    </div>
+                    <div class="h-7 flex shrink-0 border-t border-border bg-white z-20 shadow-top-scroll">
+                        <button id="add-row-fixed-btn"
+                            class="flex-1 text-primary hover:bg-surface flex items-center justify-center cursor-pointer text-xs font-medium focus:outline-none active:bg-blue-50 transition-colors">+
+                            Add Row</button>
+                        <div class="w-8 shrink-0 border-l border-border bg-surface"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="step-style" class="step flex-col gap-3 w-full p-3 h-full overflow-hidden bg-surface">
+        <div id="style-panel" class="bg-white border border-border rounded-md p-3 flex flex-col gap-3 shadow-sm overflow-auto">
+            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                <div class="flex items-center justify-between gap-2">
+                    <h2 class="text-xs font-semibold text-text-sub m-0">Templates</h2>
+                    <div class="flex items-center gap-2">
+                        <div class="flex bg-surface rounded p-0.5 border border-border">
+                            <button id="style-template-mode-read"
+                                class="px-2 py-0.5 text-xxs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer"
+                                type="button">Read</button>
+                            <button id="style-template-mode-edit"
+                                class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer"
+                                type="button">Edit</button>
+                        </div>
+                        <button id="style-template-add-btn"
+                            class="px-2 py-1 text-xxs font-semibold rounded border border-border bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer"
+                            type="button">+ 템플릿 추가</button>
+                    </div>
+                </div>
+                <div id="style-template-gallery"
+                    class="grid grid-cols-2 gap-2 max-h-40 overflow-auto pr-1"></div>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <h2 class="text-xs font-semibold text-text-sub m-0">Style Injection</h2>
+                <span class="text-[10px] text-gray-400">Apply로 Figma에 반영됩니다.</span>
+            </div>
+
+            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Grid</div>
+
+                <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                    <div class="text-xxs font-semibold text-text-sub">Cell Top</div>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Cell Fill Color (HEX)</span>
+                        <div class="hex-input-with-preview">
+                            <input id="style-cell-fill-color" type="text" value="#FFFFFF"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                            <span id="style-cell-fill-color-preview" class="style-hex-preview"></span>
+                        </div>
+                    </label>
+                    <div class="grid grid-cols-4 gap-2 items-end">
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Color (HEX)</span>
+                            <div class="hex-input-with-preview">
+                                <input id="style-cell-top-color" type="text" value="#E5E7EB"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                <span id="style-cell-top-color-preview" class="style-hex-preview"></span>
+                            </div>
+                        </label>
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Stroke Style</span>
+                            <select id="style-cell-top-stroke-style"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                                <option value="solid">Solid</option>
+                                <option value="dash">Dash</option>
+                            </select>
+                        </label>
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Thickness</span>
+                            <input id="style-cell-top-thickness" type="number" value="1" min="0" max="20" step="1"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                        </label>
+                        <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
+                            <input id="style-cell-top-visible" type="checkbox" class="cursor-pointer" checked />
+                            <span>Visible</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                    <div class="text-xxs font-semibold text-text-sub">Tab Right</div>
+                    <div class="grid grid-cols-4 gap-2 items-end">
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Color (HEX)</span>
+                            <div class="hex-input-with-preview">
+                                <input id="style-tab-right-color" type="text" value="#E5E7EB"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                <span id="style-tab-right-color-preview" class="style-hex-preview"></span>
+                            </div>
+                        </label>
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Stroke Style</span>
+                            <select id="style-tab-right-stroke-style"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                                <option value="solid">Solid</option>
+                                <option value="dash">Dash</option>
+                            </select>
+                        </label>
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Thickness</span>
+                            <input id="style-tab-right-thickness" type="number" value="1" min="0" max="20" step="1"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                        </label>
+                        <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
+                            <input id="style-tab-right-visible" type="checkbox" class="cursor-pointer" checked />
+                            <span>Visible</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                    <div class="text-xxs font-semibold text-text-sub">Grid</div>
+                    <div class="grid grid-cols-4 gap-2 items-end">
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Color (HEX)</span>
+                            <div class="hex-input-with-preview">
+                                <input id="style-grid-color" type="text" value="#E5E7EB"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                <span id="style-grid-color-preview" class="style-hex-preview"></span>
+                            </div>
+                        </label>
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Stroke Style</span>
+                            <select id="style-grid-stroke-style"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                                <option value="solid">Solid</option>
+                                <option value="dash">Dash</option>
+                            </select>
+                        </label>
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xxs text-text-sub">Thickness</span>
+                            <input id="style-grid-thickness" type="number" value="1" min="0" max="20" step="1"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                        </label>
+                        <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
+                            <input id="style-grid-visible" type="checkbox" class="cursor-pointer" checked />
+                            <span>Visible</span>
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-3 text-xxs text-text-sub">
+                        <span class="font-medium">Individual Sides</span>
+                        <label class="flex items-center gap-1 select-none">
+                            <input id="style-grid-side-top" type="checkbox" class="cursor-pointer" checked />
+                            <span>Top</span>
+                        </label>
+                        <label class="flex items-center gap-1 select-none">
+                            <input id="style-grid-side-right" type="checkbox" class="cursor-pointer" checked />
+                            <span>Right</span>
+                        </label>
+                        <label class="flex items-center gap-1 select-none">
+                            <input id="style-grid-side-bottom" type="checkbox" class="cursor-pointer" checked />
+                            <span>Bottom</span>
+                        </label>
+                        <label class="flex items-center gap-1 select-none">
+                            <input id="style-grid-side-left" type="checkbox" class="cursor-pointer" checked />
+                            <span>Left</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Mark</div>
+                <label class="flex flex-col gap-1">
+                    <span class="text-xxs text-text-sub">Mark Index</span>
+                    <select id="style-mark-index"
+                        class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors"></select>
+                </label>
+                <div class="grid grid-cols-4 gap-2 items-end">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Fill (HEX)</span>
+                        <div class="hex-input-with-preview">
+                            <input id="style-mark-fill-color" type="text" value="#3B82F6"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                            <span id="style-mark-fill-color-preview" class="style-hex-preview"></span>
+                        </div>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Stroke (HEX)</span>
+                        <div class="hex-input-with-preview">
+                            <input id="style-mark-stroke-color" type="text" value="#3B82F6"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                            <span id="style-mark-stroke-color-preview" class="style-hex-preview"></span>
+                        </div>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Stroke Style</span>
+                        <select id="style-mark-stroke-style"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                            <option value="solid">Solid</option>
+                            <option value="dash">Dash</option>
+                        </select>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Thickness</span>
+                        <input id="style-mark-thickness" type="number" value="1" min="0" max="20" step="1"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                    </label>
+                </div>
+            </div>
+
+            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
+                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Assist Line</div>
+                <div class="grid grid-cols-3 gap-2 items-end">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Color (HEX)</span>
+                        <div class="hex-input-with-preview">
+                            <input id="style-assist-line-color" type="text" value="#E5E7EB"
+                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                            <span id="style-assist-line-color-preview" class="style-hex-preview"></span>
+                        </div>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Stroke Style</span>
+                        <select id="style-assist-line-stroke-style"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                            <option value="solid">Solid</option>
+                            <option value="dash">Dash</option>
+                        </select>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xxs text-text-sub">Thickness</span>
+                        <input id="style-assist-line-thickness" type="number" value="1" min="0" max="20" step="1"
+                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="step-export" class="step flex-col gap-3 w-full p-3 h-full overflow-hidden bg-surface">
+        <div id="export-preview-panel" class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm h-1/2 shrink-0">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xs font-semibold text-text-sub m-0">D3.js Preview</h2>
+                <span class="text-[10px] text-gray-400">*Based on Figma Styles</span>
+            </div>
+            <div id="d3-preview-container"
+                class="w-full flex-1 border border-border rounded bg-white flex items-center justify-center overflow-hidden relative">
+                <span class="text-text-sub text-xs">Loading Style...</span>
+            </div>
+        </div>
+
+        <div id="export-code-panel" class="bg-white border border-border rounded-md p-3 flex flex-col gap-2 shadow-sm flex-1 overflow-hidden">
+            <div class="flex justify-between items-center shrink-0">
+                <h2 class="text-xs font-semibold text-text-sub m-0">Export Code</h2>
+                <button onclick="copyToClipboard()"
+                    class="text-primary text-xs hover:text-primary-hover font-medium bg-transparent border-0 cursor-pointer flex items-center gap-1">
+                    <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                        <path
+                            d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                    </svg>
+                    Copy
+                </button>
+            </div>
+            <textarea id="d3-code-output"
+                class="w-full h-full p-2 text-[10px] font-mono border border-border rounded bg-gray-50 resize-none focus:outline-none focus:border-primary text-text leading-relaxed"
+                readonly spellcheck="false"></textarea>
+        </div>
+    </div>
+
+    <div id="error-toast"
+        class="hidden fixed bottom-16 left-1/2 -translate-x-1/2 bg-danger text-white text-xs px-4 py-2.5 rounded-md shadow-lg z-50 flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-2 pointer-events-none">
+        <svg class="w-4 h-4 fill-white shrink-0" viewBox="0 0 24 24">
+            <path
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+        </svg>
+        <span>% 모드는 0~100 사이의 값이어야 합니다.</span>
+    </div>
+    <div id="restore-toast"
+        class="hidden fixed bottom-14 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-4 py-3 rounded-md shadow-lg z-50 flex items-center gap-4 transition-all duration-300 opacity-0 translate-y-2">
+        <span>저장된 데이터를 불러올까요?</span>
+        <div class="flex items-center gap-3">
+            <button id="toast-yes-btn" class="font-bold text-primary hover:text-blue-300 cursor-pointer">예</button>
+            <button id="toast-close-btn" class="text-gray-400 hover:text-white cursor-pointer">✕</button>
+        </div>
+    </div>
+
+    <div id="row-color-popover"
+        class="hidden fixed z-[80] w-64 rounded border border-border bg-white shadow-lg p-2 text-xxs text-text">
+        <div class="row-color-mode-tabs mb-2">
+            <button id="row-color-mode-tab-hex" type="button" class="row-color-mode-tab is-active">Hex</button>
+            <button id="row-color-mode-tab-style" type="button" class="row-color-mode-tab">Paint Style</button>
+        </div>
+        <div id="row-color-wheel" class="row-color-wheel mb-2"></div>
+        <label class="block">
+            <div id="row-color-hex-input-box" class="row-color-hex-input-box">
+                <span id="row-color-preview" class="row-color-input-swatch"></span>
+                <input id="row-color-hex-input" type="text" value="#3B82F6"
+                    class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+            </div>
+            <div id="row-color-style-input-box" class="hidden mt-1 w-full text-xxs bg-white">
+                <div class="row-color-style-main-wrap">
+                    <div id="row-color-style-chip" class="row-color-style-main">
+                        <span id="row-color-style-main-swatch" class="row-color-style-item-swatch"></span>
+                        <span id="row-color-style-chip-text" class="row-color-style-chip-text"></span>
+                        <span id="row-color-style-chip-empty" class="text-[10px] text-text-sub">Select Paint Style</span>
+                        <button id="row-color-style-chip-close" type="button" class="row-color-style-chip-close hidden" aria-label="Clear style">×</button>
+                    </div>
+                    <button id="row-color-style-caret-btn" type="button" class="row-color-style-caret-btn">▾</button>
+                </div>
+                <div id="row-color-style-menu" class="row-color-style-menu hidden">
+                    <div id="row-color-style-menu-list" class="row-color-style-menu-list"></div>
+                </div>
+                <div id="row-color-style-edit-box" class="row-color-style-edit-box hidden">
+                    <input id="row-color-style-edit-hex-input" type="text" value="#3B82F6"
+                        class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors"
+                        placeholder="#RRGGBB" />
+                </div>
+            </div>
+        </label>
+        <div class="mt-2 flex justify-end gap-1.5">
+            <button id="row-color-add-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer">Add</button>
+            <button id="row-color-edit-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer hidden">Edit</button>
+            <button id="row-color-reset-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer">Reset</button>
+            <button id="row-color-save-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-primary hover:bg-blue-50 cursor-pointer">Save</button>
+        </div>
+    </div>
+
+    <div id="style-color-popover"
+        class="hidden fixed z-[80] w-64 rounded border border-border bg-white shadow-lg p-2 text-xxs text-text">
+        <div class="flex items-center justify-between mb-2">
+            <span id="style-color-popover-title" class="font-semibold text-text-sub">Style Color</span>
+            <span id="style-color-preview" class="w-4 h-4 rounded border border-border block"></span>
+        </div>
+        <div id="style-color-wheel" class="style-color-wheel mb-2"></div>
+        <label class="block">
+            <span class="block text-[10px] text-text-sub mb-0.5">Hex</span>
+            <input id="style-color-hex-input" type="text" value="#E5E7EB"
+                class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+        </label>
+        <div class="mt-2 flex justify-end">
+            <button id="style-color-save-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-primary hover:bg-blue-50 cursor-pointer">Save</button>
+        </div>
+    </div>
+
+    <div id="graph-setting-tooltip" class="gs-tooltip" role="tooltip" aria-hidden="true">
+        <img id="graph-setting-tooltip-image" class="gs-tooltip-image" src="./assets/tooltips/graph-col.svg" alt="">
+        <div class="gs-tooltip-content">
+            <div id="graph-setting-tooltip-title" class="gs-tooltip-title">그래프 열 수</div>
+            <p id="graph-setting-tooltip-body" class="gs-tooltip-body">가로 방향 데이터 열 개수를 설정합니다.</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const panels = document.querySelectorAll('[id$="-panel"]');
+
+            panels.forEach((panel) => {
+                let lastHoveredId = '';
+
+                panel.addEventListener('mouseover', (event) => {
+                    if (!(event.target instanceof Element)) return;
+                    const hovered = event.target.closest('[id]');
+                    if (!hovered || !panel.contains(hovered) || !hovered.id) return;
+                    if (hovered.id === lastHoveredId) return;
+
+                    lastHoveredId = hovered.id;
+                    console.log(`[hover][${panel.id}] ${hovered.id}`);
+                });
+
+                panel.addEventListener('mouseleave', () => {
+                    lastHoveredId = '';
+                });
+            });
+        });
+    </script>
+    <script type="module" src="./main.ts"></script>
+</body>
+
+</html>

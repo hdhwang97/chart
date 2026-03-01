@@ -1,0 +1,151 @@
+// ==========================================
+// DOM ELEMENT ACCESS (lazy)
+// ==========================================
+
+function byId<T extends HTMLElement>(id: string): T {
+    const el = document.getElementById(id);
+    if (!el) {
+        throw new Error(`[UI] Missing required element: #${id}`);
+    }
+    return el as T;
+}
+
+export const ui = {
+    get step1() { return byId<HTMLElement>('step-1'); },
+    get step2() { return byId<HTMLElement>('step-2'); },
+    get stepStyle() { return byId<HTMLElement>('step-style'); },
+    get backBtn() { return byId<HTMLButtonElement>('back-btn'); },
+    get mainCta() { return byId<HTMLButtonElement>('main-cta'); },
+    get editModeBtn() { return byId<HTMLButtonElement>('edit-mode-btn'); },
+
+    get chartTypeWrapper() { return byId<HTMLElement>('chart-type-wrapper'); },
+    get chartTypeIcon() { return byId<HTMLElement>('chart-type-icon'); },
+    get chartTypeDisplay() { return byId<HTMLElement>('chart-type-display'); },
+    get templateModeBanner() { return byId<HTMLElement>('template-mode-banner'); },
+    get tabStyleBtn() { return byId<HTMLButtonElement>('tab-style'); },
+
+    get settingColInput() { return byId<HTMLInputElement>('setting-col-input'); },
+    get settingCellInput() { return byId<HTMLInputElement>('setting-cell-input'); },
+    get settingMarkSelect() { return byId<HTMLSelectElement>('setting-mark-select'); },
+    get graphSettingPanel() { return byId<HTMLElement>('graph-setting-panel'); },
+    get graphSettingTooltip() { return byId<HTMLElement>('graph-setting-tooltip'); },
+    get graphSettingTooltipImage() { return byId<HTMLImageElement>('graph-setting-tooltip-image'); },
+    get graphSettingTooltipTitle() { return byId<HTMLElement>('graph-setting-tooltip-title'); },
+    get graphSettingTooltipBody() { return byId<HTMLElement>('graph-setting-tooltip-body'); },
+
+    get containerMarkWrapper() { return byId<HTMLElement>('container-mark-wrapper'); },
+    get containerMarkNormal() { return byId<HTMLElement>('container-mark-normal'); },
+
+    get labelColInput() { return byId<HTMLElement>('label-col-input'); },
+    get labelMarkPosition() { return byId<HTMLElement>('label-mark-position'); },
+
+    get settingYMin() { return byId<HTMLInputElement>('setting-y-min'); },
+    get settingYMax() { return byId<HTMLInputElement>('setting-y-max'); },
+    get settingMarkRatioInput() { return byId<HTMLInputElement>('setting-mark-ratio-input'); },
+
+    get settingStrokeInput() { return byId<HTMLInputElement>('setting-stroke-input'); },
+    get containerMarkRatio() { return byId<HTMLElement>('container-mark-ratio'); },
+    get containerStrokeWidth() { return byId<HTMLElement>('container-stroke-width'); },
+    get spacerStroke() { return byId<HTMLElement>('spacer-stroke'); },
+
+    get csvInput() { return byId<HTMLInputElement>('csv-upload'); },
+    get csvStatusText() { return byId<HTMLElement>('csv-status-text'); },
+    get csvDeleteBtn() { return byId<HTMLButtonElement>('csv-delete-btn'); },
+
+    get gridScrollArea() { return byId<HTMLElement>('grid-scroll-area'); },
+    get gridContainer() { return byId<HTMLElement>('data-grid'); },
+    get rowHeaderContainer() { return byId<HTMLElement>('row-header-container'); },
+
+    get addColFixedBtn() { return byId<HTMLButtonElement>('add-col-fixed-btn'); },
+    get addRowFixedBtn() { return byId<HTMLButtonElement>('add-row-fixed-btn'); },
+    get resetBtn() { return byId<HTMLButtonElement>('reset-btn'); },
+
+    get modeToggleContainer() { return byId<HTMLElement>('mode-toggle-container'); },
+    get modeRawBtn() { return byId<HTMLButtonElement>('mode-raw'); },
+    get modePercentBtn() { return byId<HTMLButtonElement>('mode-percent'); },
+    get assistLineControl() { return byId<HTMLElement>('assist-line-control'); },
+    get assistLineLabelBtn() { return byId<HTMLButtonElement>('assist-line-label-btn'); },
+    get assistLineToggleBtn() { return byId<HTMLButtonElement>('assist-line-toggle'); },
+    get assistLinePopover() { return byId<HTMLElement>('assist-line-popover'); },
+    get assistLineMinCheck() { return byId<HTMLInputElement>('assist-line-min-check'); },
+    get assistLineMaxCheck() { return byId<HTMLInputElement>('assist-line-max-check'); },
+    get assistLineAvgCheck() { return byId<HTMLInputElement>('assist-line-avg-check'); },
+    get assistLineCtrCheck() { return byId<HTMLInputElement>('assist-line-ctr-check'); },
+
+    get tooltipNormal() { return byId<HTMLElement>('tooltip-normal'); },
+    get tooltipWarning() { return byId<HTMLElement>('tooltip-warning'); },
+    get mainTooltip() { return byId<HTMLElement>('main-tooltip'); },
+    get tooltipStackedHint() { return byId<HTMLElement>('tooltip-stacked-hint'); },
+
+    get csvExportBtn() { return byId<HTMLButtonElement>('csv-export-btn'); },
+    get toast() { return byId<HTMLElement>('restore-toast'); },
+    get toastYesBtn() { return byId<HTMLButtonElement>('toast-yes-btn'); },
+    get toastCloseBtn() { return byId<HTMLButtonElement>('toast-close-btn'); },
+    get errorToast() { return byId<HTMLElement>('error-toast'); },
+
+    get rowColorPopover() { return byId<HTMLElement>('row-color-popover'); },
+    get rowColorModeTabHex() { return byId<HTMLButtonElement>('row-color-mode-tab-hex'); },
+    get rowColorModeTabStyle() { return byId<HTMLButtonElement>('row-color-mode-tab-style'); },
+    get rowColorPreview() { return byId<HTMLElement>('row-color-preview'); },
+    get rowColorWheel() { return byId<HTMLElement>('row-color-wheel'); },
+    get rowColorHexInputBox() { return byId<HTMLElement>('row-color-hex-input-box'); },
+    get rowColorHexInput() { return byId<HTMLInputElement>('row-color-hex-input'); },
+    get rowColorStyleInputBox() { return byId<HTMLElement>('row-color-style-input-box'); },
+    get rowColorStyleChip() { return byId<HTMLElement>('row-color-style-chip'); },
+    get rowColorStyleMainSwatch() { return byId<HTMLElement>('row-color-style-main-swatch'); },
+    get rowColorStyleChipText() { return byId<HTMLElement>('row-color-style-chip-text'); },
+    get rowColorStyleChipEmpty() { return byId<HTMLElement>('row-color-style-chip-empty'); },
+    get rowColorStyleChipClose() { return byId<HTMLButtonElement>('row-color-style-chip-close'); },
+    get rowColorStyleCaretBtn() { return byId<HTMLButtonElement>('row-color-style-caret-btn'); },
+    get rowColorStyleMenu() { return byId<HTMLElement>('row-color-style-menu'); },
+    get rowColorStyleMenuList() { return byId<HTMLElement>('row-color-style-menu-list'); },
+    get rowColorStyleEditBox() { return byId<HTMLElement>('row-color-style-edit-box'); },
+    get rowColorStyleEditHexInput() { return byId<HTMLInputElement>('row-color-style-edit-hex-input'); },
+    get rowColorAddBtn() { return byId<HTMLButtonElement>('row-color-add-btn'); },
+    get rowColorEditBtn() { return byId<HTMLButtonElement>('row-color-edit-btn'); },
+    get rowColorResetBtn() { return byId<HTMLButtonElement>('row-color-reset-btn'); },
+    get rowColorSaveBtn() { return byId<HTMLButtonElement>('row-color-save-btn'); },
+    get styleColorPopover() { return byId<HTMLElement>('style-color-popover'); },
+    get styleColorPopoverTitle() { return byId<HTMLElement>('style-color-popover-title'); },
+    get styleColorPreview() { return byId<HTMLElement>('style-color-preview'); },
+    get styleColorWheel() { return byId<HTMLElement>('style-color-wheel'); },
+    get styleColorHexInput() { return byId<HTMLInputElement>('style-color-hex-input'); },
+    get styleColorSaveBtn() { return byId<HTMLButtonElement>('style-color-save-btn'); },
+
+    get styleCellTopColorInput() { return byId<HTMLInputElement>('style-cell-top-color'); },
+    get styleCellTopThicknessInput() { return byId<HTMLInputElement>('style-cell-top-thickness'); },
+    get styleCellTopVisibleInput() { return byId<HTMLInputElement>('style-cell-top-visible'); },
+    get styleCellTopStrokeStyleInput() { return byId<HTMLSelectElement>('style-cell-top-stroke-style'); },
+    get styleTabRightColorInput() { return byId<HTMLInputElement>('style-tab-right-color'); },
+    get styleTabRightThicknessInput() { return byId<HTMLInputElement>('style-tab-right-thickness'); },
+    get styleTabRightVisibleInput() { return byId<HTMLInputElement>('style-tab-right-visible'); },
+    get styleTabRightStrokeStyleInput() { return byId<HTMLSelectElement>('style-tab-right-stroke-style'); },
+    get styleGridColorInput() { return byId<HTMLInputElement>('style-grid-color'); },
+    get styleGridThicknessInput() { return byId<HTMLInputElement>('style-grid-thickness'); },
+    get styleGridVisibleInput() { return byId<HTMLInputElement>('style-grid-visible'); },
+    get styleGridStrokeStyleInput() { return byId<HTMLSelectElement>('style-grid-stroke-style'); },
+    get styleGridSideTopInput() { return byId<HTMLInputElement>('style-grid-side-top'); },
+    get styleGridSideRightInput() { return byId<HTMLInputElement>('style-grid-side-right'); },
+    get styleGridSideBottomInput() { return byId<HTMLInputElement>('style-grid-side-bottom'); },
+    get styleGridSideLeftInput() { return byId<HTMLInputElement>('style-grid-side-left'); },
+    get styleAssistLineColorInput() { return byId<HTMLInputElement>('style-assist-line-color'); },
+    get styleAssistLineThicknessInput() { return byId<HTMLInputElement>('style-assist-line-thickness'); },
+    get styleAssistLineStrokeStyleInput() { return byId<HTMLSelectElement>('style-assist-line-stroke-style'); },
+    get styleMarkFillColorInput() { return byId<HTMLInputElement>('style-mark-fill-color'); },
+    get styleMarkStrokeColorInput() { return byId<HTMLInputElement>('style-mark-stroke-color'); },
+    get styleMarkThicknessInput() { return byId<HTMLInputElement>('style-mark-thickness'); },
+    get styleMarkStrokeStyleInput() { return byId<HTMLSelectElement>('style-mark-stroke-style'); },
+    get styleMarkIndexInput() { return byId<HTMLSelectElement>('style-mark-index'); },
+    get styleCellFillColorInput() { return byId<HTMLInputElement>('style-cell-fill-color'); },
+    get styleCellFillColorPreview() { return byId<HTMLElement>('style-cell-fill-color-preview'); },
+    get styleCellTopColorPreview() { return byId<HTMLElement>('style-cell-top-color-preview'); },
+    get styleTabRightColorPreview() { return byId<HTMLElement>('style-tab-right-color-preview'); },
+    get styleGridColorPreview() { return byId<HTMLElement>('style-grid-color-preview'); },
+    get styleMarkFillColorPreview() { return byId<HTMLElement>('style-mark-fill-color-preview'); },
+    get styleMarkStrokeColorPreview() { return byId<HTMLElement>('style-mark-stroke-color-preview'); },
+    get styleAssistLineColorPreview() { return byId<HTMLElement>('style-assist-line-color-preview'); },
+    get styleTemplateModeReadBtn() { return byId<HTMLButtonElement>('style-template-mode-read'); },
+    get styleTemplateModeEditBtn() { return byId<HTMLButtonElement>('style-template-mode-edit'); },
+    get styleTemplateAddBtn() { return byId<HTMLButtonElement>('style-template-add-btn'); },
+    get styleTemplateGallery() { return byId<HTMLElement>('style-template-gallery'); }
+};

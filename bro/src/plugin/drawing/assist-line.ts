@@ -1,0 +1,307 @@
+import { collectColumns } from './shared';
+import { clamp, traverse, findActualPropKey, normalizeHexColor, tryApplyDashPattern, tryApplyStroke } from '../utils';
+
+type AssistMetricType = 'min' | 'max' | 'avg' | 'ctr';
+
+type AssistLineEnabled = {
+    min: boolean;
+    max: boolean;
+    avg: boolean;
+    ctr: boolean;
+};
+
+type AssistLineStyle = {
+    color?: string;
+    thickness?: number;
+    strokeStyle?: 'solid' | 'dash';
+};
+
+const DEFAULT_ASSIST_LINE_ENABLED: AssistLineEnabled = {
+    min: false,
+    max: false,
+    avg: false,
+    ctr: false
+};
+
+function normalizeAssistLineEnabled(value: any): AssistLineEnabled {
+    if (!value || typeof value !== 'object') {
+        return { ...DEFAULT_ASSIST_LINE_ENABLED };
+    }
+    return {
+        min: Boolean((value as any).min),
+        max: Boolean((value as any).max),
+        avg: Boolean((value as any).avg),
+        ctr: Boolean((value as any).ctr)
+    };
+}
+
+function parseMetricFromName(name: string): AssistMetricType | null {
+    const lower = name.toLowerCase();
+    if (!lower.includes('asst_line')) return null;
+    if (lower.includes('min') || lower.includes('최소')) return 'min';
+    if (lower.includes('max') || lower.includes('최대')) return 'max';
+    if (lower.includes('avg') || lower.includes('average') || lower.includes('평균')) return 'avg';
+    if (lower.includes('ctr') || lower.includes('center') || lower.includes('mid') || lower.includes('중앙')) return 'ctr';
+    return null;
+}
+
+function resolveAssistLineNodes(graph: SceneNode): Record<AssistMetricType, SceneNode[]> {
+    const nodes: Record<AssistMetricType, SceneNode[]> = {
+        min: [],
+        max: [],
+        avg: [],
+        ctr: []
+    };
+
+    traverse(graph, (node) => {
+        const metric = parseMetricFromName(node.name);
+        if (!metric) return;
+        nodes[metric].push(node);
+    });
+
+    return nodes;
+}
+
+function resolveChartContainerNodes(graph: SceneNode): SceneNode[] {
+    const nodes: SceneNode[] = [];
+    traverse(graph, (node) => {
+        if (node.name !== 'chart_container') return;
+        nodes.push(node);
+    });
+    return nodes;
+}
+
+function computeMetrics(values: any[][], yMin: number, yMax: number): Record<AssistMetricType, number> {
+    const flat: number[] = [];
+    if (Array.isArray(values)) {
+        values.forEach((row) => {
+            if (!Array.isArray(row)) return;
+            row.forEach((v) => {
+                const n = Number(v);
+                flat.push(Number.isFinite(n) ? n : 0);
+            });
+        });
+    }
+
+    if (flat.length === 0) {
+        const ctr = yMin + ((yMax - yMin) / 2);
+        return { min: 0, max: 0, avg: 0, ctr };
+    }
+
+    const min = Math.min(...flat);
+    const max = Math.max(...flat);
+    const sum = flat.reduce((acc, n) => acc + n, 0);
+    const avg = sum / flat.length;
+    const ctr = yMin + ((yMax - yMin) / 2);
+    return { min, max, avg, ctr };
+}
+
+function formatMetricValue(value: number): string {
+    const normalized = Math.round(value * 10) / 10;
+    if (Number.isInteger(normalized)) return String(normalized);
+    return normalized.toFixed(1).replace(/\.0$/, '');
+}
+
+function toPaddingTop(value: number, yMin: number, yMax: number, graphHeight: number): number {
+    const safeHeight = Math.max(0, graphHeight);
+    const range = yMax - yMin;
+    const safeRange = Number.isFinite(range) && Math.abs(range) > 0 ? range : 1;
+    const ratio = clamp((value - yMin) / safeRange, 0, 1);
+    const valuePx = safeHeight * ratio;
+    return Math.max(0, safeHeight - valuePx);
+}
+
+function resolveReferenceHeight(graph: SceneNode, fallbackHeight: number): number {
+    const cols = collectColumns(graph);
+    const refCol = cols.find((c) => c.node.visible) || cols[0];
+    if (refCol) {
+        const colNode = refCol.node;
+        if ('children' in colNode) {
+            const tab = (colNode as SceneNode & ChildrenMixin).children.find((child) => child.name === 'tab');
+            if (tab && 'height' in tab && tab.height > 0) {
+                return tab.height;
+            }
+        }
+        if ('height' in colNode && colNode.height > 0) {
+            return colNode.height;
+        }
+    }
+    if (fallbackHeight > 0) return fallbackHeight;
+    if ('height' in graph && graph.height > 0) return graph.height;
+    return 0;
+}
+
+function trySetAssistLineData(instance: InstanceNode, value: string): boolean {
+    try {
+        const key = findActualPropKey(instance.componentProperties, 'Asst_line_data');
+        if (!key) return false;
+        instance.setProperties({ [key]: value });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function normalizeAssistLineStyle(value: unknown): AssistLineStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as AssistLineStyle;
+    const color = normalizeHexColor(source.color);
+    const thicknessRaw = typeof source.thickness === 'number' ? source.thickness : Number(source.thickness);
+    const thickness = Number.isFinite(thicknessRaw) && thicknessRaw >= 0 ? thicknessRaw : undefined;
+    const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
+    if (!color && thickness === undefined && !strokeStyle) return null;
+    return {
+        color: color || undefined,
+        thickness,
+        strokeStyle
+    };
+}
+
+function applyAssistLineVisualStyle(node: SceneNode, style: AssistLineStyle | null) {
+    if (!style) return;
+
+    const applyToNode = (target: SceneNode) => {
+        if (style.color) tryApplyStroke(target, style.color);
+        if (style.strokeStyle === 'dash') tryApplyDashPattern(target, [4, 2]);
+        else if (style.strokeStyle === 'solid') tryApplyDashPattern(target, []);
+        if (typeof style.thickness === 'number') {
+            try {
+                if (
+                    'strokeTopWeight' in target
+                    && 'strokeRightWeight' in target
+                    && 'strokeBottomWeight' in target
+                    && 'strokeLeftWeight' in target
+                ) {
+                    const withIndividual = target as SceneNode & IndividualStrokesMixin & { individualStrokeWeights?: boolean };
+                    if ('individualStrokeWeights' in withIndividual) {
+                        withIndividual.individualStrokeWeights = true;
+                    }
+                    withIndividual.strokeTopWeight = style.thickness;
+                    withIndividual.strokeRightWeight = 0;
+                    withIndividual.strokeBottomWeight = 0;
+                    withIndividual.strokeLeftWeight = 0;
+                } else if ('strokeWeight' in target) {
+                    (target as SceneNode & GeometryMixin).strokeWeight = style.thickness;
+                }
+            } catch { }
+        }
+    };
+
+    let containerLayer: SceneNode | null = null;
+    traverse(node, (child) => {
+        if (containerLayer) return;
+        if (child.id === node.id) return;
+        if (!child.visible) return;
+        if (child.name === 'Container') {
+            containerLayer = child;
+        }
+    });
+
+    if (containerLayer) {
+        applyToNode(containerLayer);
+    }
+}
+
+type AssistLineLayoutOptions = {
+    xEmptyHeight?: number;
+};
+
+export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: number, options?: AssistLineLayoutOptions) {
+    const assistLineVisible = Boolean(config?.assistLineVisible);
+    const enabled = normalizeAssistLineEnabled(config?.assistLineEnabled);
+    const values = Array.isArray(config?.values) ? config.values : [];
+    const yMin = Number.isFinite(Number(config?.yMin)) ? Number(config.yMin) : 0;
+    const yMax = Number.isFinite(Number(config?.yMax)) ? Number(config.yMax) : 100;
+    const metrics = computeMetrics(values, yMin, yMax);
+    const graphHeight = resolveReferenceHeight(graph, fallbackHeight);
+    const xEmptyHeight = Number.isFinite(Number(options?.xEmptyHeight)) ? Math.max(0, Number(options?.xEmptyHeight)) : 0;
+    const nodesByMetric = resolveAssistLineNodes(graph);
+    const chartContainerNodes = resolveChartContainerNodes(graph);
+    const assistLineStyle = normalizeAssistLineStyle(config?.assistLineStyle);
+
+    chartContainerNodes.forEach((node) => {
+        try {
+            if ('paddingBottom' in node) {
+                (node as SceneNode & { paddingBottom: number }).paddingBottom = xEmptyHeight;
+            }
+        } catch {
+            // no-op
+        }
+    });
+
+    (['min', 'max', 'avg', 'ctr'] as AssistMetricType[]).forEach((metric) => {
+        const metricNodes = nodesByMetric[metric];
+        const isEnabled = assistLineVisible && enabled[metric];
+        const metricValue = metrics[metric];
+        const metricText = formatMetricValue(metricValue);
+        const paddingTop = toPaddingTop(metricValue, yMin, yMax, graphHeight);
+
+        if (metricNodes.length === 0) {
+            console.log('[chart-plugin][assist-line]', {
+                metric,
+                enabled: isEnabled,
+                found: 0
+            });
+            return;
+        }
+
+        metricNodes.forEach((node) => {
+            try {
+                if ('paddingBottom' in node) {
+                    (node as SceneNode & { paddingBottom: number }).paddingBottom = xEmptyHeight;
+                }
+                node.visible = isEnabled;
+                if (!isEnabled) {
+                    console.log('[chart-plugin][assist-line]', {
+                        metric,
+                        enabled: isEnabled,
+                        nodeId: node.id,
+                        nodeName: node.name
+                    });
+                    return;
+                }
+
+                if ('paddingTop' in node) {
+                    (node as SceneNode & { paddingTop: number }).paddingTop = paddingTop;
+                } else {
+                    console.log('[chart-plugin][assist-line]', {
+                        metric,
+                        enabled: isEnabled,
+                        nodeId: node.id,
+                        nodeName: node.name,
+                        warning: 'paddingTop is not supported'
+                    });
+                }
+
+                let dataApplied = false;
+                if (node.type === 'INSTANCE') {
+                    dataApplied = trySetAssistLineData(node, metricText);
+                }
+                applyAssistLineVisualStyle(node, assistLineStyle);
+
+                console.log('[chart-plugin][assist-line]', {
+                    metric,
+                    enabled: isEnabled,
+                    metricValue,
+                    graphHeight,
+                    xEmptyHeight,
+                    yMin,
+                    yMax,
+                    paddingTop,
+                    paddingBottom: xEmptyHeight,
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    dataApplied
+                });
+            } catch (error) {
+                console.warn('[chart-plugin][assist-line]', {
+                    metric,
+                    enabled: isEnabled,
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    error: error instanceof Error ? error.message : String(error)
+                });
+            }
+        });
+    });
+}
