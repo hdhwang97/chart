@@ -429,12 +429,21 @@ export async function initPluginUI(
         : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
     const extractedColColors = Array.from({ length: Math.max(1, colCount) }, () => extractedRowColors[0] || '#3B82F6');
     const extractedColEnabled = Array.from({ length: Math.max(1, colCount) }, () => false);
+    const shouldUseSavedPaletteForInstance = isInstanceTarget && chartData.isSaved;
     const baseUiSnapshot: LocalStyleOverrides = isInstanceTarget
         ? {
-            rowColors: extractedRowColors,
-            colColors: extractedColColors,
-            colColorEnabled: extractedColEnabled,
-            markColorSource: 'row',
+            rowColors: shouldUseSavedPaletteForInstance
+                ? resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors)
+                : extractedRowColors,
+            colColors: shouldUseSavedPaletteForInstance
+                ? resolveColColorsFromNode(node, Math.max(1, colCount))
+                : extractedColColors,
+            colColorEnabled: shouldUseSavedPaletteForInstance
+                ? resolveColColorEnabledFromNode(node, Math.max(1, colCount))
+                : extractedColEnabled,
+            markColorSource: shouldUseSavedPaletteForInstance
+                ? (node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row')
+                : 'row',
             cellFillStyle: styleInfo.cellFillStyle || undefined,
             cellTopStyle: undefined,
             tabRightStyle: undefined,

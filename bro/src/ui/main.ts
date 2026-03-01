@@ -307,6 +307,7 @@ function applyColorHex(target: { type: 'row' | 'col'; index: number }, rawHex: s
             }
         }
         updateColColorSwatchDom(target.index);
+        syncMarkStylesFromHeaderColors(false);
     }
     ui.rowColorHexInput.classList.remove('row-color-hex-error');
     updateColorPopoverUi(target, normalized);

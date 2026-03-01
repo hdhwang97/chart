@@ -177,40 +177,36 @@ function hasSavedChartData(node: SceneNode) {
 }
 
 function findSingleDescendantChartTarget(root: SceneNode): SceneNode | null {
-    const dataOwners: SceneNode[] = [];
-    const typedNodes: SceneNode[] = [];
-    const instanceNodes: SceneNode[] = [];
-    const recognizedNodes: SceneNode[] = [];
-
-    traverse(root, (candidate) => {
-        if (candidate.id === root.id) return;
-        if (!isRecognizedChartSelection(candidate)) return;
-
-        recognizedNodes.push(candidate);
-
-        if (hasSavedChartData(candidate)) {
-            dataOwners.push(candidate);
-            return;
+    const candidates: Array<{ node: SceneNode; depth: number; score: number }> = [];
+    const visit = (node: SceneNode, depth: number) => {
+        if (depth > 0 && isRecognizedChartSelection(node)) {
+            let score = 0;
+            if (hasSavedChartData(node)) score += 1000;
+            if (node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE)) score += 300;
+            if (node.type === 'INSTANCE') score += 100;
+            if (node.type === 'COMPONENT') score += 50;
+            // Prefer closer descendants when priority signals are equal.
+            score -= depth;
+            candidates.push({ node, depth, score });
         }
+        if (!('children' in node)) return;
+        (node as SceneNode & ChildrenMixin).children.forEach((child) => visit(child, depth + 1));
+    };
 
-        if (candidate.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE)) {
-            typedNodes.push(candidate);
-            return;
-        }
-
-        if (candidate.type === 'INSTANCE') {
-            instanceNodes.push(candidate);
-        }
+    visit(root, 0);
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.depth - b.depth;
     });
-
-    if (dataOwners.length === 1) return dataOwners[0];
-    if (typedNodes.length === 1) return typedNodes[0];
-    if (instanceNodes.length === 1) return instanceNodes[0];
-    if (recognizedNodes.length === 1) return recognizedNodes[0];
-    return null;
+    return candidates[0].node;
 }
 
 function resolveChartTargetFromSelection(node: SceneNode): SceneNode {
+    // If the selected node already owns persisted chart data, prefer it.
+    // This protects direct selection of the original chart instance (2번).
+    if (hasSavedChartData(node)) return node;
+
     const descendantTarget = findSingleDescendantChartTarget(node);
     if (descendantTarget) return descendantTarget;
 

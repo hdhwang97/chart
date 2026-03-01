@@ -1,6 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM } from '../constants';
 import { collectColumns, setVariantProperty, type ColRef } from './shared';
-import { normalizeHexColor, rgbToHex, tryApplyFill } from '../utils';
+import { normalizeHexColor, rgbToHex, tryApplyFill, tryApplyStroke } from '../utils';
 
 // ==========================================
 // STACKED BAR CHART DRAWING
@@ -325,6 +325,7 @@ export function applySegmentsToBar(
                     if (!hasSameSolidFill(targetLayer as SceneNode, rowColor)) {
                         tryApplyFill(targetLayer as SceneNode, rowColor);
                     }
+                    tryApplyStroke(targetLayer as SceneNode, rowColor);
                 }
                 let ratio = 0;
                 if (mode === 'raw') {
