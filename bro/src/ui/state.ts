@@ -113,6 +113,7 @@ export const state = {
     cellStrokeStyles: [] as CellStrokeStyle[],
     rowStrokeStyles: [] as RowStrokeStyle[],
     isInstanceTarget: false,
+    isTemplateMasterTarget: false,
     extractedStyleSnapshot: {} as LocalStyleOverrides,
     localStyleOverrides: {} as LocalStyleOverrides,
     localStyleOverrideMask: {} as LocalStyleOverrideMask,

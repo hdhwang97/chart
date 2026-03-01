@@ -514,6 +514,7 @@ export async function initPluginUI(
         cellStrokeStyles: styleInfo.cellStrokeStyles || [],
         rowStrokeStyles: effectiveUiSnapshot.rowStrokeStyles || styleInfo.rowStrokeStyles || [],
         isInstanceTarget,
+        isTemplateMasterTarget: node.type === 'COMPONENT',
         extractedStyleSnapshot: {
             rowColors: extractedRowColors,
             colColors: extractedColColors,

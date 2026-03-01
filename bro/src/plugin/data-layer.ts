@@ -317,23 +317,31 @@ function recoverLegacyStackedValuesIfNeeded(values: any, markNum: any) {
 }
 
 // styleInfo를 받아 스타일 데이터도 함께 저장
-export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
+export function saveChartData(
+    node: SceneNode,
+    msg: any,
+    styleInfo?: any,
+    options?: { skipDataKeys?: boolean }
+) {
     const styleApplyMode = normalizeStyleApplyMode(msg?.styleApplyMode);
     const shouldSaveStyleKeys = styleApplyMode === 'include_style';
+    const skipDataKeys = Boolean(options?.skipDataKeys);
 
     node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
-    node.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(msg.rawValues));
-    node.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(msg.values));
-    node.setPluginData(PLUGIN_DATA_KEYS.LAST_MODE, msg.mode);
-    node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN, String(msg.yMin));
-    if (msg.mode === 'raw' && msg.rawYMaxAuto) {
-        node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, '');
-    } else {
-        node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, String(msg.yMax));
+    if (!skipDataKeys) {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(msg.rawValues));
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(msg.values));
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_MODE, msg.mode);
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN, String(msg.yMin));
+        if (msg.mode === 'raw' && msg.rawYMaxAuto) {
+            node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, '');
+        } else {
+            node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, String(msg.yMax));
+        }
     }
 
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(msg.cellCount));
-    if (msg.markNum) {
+    if (!skipDataKeys && msg.markNum) {
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(msg.markNum));
     }
     node.setPluginData(
@@ -348,13 +356,15 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE,
         String(Boolean(msg.assistLineVisible))
     );
-    const rowCount = Number.isFinite(Number(msg.rows))
-        ? Number(msg.rows)
-        : (Array.isArray(msg.rawValues) ? msg.rawValues.length : 1);
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS,
-        JSON.stringify(normalizeRowHeaderLabels(msg.rowHeaderLabels, rowCount, msg.type))
-    );
+    if (!skipDataKeys) {
+        const rowCount = Number.isFinite(Number(msg.rows))
+            ? Number(msg.rows)
+            : (Array.isArray(msg.rawValues) ? msg.rawValues.length : 1);
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS,
+            JSON.stringify(normalizeRowHeaderLabels(msg.rowHeaderLabels, rowCount, msg.type))
+        );
+    }
     if (shouldSaveStyleKeys) {
         node.setPluginData(
             PLUGIN_DATA_KEYS.LAST_ROW_COLORS,

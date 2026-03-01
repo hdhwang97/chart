@@ -373,6 +373,10 @@ function normalizeAssistLineVisibleInput(value: any) {
     return Boolean(value);
 }
 
+function updateTemplateModeBanner() {
+    ui.templateModeBanner.classList.toggle('hidden', !state.isTemplateMasterTarget);
+}
+
 function closeAssistLinePopover() {
     assistLinePopoverOpen = false;
     ui.assistLinePopover.classList.add('hidden');
@@ -401,6 +405,7 @@ function handlePluginMessage(msg: any) {
             // No selection
             state.uiMode = 'create';
             state.isInstanceTarget = false;
+            state.isTemplateMasterTarget = false;
             resetLocalStyleOverrideState();
             state.mode = 'edit';
             state.markRatio = 0.8;
@@ -427,12 +432,14 @@ function handlePluginMessage(msg: any) {
             switchTab('data');
             goToStep(1);
             ui.editModeBtn.classList.add('hidden');
+            updateTemplateModeBanner();
             return;
         }
 
         state.uiMode = 'edit';
         state.chartType = msg.chartType;
         state.isInstanceTarget = Boolean(msg.isInstanceTarget);
+        state.isTemplateMasterTarget = Boolean(msg.isTemplateMasterTarget);
         state.extractedStyleSnapshot = normalizeIncomingLocalOverrides(msg.extractedStyleSnapshot);
         setLocalStyleOverrideSnapshot(
             normalizeIncomingLocalOverrides(msg.localStyleOverrides),
@@ -584,6 +591,7 @@ function handlePluginMessage(msg: any) {
         goToStep(2);
         switchTab('data');
         checkCtaValidation();
+        updateTemplateModeBanner();
     }
     if (msg.type === 'style_templates_loaded') {
         setStyleTemplateList(msg.list || []);
@@ -605,6 +613,9 @@ function handlePluginMessage(msg: any) {
         if (msg.payload) {
             if (msg.payload.isInstanceTarget !== undefined) {
                 state.isInstanceTarget = Boolean(msg.payload.isInstanceTarget);
+            }
+            if (msg.payload.isTemplateMasterTarget !== undefined) {
+                state.isTemplateMasterTarget = Boolean(msg.payload.isTemplateMasterTarget);
             }
             state.extractedStyleSnapshot = normalizeIncomingLocalOverrides(msg.payload.extractedStyleSnapshot);
             setLocalStyleOverrideSnapshot(
@@ -690,6 +701,7 @@ function handlePluginMessage(msg: any) {
         applyModeLocks();
         checkCtaValidation();
         handleStyleExtracted(msg.payload);
+        updateTemplateModeBanner();
     }
 }
 

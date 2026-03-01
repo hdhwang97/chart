@@ -1,5 +1,5 @@
 import { VARIANT_MAPPING, PLUGIN_DATA_KEYS } from './constants';
-import { loadLocalStyleOverrides, saveChartData, saveLocalStyleOverrides } from './data-layer';
+import { loadChartData, loadLocalStyleOverrides, saveChartData, saveLocalStyleOverrides } from './data-layer';
 import { extractStyleFromNode } from './style';
 import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, getChartLegendHeight, getGraphHeight, getXEmptyHeight, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
 import { applyBar } from './drawing/bar';
@@ -9,7 +9,7 @@ import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
-import { normalizeHexColor } from './utils';
+import { normalizeHexColor, traverse } from './utils';
 import { deleteStyleTemplate, loadStyleTemplates, renameStyleTemplate, saveStyleTemplate } from './template-store';
 import { PerfTracker, shouldLogApplyPerf } from './perf';
 import type {
@@ -27,6 +27,7 @@ figma.showUI(__html__, { width: 600, height: 800 });
 let currentSelectionId: string | null = null;
 let prevWidth = 0;
 let prevHeight = 0;
+type ApplyPolicy = 'template-master' | 'instance-data' | 'default';
 
 function normalizeMarkRatio(value: unknown): number | null {
     const ratio = typeof value === 'number' ? value : Number(value);
@@ -171,21 +172,59 @@ function isRecognizedChartSelection(node: SceneNode) {
     return Boolean(savedChartType) || columnCount > 0;
 }
 
-function resolveChartTargetFromSelection(node: SceneNode): SceneNode {
-    let current: BaseNode | null = node;
-    let resolved: SceneNode = node;
+function hasSavedChartData(node: SceneNode) {
+    return Boolean(node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES));
+}
 
+function findSingleDescendantChartTarget(root: SceneNode): SceneNode | null {
+    const dataOwners: SceneNode[] = [];
+    const typedNodes: SceneNode[] = [];
+    const instanceNodes: SceneNode[] = [];
+    const recognizedNodes: SceneNode[] = [];
+
+    traverse(root, (candidate) => {
+        if (candidate.id === root.id) return;
+        if (!isRecognizedChartSelection(candidate)) return;
+
+        recognizedNodes.push(candidate);
+
+        if (hasSavedChartData(candidate)) {
+            dataOwners.push(candidate);
+            return;
+        }
+
+        if (candidate.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE)) {
+            typedNodes.push(candidate);
+            return;
+        }
+
+        if (candidate.type === 'INSTANCE') {
+            instanceNodes.push(candidate);
+        }
+    });
+
+    if (dataOwners.length === 1) return dataOwners[0];
+    if (typedNodes.length === 1) return typedNodes[0];
+    if (instanceNodes.length === 1) return instanceNodes[0];
+    if (recognizedNodes.length === 1) return recognizedNodes[0];
+    return null;
+}
+
+function resolveChartTargetFromSelection(node: SceneNode): SceneNode {
+    const descendantTarget = findSingleDescendantChartTarget(node);
+    if (descendantTarget) return descendantTarget;
+
+    let current: BaseNode | null = node;
     while (current && current.type !== 'PAGE') {
         if ('getPluginData' in current) {
             const candidate = current as SceneNode;
             if (isRecognizedChartSelection(candidate)) {
-                resolved = candidate;
+                return candidate;
             }
         }
         current = current.parent;
     }
-
-    return resolved;
+    return node;
 }
 
 function resolveColColorsFromNode(node: SceneNode, colCount: number, fallbackColor: string) {
@@ -299,11 +338,16 @@ figma.ui.onmessage = async (msg) => {
                     figma.notify("Please select a chart component instance.");
                     return null;
                 }
+                const applyPolicy: ApplyPolicy =
+                    resolvedNode.type === 'COMPONENT'
+                        ? 'template-master'
+                        : (resolvedNode.type === 'INSTANCE' ? 'instance-data' : 'default');
                 console.log('[chart-plugin][apply]', {
                     selectedNodeId: nodes[0].id,
                     targetNodeId: resolvedNode.id,
                     selectedNodeName: nodes[0].name,
-                    targetNodeName: resolvedNode.name
+                    targetNodeName: resolvedNode.name,
+                    applyPolicy
                 });
                 return resolvedNode as FrameNode;
             }
@@ -336,6 +380,10 @@ figma.ui.onmessage = async (msg) => {
             return instance;
         });
         if (!targetNode) return;
+        const isTemplateMasterApply = msg.type === 'apply' && targetNode.type === 'COMPONENT';
+        const applyPolicy: ApplyPolicy = isTemplateMasterApply
+            ? 'template-master'
+            : (targetNode.type === 'INSTANCE' ? 'instance-data' : 'default');
         const resolvedStyleApplyMode: StyleApplyMode =
             targetNode.type === 'INSTANCE' ? 'data_only' : requestedStyleApplyMode;
         const isDataOnlyApply = resolvedStyleApplyMode === 'data_only';
@@ -349,6 +397,32 @@ figma.ui.onmessage = async (msg) => {
             ? normalizedLocalOverrides
             : persistedLocal.overrides;
         const columns = await perf.step('collect-columns', () => collectColumns(targetNode));
+        let templateExistingValues: any[][] | null = null;
+        let templateExistingMode: 'raw' | 'percent' | null = null;
+        if (isTemplateMasterApply) {
+            const loaded = await perf.step('load-template-data', () => loadChartData(targetNode as SceneNode, type));
+            if (Array.isArray(loaded.values)) {
+                templateExistingValues = isStackedType(type)
+                    ? loaded.values.slice(1)
+                    : loaded.values;
+            }
+            const savedMode = targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
+            templateExistingMode = savedMode === 'percent' ? 'percent' : 'raw';
+            console.log('[chart-plugin][apply-policy]', {
+                applyPolicy,
+                targetNodeId: targetNode.id,
+                targetNodeType: targetNode.type,
+                savedRows: Array.isArray(loaded.values) ? loaded.values.length : 0,
+                savedMode: templateExistingMode
+            });
+        }
+
+        const drawValues = isTemplateMasterApply && Array.isArray(templateExistingValues)
+            ? templateExistingValues
+            : values;
+        const drawMode: 'raw' | 'percent' = isTemplateMasterApply
+            ? (templateExistingMode || 'raw')
+            : mode;
 
         // 2. Variant Setup
         await perf.step('variant-setup', () => {
@@ -360,11 +434,11 @@ figma.ui.onmessage = async (msg) => {
 
         const effectiveY = await perf.step('resolve-y-range', () => resolveEffectiveYRange({
             chartType: type,
-            mode,
-            values,
+            mode: drawMode,
+            values: drawValues,
             yMin,
             yMax,
-            rawYMaxAuto
+            rawYMaxAuto: drawMode === 'raw' ? rawYMaxAuto : false
         }));
 
         // 3. Basic Setup
@@ -412,8 +486,8 @@ figma.ui.onmessage = async (msg) => {
             : (effectiveLocalMask.assistLineStyle ? effectiveLocalOverrides.assistLineStyle : undefined);
 
         const drawConfig = {
-            values,
-            mode,
+            values: drawValues,
+            mode: drawMode,
             markNum,
             rows,
             yMin: effectiveY.yMin,
@@ -622,6 +696,7 @@ figma.ui.onmessage = async (msg) => {
                     ? (styleInfo.rowStrokeStyles || [])
                     : (Array.isArray(rowStrokeStyles) ? rowStrokeStyles : (styleInfo.rowStrokeStyles || []))),
             isInstanceTarget: targetNode.type === 'INSTANCE',
+            isTemplateMasterTarget: applyPolicy === 'template-master',
             extractedStyleSnapshot: {
                 rowColors: extractedRowColorsForUi,
                 colColors: colColorsForUiBase,
@@ -643,11 +718,17 @@ figma.ui.onmessage = async (msg) => {
             saveChartData(
                 targetNode,
                 { ...msg.payload, styleApplyMode: resolvedStyleApplyMode },
-                shouldUseFastStyleSync ? undefined : styleInfo
+                shouldUseFastStyleSync ? undefined : styleInfo,
+                { skipDataKeys: isTemplateMasterApply }
             );
             if (targetNode.type === 'INSTANCE') {
                 saveLocalStyleOverrides(targetNode, effectiveLocalOverrides, effectiveLocalMask);
             }
+            console.log('[chart-plugin][save-policy]', {
+                applyPolicy,
+                targetNodeId: targetNode.id,
+                skipDataKeys: isTemplateMasterApply
+            });
             figma.ui.postMessage({ type: 'style_extracted', source: 'generate_apply', payload: stylePayload });
         });
         const perfReport = perf.done();
