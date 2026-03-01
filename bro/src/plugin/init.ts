@@ -4,16 +4,25 @@ import {
     VARIANT_MAPPING
 } from './constants';
 import { traverse, findActualPropKey, normalizeHexColor } from './utils';
-import { loadChartData } from './data-layer';
+import { loadChartData, loadLocalStyleOverrides } from './data-layer';
 import { extractChartColors, extractStyleFromNode } from './style';
 import { collectColumns } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
+import { applyStrokeInjection } from './drawing/stroke-injection';
 import { getGraphHeight, getXEmptyHeight } from './drawing/shared';
 import { resolveEffectiveYRange } from './drawing/y-range';
-import type { AssistLineInjectionStyle, CellFillInjectionStyle, GridStrokeInjectionStyle, MarkInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
+import type {
+    AssistLineInjectionStyle,
+    CellFillInjectionStyle,
+    GridStrokeInjectionStyle,
+    LocalStyleOverrideMask,
+    LocalStyleOverrides,
+    MarkInjectionStyle,
+    SideStrokeInjectionStyle
+} from '../shared/style-types';
 
 // ==========================================
 // COMPONENT DISCOVERY
@@ -227,6 +236,26 @@ function resolveColColorEnabledFromNode(node: SceneNode, colCount: number) {
     return next;
 }
 
+function hasTruthyMask(mask: LocalStyleOverrideMask): boolean {
+    return Object.values(mask).some((value) => Boolean(value));
+}
+
+function applyLocalOverridesToUiSnapshot(
+    base: LocalStyleOverrides,
+    overrides: LocalStyleOverrides,
+    mask: LocalStyleOverrideMask
+): LocalStyleOverrides {
+    if (!hasTruthyMask(mask)) return { ...base };
+    const next: LocalStyleOverrides = { ...base };
+    (Object.keys(mask) as Array<keyof LocalStyleOverrideMask>).forEach((key) => {
+        if (!mask[key]) return;
+        const value = overrides[key as keyof LocalStyleOverrides];
+        if (value === undefined) return;
+        (next as any)[key] = value;
+    });
+    return next;
+}
+
 export async function getOrImportComponent(): Promise<ComponentNode | ComponentSetNode | null> {
     const { KEY, NAME } = MASTER_COMPONENT_CONFIG;
 
@@ -306,13 +335,14 @@ export async function initPluginUI(
 
         const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
         const assistLineVisible = resolveAssistLineVisibleFromNode(node);
-        const autoStyleInfo = extractStyleFromNode(node, chartType);
-        const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
-        const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, autoStyleInfo.colors);
-        const autoColCount = Array.isArray(valuesToUse) && valuesToUse.length > 0 && Array.isArray(valuesToUse[0]) ? valuesToUse[0].length : 0;
-        const colColors = resolveColColorsFromNode(node, Math.max(1, autoColCount));
-        const colColorEnabled = resolveColColorEnabledFromNode(node, Math.max(1, autoColCount));
-        const markColorSource = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row';
+        const localOverrideState = node.type === 'INSTANCE'
+            ? loadLocalStyleOverrides(node)
+            : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
+        const runtimeRowColors = localOverrideState.mask.rowColors ? localOverrideState.overrides.rowColors : undefined;
+        const runtimeColColors = localOverrideState.mask.colColors ? localOverrideState.overrides.colColors : undefined;
+        const runtimeColEnabled = localOverrideState.mask.colColorEnabled ? localOverrideState.overrides.colColorEnabled : undefined;
+        const runtimeMarkColorSource = localOverrideState.mask.markColorSource ? localOverrideState.overrides.markColorSource : undefined;
+        const runtimeAssistLineStyle = localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined;
         const payload = {
             type: chartType,
             mode,
@@ -328,13 +358,13 @@ export async function initPluginUI(
             markRatio: (chartType === 'bar' || chartType === 'stackedBar' || chartType === 'stacked')
                 ? resolveMarkRatioFromNode(node)
                 : undefined,
-            rowColors,
-            colColors,
-            colColorEnabled,
-            markColorSource,
             assistLineVisible,
             assistLineEnabled,
-            assistLineStyle: parseSavedAssistLineStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE),
+            rowColors: runtimeRowColors,
+            colColors: runtimeColColors,
+            colColorEnabled: runtimeColEnabled,
+            markColorSource: runtimeMarkColorSource,
+            assistLineStyle: runtimeAssistLineStyle,
             reason: opts?.reason || 'auto-resize'
         };
 
@@ -344,6 +374,24 @@ export async function initPluginUI(
         else if (chartType === 'bar') applyBar(payload, H, node);
         else if (chartType === 'line') applyLine(payload, H, node);
         applyAssistLines(payload, node, H, { xEmptyHeight });
+        if (node.type === 'INSTANCE' && hasTruthyMask(localOverrideState.mask)) {
+            applyStrokeInjection(node, {
+                chartType,
+                markNum: chartData.markNum,
+                ...(localOverrideState.mask.rowColors ? { rowColors: localOverrideState.overrides.rowColors } : {}),
+                ...(localOverrideState.mask.colColors ? { colColors: localOverrideState.overrides.colColors } : {}),
+                ...(localOverrideState.mask.colColorEnabled ? { colColorEnabled: localOverrideState.overrides.colColorEnabled } : {}),
+                ...(localOverrideState.mask.cellFillStyle ? { cellFillStyle: localOverrideState.overrides.cellFillStyle } : {}),
+                ...(localOverrideState.mask.cellTopStyle ? { cellTopStyle: localOverrideState.overrides.cellTopStyle } : {}),
+                ...(localOverrideState.mask.tabRightStyle ? { tabRightStyle: localOverrideState.overrides.tabRightStyle } : {}),
+                ...(localOverrideState.mask.gridContainerStyle ? { gridContainerStyle: localOverrideState.overrides.gridContainerStyle } : {}),
+                ...(localOverrideState.mask.assistLineStyle ? { assistLineStyle: localOverrideState.overrides.assistLineStyle } : {}),
+                ...(localOverrideState.mask.markStyle ? { markStyle: localOverrideState.overrides.markStyle } : {}),
+                ...(localOverrideState.mask.markStyles ? { markStyles: localOverrideState.overrides.markStyles } : {}),
+                ...(localOverrideState.mask.rowStrokeStyles ? { rowStrokeStyles: localOverrideState.overrides.rowStrokeStyles } : {}),
+                ...(localOverrideState.mask.colStrokeStyle ? { colStrokeStyle: localOverrideState.overrides.colStrokeStyle } : {})
+            });
+        }
         return;
     }
 
@@ -354,6 +402,10 @@ export async function initPluginUI(
     const parsedLastYMax = lastYMax !== '' && Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : undefined;
     const extractedColors = extractChartColors(node, chartType);
     const styleInfo = extractStyleFromNode(node, chartType);
+    const isInstanceTarget = node.type === 'INSTANCE';
+    const localOverrideState = isInstanceTarget
+        ? loadLocalStyleOverrides(node)
+        : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
     const markRatio = resolveMarkRatioFromNode(node, styleInfo.markRatio);
     const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
@@ -369,13 +421,43 @@ export async function initPluginUI(
     const savedRowHeaderLabels = parseSavedRowHeaderLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS);
     const savedXAxisLabels = parseSavedXAxisLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS);
     const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
-    const rowColors = resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors);
+    const extractedRowColors = Array.from({ length: Math.max(1, rowColorCount) }, (_, i) =>
+        normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
+    );
     const colCount = chartType === 'stackedBar' || chartType === 'stacked'
         ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((a, b) => a + b, 0) : 0)
         : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
-    const colColors = resolveColColorsFromNode(node, Math.max(1, colCount));
-    const colColorEnabled = resolveColColorEnabledFromNode(node, Math.max(1, colCount));
-    const markColorSource = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row';
+    const extractedColColors = Array.from({ length: Math.max(1, colCount) }, () => extractedRowColors[0] || '#3B82F6');
+    const extractedColEnabled = Array.from({ length: Math.max(1, colCount) }, () => false);
+    const baseUiSnapshot: LocalStyleOverrides = isInstanceTarget
+        ? {
+            rowColors: extractedRowColors,
+            colColors: extractedColColors,
+            colColorEnabled: extractedColEnabled,
+            markColorSource: 'row',
+            cellFillStyle: styleInfo.cellFillStyle || undefined,
+            cellTopStyle: undefined,
+            tabRightStyle: undefined,
+            gridContainerStyle: undefined,
+            assistLineStyle: undefined,
+            markStyle: styleInfo.markStyle || undefined,
+            markStyles: styleInfo.markStyles || [],
+            rowStrokeStyles: styleInfo.rowStrokeStyles || [],
+            colStrokeStyle: styleInfo.colStrokeStyle || null
+        }
+        : {
+            rowColors: resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors),
+            colColors: resolveColColorsFromNode(node, Math.max(1, colCount)),
+            colColorEnabled: resolveColColorEnabledFromNode(node, Math.max(1, colCount)),
+            markColorSource: node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row'
+        };
+    const effectiveUiSnapshot = isInstanceTarget
+        ? applyLocalOverridesToUiSnapshot(baseUiSnapshot, localOverrideState.overrides, localOverrideState.mask)
+        : baseUiSnapshot;
+    const rowColors = Array.isArray(effectiveUiSnapshot.rowColors) ? effectiveUiSnapshot.rowColors : extractedRowColors;
+    const colColors = Array.isArray(effectiveUiSnapshot.colColors) ? effectiveUiSnapshot.colColors : extractedColColors;
+    const colColorEnabled = Array.isArray(effectiveUiSnapshot.colColorEnabled) ? effectiveUiSnapshot.colColorEnabled : extractedColEnabled;
+    const markColorSource = effectiveUiSnapshot.markColorSource === 'col' ? 'col' : 'row';
 
     figma.ui.postMessage({
         type: 'init',
@@ -399,24 +481,54 @@ export async function initPluginUI(
         markRatio,
         assistLineVisible,
         assistLineEnabled,
-        savedCellTopStyle,
-        savedCellFillStyle,
-        savedTabRightStyle,
-        savedGridContainerStyle,
-        savedAssistLineStyle,
-        savedMarkStyle,
-        savedMarkStyles,
+        savedCellTopStyle: isInstanceTarget
+            ? (localOverrideState.mask.cellTopStyle ? localOverrideState.overrides.cellTopStyle : undefined)
+            : savedCellTopStyle,
+        savedCellFillStyle: isInstanceTarget
+            ? (localOverrideState.mask.cellFillStyle ? localOverrideState.overrides.cellFillStyle : undefined)
+            : savedCellFillStyle,
+        savedTabRightStyle: isInstanceTarget
+            ? (localOverrideState.mask.tabRightStyle ? localOverrideState.overrides.tabRightStyle : undefined)
+            : savedTabRightStyle,
+        savedGridContainerStyle: isInstanceTarget
+            ? (localOverrideState.mask.gridContainerStyle ? localOverrideState.overrides.gridContainerStyle : undefined)
+            : savedGridContainerStyle,
+        savedAssistLineStyle: isInstanceTarget
+            ? (localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined)
+            : savedAssistLineStyle,
+        savedMarkStyle: isInstanceTarget
+            ? (localOverrideState.mask.markStyle ? localOverrideState.overrides.markStyle : undefined)
+            : savedMarkStyle,
+        savedMarkStyles: isInstanceTarget
+            ? (localOverrideState.mask.markStyles ? localOverrideState.overrides.markStyles : undefined)
+            : savedMarkStyles,
         savedRowHeaderLabels,
         savedXAxisLabels,
 
-        cellFillStyle: styleInfo.cellFillStyle || null,
-        markStyle: styleInfo.markStyle || null,
-        markStyles: styleInfo.markStyles || [],
-        colStrokeStyle: styleInfo.colStrokeStyle || null,
+        cellFillStyle: effectiveUiSnapshot.cellFillStyle || styleInfo.cellFillStyle || null,
+        markStyle: effectiveUiSnapshot.markStyle || styleInfo.markStyle || null,
+        markStyles: effectiveUiSnapshot.markStyles || styleInfo.markStyles || [],
+        colStrokeStyle: effectiveUiSnapshot.colStrokeStyle || styleInfo.colStrokeStyle || null,
         chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
         assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
         cellStrokeStyles: styleInfo.cellStrokeStyles || [],
-        rowStrokeStyles: styleInfo.rowStrokeStyles || []
+        rowStrokeStyles: effectiveUiSnapshot.rowStrokeStyles || styleInfo.rowStrokeStyles || [],
+        isInstanceTarget,
+        extractedStyleSnapshot: {
+            rowColors: extractedRowColors,
+            colColors: extractedColColors,
+            colColorEnabled: extractedColEnabled,
+            markColorSource: 'row',
+            cellFillStyle: styleInfo.cellFillStyle || null,
+            markStyle: styleInfo.markStyle || null,
+            markStyles: styleInfo.markStyles || [],
+            rowStrokeStyles: styleInfo.rowStrokeStyles || [],
+            colStrokeStyle: styleInfo.colStrokeStyle || null,
+            chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
+            assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null
+        },
+        localStyleOverrides: localOverrideState.overrides,
+        localStyleOverrideMask: localOverrideState.mask
     });
 }
 

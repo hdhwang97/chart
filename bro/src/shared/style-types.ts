@@ -1,4 +1,6 @@
 export type StrokeAlign = 'CENTER' | 'INSIDE' | 'OUTSIDE';
+export type StyleApplyMode = 'data_only' | 'include_style';
+export type StyleSourceMode = 'master_extracted' | 'local_override';
 
 export type StrokeStyleSnapshot = {
     color?: string;
@@ -71,6 +73,42 @@ export type StrokeInjectionPayload = {
     assistLineStyle?: AssistLineInjectionStyle;
     markStyle?: MarkInjectionStyle;
     markStyles?: MarkInjectionStyle[];
+};
+
+export type LocalStyleOverrides = {
+    rowColors?: string[];
+    colColors?: string[];
+    colColorEnabled?: boolean[];
+    markColorSource?: 'row' | 'col';
+    assistLineVisible?: boolean;
+    assistLineEnabled?: { min?: boolean; max?: boolean; avg?: boolean };
+    cellFillStyle?: CellFillInjectionStyle;
+    cellTopStyle?: SideStrokeInjectionStyle;
+    tabRightStyle?: SideStrokeInjectionStyle;
+    gridContainerStyle?: GridStrokeInjectionStyle;
+    assistLineStyle?: AssistLineInjectionStyle;
+    markStyle?: MarkInjectionStyle;
+    markStyles?: MarkInjectionStyle[];
+    rowStrokeStyles?: RowStrokeStyle[];
+    colStrokeStyle?: StrokeStyleSnapshot | null;
+};
+
+export type LocalStyleOverrideMask = {
+    rowColors?: boolean;
+    colColors?: boolean;
+    colColorEnabled?: boolean;
+    markColorSource?: boolean;
+    assistLineVisible?: boolean;
+    assistLineEnabled?: boolean;
+    cellFillStyle?: boolean;
+    cellTopStyle?: boolean;
+    tabRightStyle?: boolean;
+    gridContainerStyle?: boolean;
+    assistLineStyle?: boolean;
+    markStyle?: boolean;
+    markStyles?: boolean;
+    rowStrokeStyles?: boolean;
+    colStrokeStyle?: boolean;
 };
 
 export type StyleTemplatePayload = StrokeInjectionPayload;

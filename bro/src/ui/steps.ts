@@ -220,6 +220,9 @@ export function submitData() {
         ? toStrokeInjectionPayload(validatedStyleDraft.draft)
         : null;
 
+    const msgType = state.uiMode === 'edit' ? 'apply' : 'generate';
+    const styleApplyMode = msgType === 'generate' ? 'include_style' : 'include_style';
+
     const payload = {
         type: state.chartType,
         mode: state.dataMode,
@@ -250,10 +253,12 @@ export function submitData() {
         },
         rowStrokeStyles: state.rowStrokeStyles,
         colStrokeStyle: state.colStrokeStyle,
+        localStyleOverrides: state.isInstanceTarget ? state.localStyleOverrides : undefined,
+        localStyleOverrideMask: state.isInstanceTarget ? state.localStyleOverrideMask : undefined,
+        styleApplyMode,
         ...(explicitStylePayload || {})
     };
 
-    const msgType = state.uiMode === 'edit' ? 'apply' : 'generate';
     parent.postMessage({ pluginMessage: { type: msgType, payload } }, '*');
 }
 

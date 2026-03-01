@@ -12,6 +12,8 @@ import {
     getGridColsForChart,
     getRowColor,
     getTotalStackedCols,
+    recomputeEffectiveStyleSnapshot,
+    setLocalStyleOverrideField,
     state,
     normalizeHexColorInput
 } from './state';
@@ -19,6 +21,8 @@ import type {
     AssistLineInjectionStyle,
     CellFillInjectionStyle,
     GridStrokeInjectionStyle,
+    LocalStyleOverrideMask,
+    LocalStyleOverrides,
     MarkInjectionStyle,
     RowStrokeStyle,
     SideStrokeInjectionStyle,
@@ -959,6 +963,74 @@ export function buildTemplatePayloadFromDraft(draft: StyleInjectionDraft): Style
     return toStrokeInjectionPayload(draft);
 }
 
+export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
+    overrides: LocalStyleOverrides;
+    mask: LocalStyleOverrideMask;
+} {
+    return {
+        overrides: {
+            cellFillStyle: {
+                color: draft.cellFill.color
+            },
+            cellTopStyle: {
+                color: draft.cellTop.color,
+                thickness: draft.cellTop.thickness,
+                visible: draft.cellTop.visible,
+                strokeStyle: draft.cellTop.strokeStyle
+            },
+            tabRightStyle: {
+                color: draft.tabRight.color,
+                thickness: draft.tabRight.thickness,
+                visible: draft.tabRight.visible,
+                strokeStyle: draft.tabRight.strokeStyle
+            },
+            gridContainerStyle: {
+                color: draft.gridContainer.color,
+                thickness: draft.gridContainer.thickness,
+                visible: draft.gridContainer.visible,
+                strokeStyle: draft.gridContainer.strokeStyle,
+                enableIndividualStroke: true,
+                sides: {
+                    top: draft.gridContainer.sides.top,
+                    right: draft.gridContainer.sides.right,
+                    bottom: draft.gridContainer.sides.bottom,
+                    left: draft.gridContainer.sides.left
+                }
+            },
+            assistLineStyle: {
+                color: draft.assistLine.color,
+                thickness: draft.assistLine.thickness,
+                strokeStyle: draft.assistLine.strokeStyle
+            },
+            markStyle: {
+                fillColor: draft.mark.fillColor,
+                strokeColor: draft.mark.strokeColor,
+                thickness: draft.mark.thickness,
+                strokeStyle: draft.mark.strokeStyle
+            },
+            markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item) => ({
+                fillColor: item.fillColor,
+                strokeColor: item.strokeColor,
+                thickness: item.thickness,
+                strokeStyle: item.strokeStyle
+            })),
+            rowStrokeStyles: state.rowStrokeStyles,
+            colStrokeStyle: state.colStrokeStyle || undefined
+        },
+        mask: {
+            cellFillStyle: true,
+            cellTopStyle: true,
+            tabRightStyle: true,
+            gridContainerStyle: true,
+            assistLineStyle: true,
+            markStyle: true,
+            markStyles: true,
+            rowStrokeStyles: true,
+            colStrokeStyle: true
+        }
+    };
+}
+
 export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
     const nextDraft = buildDraftFromPayload(toSavedStylePayload(template.payload), {});
     setStyleInjectionDraft(nextDraft);
@@ -979,6 +1051,21 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
             .map((flag) => Boolean(flag))
             .slice(0, totalCols);
         ensureColHeaderColorEnabledLength(totalCols);
+    }
+    if (state.isInstanceTarget) {
+        const draftOverrides = buildLocalStyleOverridesFromDraft(nextDraft);
+        setLocalStyleOverrideField('cellFillStyle', draftOverrides.overrides.cellFillStyle);
+        setLocalStyleOverrideField('cellTopStyle', draftOverrides.overrides.cellTopStyle);
+        setLocalStyleOverrideField('tabRightStyle', draftOverrides.overrides.tabRightStyle);
+        setLocalStyleOverrideField('gridContainerStyle', draftOverrides.overrides.gridContainerStyle);
+        setLocalStyleOverrideField('assistLineStyle', draftOverrides.overrides.assistLineStyle);
+        setLocalStyleOverrideField('markStyle', draftOverrides.overrides.markStyle);
+        setLocalStyleOverrideField('markStyles', draftOverrides.overrides.markStyles);
+        setLocalStyleOverrideField('rowStrokeStyles', draftOverrides.overrides.rowStrokeStyles);
+        setLocalStyleOverrideField('colStrokeStyle', draftOverrides.overrides.colStrokeStyle);
+        setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());
+        setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
+        recomputeEffectiveStyleSnapshot();
     }
     markStyleInjectionDirty();
     state.selectedStyleTemplateId = template.id;

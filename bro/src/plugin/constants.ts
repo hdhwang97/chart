@@ -65,7 +65,9 @@ export const PLUGIN_DATA_KEYS = {
     LAST_CELL_TOP_STYLE: "lastCellTopStyle",
     LAST_CELL_BOTTOM_STYLE: "lastCellBottomStyle",
     LAST_TAB_RIGHT_STYLE: "lastTabRightStyle",
-    LAST_GRID_CONTAINER_STYLE: "lastGridContainerStyle"
+    LAST_GRID_CONTAINER_STYLE: "lastGridContainerStyle",
+    LAST_LOCAL_STYLE_OVERRIDES: "lastLocalStyleOverridesV1",
+    LAST_LOCAL_STYLE_OVERRIDE_MASK: "lastLocalStyleOverrideMaskV1"
 } as const;
 
 export const CLIENT_STORAGE_KEYS = {

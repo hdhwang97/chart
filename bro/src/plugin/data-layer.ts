@@ -1,7 +1,16 @@
 import { PLUGIN_DATA_KEYS } from './constants';
 import { inferStructureFromGraph } from './init';
 import { normalizeHexColor } from './utils';
-import type { AssistLineInjectionStyle, CellFillInjectionStyle, GridStrokeInjectionStyle, MarkInjectionStyle, SideStrokeInjectionStyle } from '../shared/style-types';
+import type {
+    AssistLineInjectionStyle,
+    CellFillInjectionStyle,
+    GridStrokeInjectionStyle,
+    LocalStyleOverrideMask,
+    LocalStyleOverrides,
+    MarkInjectionStyle,
+    SideStrokeInjectionStyle,
+    StyleApplyMode
+} from '../shared/style-types';
 
 // ==========================================
 // DATA LAYER (저장/로드 핵심 로직)
@@ -79,6 +88,116 @@ function normalizeColColorEnabled(value: unknown, colCount: number): boolean[] {
         next.push(Boolean(source[i]));
     }
     return next;
+}
+
+function normalizeStyleApplyMode(value: unknown): StyleApplyMode {
+    return value === 'data_only' ? 'data_only' : 'include_style';
+}
+
+function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask {
+    if (!value || typeof value !== 'object') return {};
+    const source = value as Record<string, unknown>;
+    const keys: Array<keyof LocalStyleOverrideMask> = [
+        'rowColors',
+        'colColors',
+        'colColorEnabled',
+        'markColorSource',
+        'assistLineVisible',
+        'assistLineEnabled',
+        'cellFillStyle',
+        'cellTopStyle',
+        'tabRightStyle',
+        'gridContainerStyle',
+        'assistLineStyle',
+        'markStyle',
+        'markStyles',
+        'rowStrokeStyles',
+        'colStrokeStyle'
+    ];
+    const next: LocalStyleOverrideMask = {};
+    keys.forEach((key) => {
+        if (key in source) next[key] = Boolean(source[key]);
+    });
+    return next;
+}
+
+function hasTruthyMask(mask: LocalStyleOverrideMask): boolean {
+    return Object.values(mask).some((value) => Boolean(value));
+}
+
+function sanitizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
+    if (!value || typeof value !== 'object') return {};
+    const source = value as LocalStyleOverrides;
+    const next: LocalStyleOverrides = {};
+
+    if (Array.isArray(source.rowColors)) next.rowColors = normalizeRowColors(source.rowColors);
+    if (Array.isArray(source.colColors)) next.colColors = normalizeRowColors(source.colColors);
+    if (Array.isArray(source.colColorEnabled)) next.colColorEnabled = source.colColorEnabled.map((v) => Boolean(v));
+    if (source.markColorSource === 'col' || source.markColorSource === 'row') next.markColorSource = source.markColorSource;
+    if (typeof source.assistLineVisible === 'boolean') next.assistLineVisible = source.assistLineVisible;
+    if (source.assistLineEnabled && typeof source.assistLineEnabled === 'object') {
+        next.assistLineEnabled = normalizeAssistLineEnabled(source.assistLineEnabled);
+    }
+    const cellFillStyle = normalizeCellFillStyle(source.cellFillStyle);
+    if (cellFillStyle) next.cellFillStyle = cellFillStyle;
+    const cellTopStyle = normalizeSideStrokeStyle(source.cellTopStyle);
+    if (cellTopStyle) next.cellTopStyle = cellTopStyle;
+    const tabRightStyle = normalizeSideStrokeStyle(source.tabRightStyle);
+    if (tabRightStyle) next.tabRightStyle = tabRightStyle;
+    const gridContainerStyle = normalizeGridStrokeStyle(source.gridContainerStyle);
+    if (gridContainerStyle) next.gridContainerStyle = gridContainerStyle;
+    const assistLineStyle = normalizeAssistLineStyle(source.assistLineStyle);
+    if (assistLineStyle) next.assistLineStyle = assistLineStyle;
+    const markStyle = normalizeMarkStyle(source.markStyle);
+    if (markStyle) next.markStyle = markStyle;
+    const markStyles = normalizeMarkStyles(source.markStyles);
+    if (markStyles.length > 0) next.markStyles = markStyles;
+    if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
+    if (source.colStrokeStyle && typeof source.colStrokeStyle === 'object') next.colStrokeStyle = source.colStrokeStyle;
+
+    return next;
+}
+
+export function saveLocalStyleOverrides(
+    node: SceneNode,
+    overrides: unknown,
+    mask: unknown
+) {
+    const normalizedMask = normalizeLocalStyleOverrideMask(mask);
+    if (!hasTruthyMask(normalizedMask)) {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_LOCAL_STYLE_OVERRIDES, '');
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_LOCAL_STYLE_OVERRIDE_MASK, '');
+        return;
+    }
+    const normalizedOverrides = sanitizeLocalStyleOverrides(overrides);
+    node.setPluginData(PLUGIN_DATA_KEYS.LAST_LOCAL_STYLE_OVERRIDES, JSON.stringify(normalizedOverrides));
+    node.setPluginData(PLUGIN_DATA_KEYS.LAST_LOCAL_STYLE_OVERRIDE_MASK, JSON.stringify(normalizedMask));
+}
+
+export function loadLocalStyleOverrides(node: SceneNode): {
+    overrides: LocalStyleOverrides;
+    mask: LocalStyleOverrideMask;
+} {
+    let overrides: LocalStyleOverrides = {};
+    let mask: LocalStyleOverrideMask = {};
+
+    const rawOverrides = node.getPluginData(PLUGIN_DATA_KEYS.LAST_LOCAL_STYLE_OVERRIDES);
+    if (rawOverrides) {
+        try {
+            overrides = sanitizeLocalStyleOverrides(JSON.parse(rawOverrides));
+        } catch {
+            overrides = {};
+        }
+    }
+    const rawMask = node.getPluginData(PLUGIN_DATA_KEYS.LAST_LOCAL_STYLE_OVERRIDE_MASK);
+    if (rawMask) {
+        try {
+            mask = normalizeLocalStyleOverrideMask(JSON.parse(rawMask));
+        } catch {
+            mask = {};
+        }
+    }
+    return { overrides, mask };
 }
 
 function normalizeThickness(value: unknown): number | undefined {
@@ -199,6 +318,9 @@ function recoverLegacyStackedValuesIfNeeded(values: any, markNum: any) {
 
 // styleInfo를 받아 스타일 데이터도 함께 저장
 export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
+    const styleApplyMode = normalizeStyleApplyMode(msg?.styleApplyMode);
+    const shouldSaveStyleKeys = styleApplyMode === 'include_style';
+
     node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(msg.rawValues));
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(msg.values));
@@ -226,10 +348,6 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE,
         String(Boolean(msg.assistLineVisible))
     );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_ROW_COLORS,
-        JSON.stringify(normalizeRowColors(msg.rowColors))
-    );
     const rowCount = Number.isFinite(Number(msg.rows))
         ? Number(msg.rows)
         : (Array.isArray(msg.rawValues) ? msg.rawValues.length : 1);
@@ -237,21 +355,27 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS,
         JSON.stringify(normalizeRowHeaderLabels(msg.rowHeaderLabels, rowCount, msg.type))
     );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_COL_COLORS,
-        JSON.stringify(normalizeRowColors(msg.colColors))
-    );
-    const msgCols = Number.isFinite(Number(msg.cols)) ? Number(msg.cols) : 0;
-    const xAxisCount = Array.isArray(msg.xAxisLabels) ? msg.xAxisLabels.length : 0;
-    const colCount = Math.max(1, msgCols, xAxisCount);
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_COL_COLOR_ENABLED,
-        JSON.stringify(normalizeColColorEnabled(msg.colColorEnabled, colCount))
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE,
-        normalizeMarkColorSource(msg.markColorSource)
-    );
+    if (shouldSaveStyleKeys) {
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_ROW_COLORS,
+            JSON.stringify(normalizeRowColors(msg.rowColors))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_COL_COLORS,
+            JSON.stringify(normalizeRowColors(msg.colColors))
+        );
+        const msgCols = Number.isFinite(Number(msg.cols)) ? Number(msg.cols) : 0;
+        const xAxisCount = Array.isArray(msg.xAxisLabels) ? msg.xAxisLabels.length : 0;
+        const colCount = Math.max(1, msgCols, xAxisCount);
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_COL_COLOR_ENABLED,
+            JSON.stringify(normalizeColColorEnabled(msg.colColorEnabled, colCount))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE,
+            normalizeMarkColorSource(msg.markColorSource)
+        );
+    }
 
     // UI에서 직접 넘어온 Stroke Width가 있다면 우선 저장
     if (msg.strokeWidth) {
@@ -280,47 +404,49 @@ export function saveChartData(node: SceneNode, msg: any, styleInfo?: any) {
         }
     }
 
-    const cellFillStyle = normalizeCellFillStyle(msg.cellFillStyle);
-    const cellTopStyle = normalizeSideStrokeStyle(msg.cellTopStyle ?? msg.cellBottomStyle);
-    const tabRightStyle = normalizeSideStrokeStyle(msg.tabRightStyle);
-    const gridContainerStyle = normalizeGridStrokeStyle(msg.gridContainerStyle);
-    const assistLineStyle = normalizeAssistLineStyle(msg.assistLineStyle);
-    const markStyle = normalizeMarkStyle(msg.markStyle);
-    const markStyles = normalizeMarkStyles(msg.markStyles);
+    if (shouldSaveStyleKeys) {
+        const cellFillStyle = normalizeCellFillStyle(msg.cellFillStyle);
+        const cellTopStyle = normalizeSideStrokeStyle(msg.cellTopStyle ?? msg.cellBottomStyle);
+        const tabRightStyle = normalizeSideStrokeStyle(msg.tabRightStyle);
+        const gridContainerStyle = normalizeGridStrokeStyle(msg.gridContainerStyle);
+        const assistLineStyle = normalizeAssistLineStyle(msg.assistLineStyle);
+        const markStyle = normalizeMarkStyle(msg.markStyle);
+        const markStyles = normalizeMarkStyles(msg.markStyles);
 
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_CELL_FILL_STYLE,
-        cellFillStyle ? JSON.stringify(cellFillStyle) : ''
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE,
-        cellTopStyle ? JSON.stringify(cellTopStyle) : ''
-    );
-    // Legacy compatibility for previously-saved charts.
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE,
-        cellTopStyle ? JSON.stringify(cellTopStyle) : ''
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE,
-        tabRightStyle ? JSON.stringify(tabRightStyle) : ''
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE,
-        gridContainerStyle ? JSON.stringify(gridContainerStyle) : ''
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE,
-        assistLineStyle ? JSON.stringify(assistLineStyle) : ''
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_MARK_STYLE,
-        markStyle ? JSON.stringify(markStyle) : ''
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_MARK_STYLES,
-        markStyles.length > 0 ? JSON.stringify(markStyles) : ''
-    );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_CELL_FILL_STYLE,
+            cellFillStyle ? JSON.stringify(cellFillStyle) : ''
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE,
+            cellTopStyle ? JSON.stringify(cellTopStyle) : ''
+        );
+        // Legacy compatibility for previously-saved charts.
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE,
+            cellTopStyle ? JSON.stringify(cellTopStyle) : ''
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE,
+            tabRightStyle ? JSON.stringify(tabRightStyle) : ''
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE,
+            gridContainerStyle ? JSON.stringify(gridContainerStyle) : ''
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE,
+            assistLineStyle ? JSON.stringify(assistLineStyle) : ''
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_MARK_STYLE,
+            markStyle ? JSON.stringify(markStyle) : ''
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_MARK_STYLES,
+            markStyles.length > 0 ? JSON.stringify(markStyles) : ''
+        );
+    }
 }
 
 export async function loadChartData(node: SceneNode, chartType: string) {

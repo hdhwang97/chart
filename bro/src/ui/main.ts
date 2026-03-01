@@ -13,7 +13,11 @@ import {
     ensureColHeaderTitlesLength,
     getDefaultRowColor,
     getRowColor,
-    normalizeHexColorInput
+    normalizeHexColorInput,
+    recomputeEffectiveStyleSnapshot,
+    resetLocalStyleOverrideState,
+    setLocalStyleOverrideField,
+    setLocalStyleOverrideSnapshot
 } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
@@ -23,7 +27,8 @@ import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, refreshExportPreview } from './export';
-import { bindStyleTabEvents, buildTemplatePayloadFromDraft, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
+import { bindStyleTabEvents, buildTemplatePayloadFromDraft, buildLocalStyleOverridesFromDraft, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
+import type { LocalStyleOverrideMask, LocalStyleOverrides } from '../shared/style-types';
 import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
 
 // ==========================================
@@ -96,6 +101,50 @@ function applyColHeaderTitlesFromPayload(
         typeof label === 'string' ? label.trim() : ''
     ));
     return ensureColHeaderTitlesLength(colCount, chartType);
+}
+
+function normalizeIncomingLocalMask(value: unknown): LocalStyleOverrideMask {
+    if (!value || typeof value !== 'object') return {};
+    const source = value as Record<string, unknown>;
+    const keys: Array<keyof LocalStyleOverrideMask> = [
+        'rowColors', 'colColors', 'colColorEnabled', 'markColorSource',
+        'assistLineVisible', 'assistLineEnabled',
+        'cellFillStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
+        'assistLineStyle', 'markStyle', 'markStyles', 'rowStrokeStyles', 'colStrokeStyle'
+    ];
+    const next: LocalStyleOverrideMask = {};
+    keys.forEach((key) => {
+        if (key in source) next[key] = Boolean(source[key]);
+    });
+    return next;
+}
+
+function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
+    if (!value || typeof value !== 'object') return {};
+    const source = value as LocalStyleOverrides;
+    const next: LocalStyleOverrides = {};
+    if (Array.isArray(source.rowColors)) next.rowColors = source.rowColors.map((v) => normalizeHexColorInput(v) || '').filter((v) => Boolean(v));
+    if (Array.isArray(source.colColors)) next.colColors = source.colColors.map((v) => normalizeHexColorInput(v) || '').filter((v) => Boolean(v));
+    if (Array.isArray(source.colColorEnabled)) next.colColorEnabled = source.colColorEnabled.map((v) => Boolean(v));
+    if (source.markColorSource === 'col' || source.markColorSource === 'row') next.markColorSource = source.markColorSource;
+    if (typeof source.assistLineVisible === 'boolean') next.assistLineVisible = source.assistLineVisible;
+    if (source.assistLineEnabled && typeof source.assistLineEnabled === 'object') {
+        next.assistLineEnabled = {
+            min: Boolean(source.assistLineEnabled.min),
+            max: Boolean(source.assistLineEnabled.max),
+            avg: Boolean(source.assistLineEnabled.avg)
+        };
+    }
+    if (source.cellFillStyle) next.cellFillStyle = source.cellFillStyle;
+    if (source.cellTopStyle) next.cellTopStyle = source.cellTopStyle;
+    if (source.tabRightStyle) next.tabRightStyle = source.tabRightStyle;
+    if (source.gridContainerStyle) next.gridContainerStyle = source.gridContainerStyle;
+    if (source.assistLineStyle) next.assistLineStyle = source.assistLineStyle;
+    if (source.markStyle) next.markStyle = source.markStyle;
+    if (Array.isArray(source.markStyles)) next.markStyles = source.markStyles;
+    if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
+    if (source.colStrokeStyle) next.colStrokeStyle = source.colStrokeStyle;
+    return next;
 }
 
 function closeRowColorPopover() {
@@ -226,8 +275,16 @@ function applyColorHex(target: { type: 'row' | 'col'; index: number }, rawHex: s
         ensureRowColorsLength(state.rows);
         if (isRowColorDisabledByColOverrides()) return false;
         state.rowColors[target.index] = normalized;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('rowColors', ensureRowColorsLength(state.rows).slice());
+            recomputeEffectiveStyleSnapshot();
+        }
         if (state.rows === 1 && state.chartType !== 'stackedBar') {
             state.markColorSource = 'row';
+            if (state.isInstanceTarget) {
+                setLocalStyleOverrideField('markColorSource', 'row');
+                recomputeEffectiveStyleSnapshot();
+            }
         }
         updateRowColorSwatchDom(target.index);
         syncMarkStylesFromHeaderColors(false);
@@ -237,8 +294,17 @@ function applyColorHex(target: { type: 'row' | 'col'; index: number }, rawHex: s
         ensureColHeaderColorEnabledLength(totalCols);
         state.colHeaderColors[target.index] = normalized;
         state.colHeaderColorEnabled[target.index] = true;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());
+            setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
+            recomputeEffectiveStyleSnapshot();
+        }
         if (state.rows === 1 && state.chartType !== 'stackedBar') {
             state.markColorSource = 'col';
+            if (state.isInstanceTarget) {
+                setLocalStyleOverrideField('markColorSource', 'col');
+                recomputeEffectiveStyleSnapshot();
+            }
         }
         updateColColorSwatchDom(target.index);
     }
@@ -334,6 +400,8 @@ function handlePluginMessage(msg: any) {
         if (!msg.chartType) {
             // No selection
             state.uiMode = 'create';
+            state.isInstanceTarget = false;
+            resetLocalStyleOverrideState();
             state.mode = 'edit';
             state.markRatio = 0.8;
             state.rowColors = [getDefaultRowColor(0), getDefaultRowColor(1), getDefaultRowColor(2)];
@@ -364,6 +432,13 @@ function handlePluginMessage(msg: any) {
 
         state.uiMode = 'edit';
         state.chartType = msg.chartType;
+        state.isInstanceTarget = Boolean(msg.isInstanceTarget);
+        state.extractedStyleSnapshot = normalizeIncomingLocalOverrides(msg.extractedStyleSnapshot);
+        setLocalStyleOverrideSnapshot(
+            normalizeIncomingLocalOverrides(msg.localStyleOverrides),
+            normalizeIncomingLocalMask(msg.localStyleOverrideMask)
+        );
+        recomputeEffectiveStyleSnapshot();
 
         // Chart type badge
         ui.chartTypeWrapper.classList.remove('hidden');
@@ -527,6 +602,17 @@ function handlePluginMessage(msg: any) {
     }
 
     if (msg.type === 'style_extracted') {
+        if (msg.payload) {
+            if (msg.payload.isInstanceTarget !== undefined) {
+                state.isInstanceTarget = Boolean(msg.payload.isInstanceTarget);
+            }
+            state.extractedStyleSnapshot = normalizeIncomingLocalOverrides(msg.payload.extractedStyleSnapshot);
+            setLocalStyleOverrideSnapshot(
+                normalizeIncomingLocalOverrides(msg.payload.localStyleOverrides),
+                normalizeIncomingLocalMask(msg.payload.localStyleOverrideMask)
+            );
+            recomputeEffectiveStyleSnapshot();
+        }
         const extractedDraftPayload = {
             cellFillStyle: msg.payload?.cellFillStyle,
             markStyle: msg.payload?.markStyle,
@@ -539,7 +625,9 @@ function handlePluginMessage(msg: any) {
 
         if (msg.source === 'extract_style') {
             const wasDirty = state.styleInjectionDirty;
-            const syncApplied = syncStyleTabDraftFromExtracted(extractedDraftPayload);
+            const syncApplied = state.isInstanceTarget
+                ? false
+                : syncStyleTabDraftFromExtracted(extractedDraftPayload);
             if (syncApplied) {
                 syncAllHexPreviewsFromDom();
                 renderGrid();
@@ -646,19 +734,35 @@ function bindUiEvents() {
     });
     ui.assistLineToggleBtn.addEventListener('click', () => {
         state.assistLineVisible = !state.assistLineVisible;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('assistLineVisible', state.assistLineVisible);
+            recomputeEffectiveStyleSnapshot();
+        }
         updateAssistLineToggleUi();
         checkCtaValidation();
     });
     ui.assistLineMinCheck.addEventListener('change', () => {
         state.assistLineEnabled.min = ui.assistLineMinCheck.checked;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('assistLineEnabled', { ...state.assistLineEnabled });
+            recomputeEffectiveStyleSnapshot();
+        }
         checkCtaValidation();
     });
     ui.assistLineMaxCheck.addEventListener('change', () => {
         state.assistLineEnabled.max = ui.assistLineMaxCheck.checked;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('assistLineEnabled', { ...state.assistLineEnabled });
+            recomputeEffectiveStyleSnapshot();
+        }
         checkCtaValidation();
     });
     ui.assistLineAvgCheck.addEventListener('change', () => {
         state.assistLineEnabled.avg = ui.assistLineAvgCheck.checked;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('assistLineEnabled', { ...state.assistLineEnabled });
+            recomputeEffectiveStyleSnapshot();
+        }
         checkCtaValidation();
     });
     ui.assistLinePopover.addEventListener('click', (e) => e.stopPropagation());
@@ -718,6 +822,12 @@ function bindUiEvents() {
         ensureColHeaderColorEnabledLength(totalCols);
         state.colHeaderColorEnabled[activeColorTarget.index] = false;
         state.colHeaderColors[activeColorTarget.index] = getRowColor(0);
+        if (state.isInstanceTarget) {
+            const totalCols = getGridColsForChart(state.chartType, state.cols);
+            setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());
+            setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
+            recomputeEffectiveStyleSnapshot();
+        }
         updateColColorSwatchDom(activeColorTarget.index);
         const fallback = normalizeHexColorInput(state.colHeaderColors[activeColorTarget.index]) || getRowColor(0);
         updateColorPopoverUi(activeColorTarget, fallback);
@@ -786,6 +896,20 @@ function bindUiEvents() {
         parent.postMessage({ pluginMessage: { type: 'save_style_template', name, payload } }, '*');
     });
     document.addEventListener('style-draft-updated', () => {
+        if (state.isInstanceTarget) {
+            const draft = readStyleTabDraft();
+            const fromDraft = buildLocalStyleOverridesFromDraft(draft);
+            if (fromDraft.mask.cellFillStyle) setLocalStyleOverrideField('cellFillStyle', fromDraft.overrides.cellFillStyle);
+            if (fromDraft.mask.cellTopStyle) setLocalStyleOverrideField('cellTopStyle', fromDraft.overrides.cellTopStyle);
+            if (fromDraft.mask.tabRightStyle) setLocalStyleOverrideField('tabRightStyle', fromDraft.overrides.tabRightStyle);
+            if (fromDraft.mask.gridContainerStyle) setLocalStyleOverrideField('gridContainerStyle', fromDraft.overrides.gridContainerStyle);
+            if (fromDraft.mask.assistLineStyle) setLocalStyleOverrideField('assistLineStyle', fromDraft.overrides.assistLineStyle);
+            if (fromDraft.mask.markStyle) setLocalStyleOverrideField('markStyle', fromDraft.overrides.markStyle);
+            if (fromDraft.mask.markStyles) setLocalStyleOverrideField('markStyles', fromDraft.overrides.markStyles);
+            if (fromDraft.mask.rowStrokeStyles) setLocalStyleOverrideField('rowStrokeStyles', fromDraft.overrides.rowStrokeStyles);
+            if (fromDraft.mask.colStrokeStyle) setLocalStyleOverrideField('colStrokeStyle', fromDraft.overrides.colStrokeStyle);
+            recomputeEffectiveStyleSnapshot();
+        }
         state.selectedStyleTemplateId = null;
         renderStyleTemplateGallery();
     });

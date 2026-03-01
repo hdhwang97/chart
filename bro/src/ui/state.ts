@@ -2,7 +2,14 @@
 // STATE & CONSTANTS
 // ==========================================
 
-import type { CellStrokeStyle, RowStrokeStyle, StrokeStyleSnapshot, StyleTemplateItem } from '../shared/style-types';
+import type {
+    CellStrokeStyle,
+    LocalStyleOverrideMask,
+    LocalStyleOverrides,
+    RowStrokeStyle,
+    StrokeStyleSnapshot,
+    StyleTemplateItem
+} from '../shared/style-types';
 
 export const MAX_SIZE = 25;
 export const DEFAULT_ROW_COLORS = [
@@ -105,6 +112,11 @@ export const state = {
     colStrokeStyle: null as StrokeStyleSnapshot | null,
     cellStrokeStyles: [] as CellStrokeStyle[],
     rowStrokeStyles: [] as RowStrokeStyle[],
+    isInstanceTarget: false,
+    extractedStyleSnapshot: {} as LocalStyleOverrides,
+    localStyleOverrides: {} as LocalStyleOverrides,
+    localStyleOverrideMask: {} as LocalStyleOverrideMask,
+    effectiveStyleSnapshot: {} as LocalStyleOverrides,
     styleInjectionDraft: {
         cellFill: { color: '#FFFFFF' },
         cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
@@ -139,6 +151,54 @@ export const state = {
     editingTemplateId: null as string | null,
     editingTemplateName: '' as string
 };
+
+function cloneOverrideValue<T>(value: T): T {
+    if (Array.isArray(value)) return [...value] as T;
+    if (value && typeof value === 'object') return { ...(value as Record<string, unknown>) } as T;
+    return value;
+}
+
+export function resetLocalStyleOverrideState() {
+    state.extractedStyleSnapshot = {};
+    state.localStyleOverrides = {};
+    state.localStyleOverrideMask = {};
+    state.effectiveStyleSnapshot = {};
+}
+
+export function setLocalStyleOverrideField<K extends keyof LocalStyleOverrides>(
+    key: K,
+    value: LocalStyleOverrides[K]
+) {
+    state.localStyleOverrides = {
+        ...state.localStyleOverrides,
+        [key]: cloneOverrideValue(value)
+    };
+    state.localStyleOverrideMask = {
+        ...state.localStyleOverrideMask,
+        [key]: true
+    };
+}
+
+export function setLocalStyleOverrideSnapshot(
+    overrides: LocalStyleOverrides,
+    mask: LocalStyleOverrideMask
+) {
+    state.localStyleOverrides = { ...overrides };
+    state.localStyleOverrideMask = { ...mask };
+}
+
+export function recomputeEffectiveStyleSnapshot() {
+    const next: LocalStyleOverrides = { ...state.extractedStyleSnapshot };
+    const mask = state.localStyleOverrideMask || {};
+    (Object.keys(mask) as Array<keyof LocalStyleOverrideMask>).forEach((key) => {
+        if (!mask[key]) return;
+        const value = state.localStyleOverrides[key as keyof LocalStyleOverrides];
+        if (value === undefined) return;
+        (next as any)[key] = cloneOverrideValue(value);
+    });
+    state.effectiveStyleSnapshot = next;
+    return state.effectiveStyleSnapshot;
+}
 
 export const CHART_ICONS: { [key: string]: string } = {
     bar: `<svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M4 19h4v-7H4v7zm6 0h4V9h-4v10zm6-14v14h4V5h-4zm2-4H2v22h22V1h-2z"/></svg>`,
