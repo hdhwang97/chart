@@ -4,6 +4,7 @@ import { normalizeHexColor } from './utils';
 import type {
     AssistLineInjectionStyle,
     CellFillInjectionStyle,
+    ColorMode,
     GridStrokeInjectionStyle,
     LocalStyleOverrideMask,
     LocalStyleOverrides,
@@ -90,6 +91,36 @@ function normalizeColColorEnabled(value: unknown, colCount: number): boolean[] {
     return next;
 }
 
+function normalizeColorMode(value: unknown): ColorMode {
+    return value === 'paint_style' ? 'paint_style' : 'hex';
+}
+
+function normalizeColorModes(value: unknown, count: number): ColorMode[] {
+    const source = Array.isArray(value) ? value : [];
+    const safeCount = Math.max(1, Number.isFinite(count) ? Math.floor(count) : 1);
+    const next: ColorMode[] = [];
+    for (let i = 0; i < safeCount; i++) {
+        next.push(normalizeColorMode(source[i]));
+    }
+    return next;
+}
+
+function normalizeStyleId(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+}
+
+function normalizeStyleIds(value: unknown, count: number): Array<string | null> {
+    const source = Array.isArray(value) ? value : [];
+    const safeCount = Math.max(1, Number.isFinite(count) ? Math.floor(count) : 1);
+    const next: Array<string | null> = [];
+    for (let i = 0; i < safeCount; i++) {
+        next.push(normalizeStyleId(source[i]));
+    }
+    return next;
+}
+
 function normalizeStyleApplyMode(value: unknown): StyleApplyMode {
     return value === 'data_only' ? 'data_only' : 'include_style';
 }
@@ -99,7 +130,11 @@ function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask
     const source = value as Record<string, unknown>;
     const keys: Array<keyof LocalStyleOverrideMask> = [
         'rowColors',
+        'rowColorModes',
+        'rowPaintStyleIds',
         'colColors',
+        'colColorModes',
+        'colPaintStyleIds',
         'colColorEnabled',
         'markColorSource',
         'assistLineVisible',
@@ -131,7 +166,11 @@ function sanitizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
     const next: LocalStyleOverrides = {};
 
     if (Array.isArray(source.rowColors)) next.rowColors = normalizeRowColors(source.rowColors);
+    if (Array.isArray(source.rowColorModes)) next.rowColorModes = source.rowColorModes.map((v) => normalizeColorMode(v));
+    if (Array.isArray(source.rowPaintStyleIds)) next.rowPaintStyleIds = source.rowPaintStyleIds.map((v) => normalizeStyleId(v));
     if (Array.isArray(source.colColors)) next.colColors = normalizeRowColors(source.colColors);
+    if (Array.isArray(source.colColorModes)) next.colColorModes = source.colColorModes.map((v) => normalizeColorMode(v));
+    if (Array.isArray(source.colPaintStyleIds)) next.colPaintStyleIds = source.colPaintStyleIds.map((v) => normalizeStyleId(v));
     if (Array.isArray(source.colColorEnabled)) next.colColorEnabled = source.colColorEnabled.map((v) => Boolean(v));
     if (source.markColorSource === 'col' || source.markColorSource === 'row') next.markColorSource = source.markColorSource;
     if (typeof source.assistLineVisible === 'boolean') next.assistLineVisible = source.assistLineVisible;
@@ -366,9 +405,20 @@ export function saveChartData(
         );
     }
     if (shouldSaveStyleKeys) {
+        const rowCount = Number.isFinite(Number(msg.rows))
+            ? Number(msg.rows)
+            : (Array.isArray(msg.rawValues) ? msg.rawValues.length : 1);
         node.setPluginData(
             PLUGIN_DATA_KEYS.LAST_ROW_COLORS,
             JSON.stringify(normalizeRowColors(msg.rowColors))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_ROW_COLOR_MODES,
+            JSON.stringify(normalizeColorModes(msg.rowColorModes, rowCount))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_ROW_PAINT_STYLE_IDS,
+            JSON.stringify(normalizeStyleIds(msg.rowPaintStyleIds, rowCount))
         );
         node.setPluginData(
             PLUGIN_DATA_KEYS.LAST_COL_COLORS,
@@ -377,6 +427,14 @@ export function saveChartData(
         const msgCols = Number.isFinite(Number(msg.cols)) ? Number(msg.cols) : 0;
         const xAxisCount = Array.isArray(msg.xAxisLabels) ? msg.xAxisLabels.length : 0;
         const colCount = Math.max(1, msgCols, xAxisCount);
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_COL_COLOR_MODES,
+            JSON.stringify(normalizeColorModes(msg.colColorModes, colCount))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_COL_PAINT_STYLE_IDS,
+            JSON.stringify(normalizeStyleIds(msg.colPaintStyleIds, colCount))
+        );
         node.setPluginData(
             PLUGIN_DATA_KEYS.LAST_COL_COLOR_ENABLED,
             JSON.stringify(normalizeColColorEnabled(msg.colColorEnabled, colCount))

@@ -4,6 +4,7 @@
 
 import type {
     CellStrokeStyle,
+    ColorMode,
     LocalStyleOverrideMask,
     LocalStyleOverrides,
     RowStrokeStyle,
@@ -102,9 +103,13 @@ export const state = {
     strokeWidth: 2,
     markRatio: 0.8,
     rowColors: DEFAULT_ROW_COLORS.slice(0, 3),
+    rowColorModes: ['hex', 'hex', 'hex'] as ColorMode[],
+    rowPaintStyleIds: [null, null, null] as Array<string | null>,
     rowHeaderLabels: ['R1', 'R2', 'R3'] as string[],
     colHeaderTitles: ['C1', 'C2', 'C3'] as string[],
     colHeaderColors: [] as string[],
+    colHeaderColorModes: [] as ColorMode[],
+    colHeaderPaintStyleIds: [] as Array<string | null>,
     colHeaderColorEnabled: [] as boolean[],
     markColorSource: 'row' as 'row' | 'col',
     assistLineVisible: false,
@@ -260,6 +265,25 @@ export function ensureRowColorsLength(rowCount: number) {
     return state.rowColors;
 }
 
+export function ensureRowColorModesLength(rowCount: number) {
+    const next: ColorMode[] = [];
+    for (let i = 0; i < rowCount; i++) {
+        next.push(state.rowColorModes[i] === 'paint_style' ? 'paint_style' : 'hex');
+    }
+    state.rowColorModes = next;
+    return state.rowColorModes;
+}
+
+export function ensureRowPaintStyleIdsLength(rowCount: number) {
+    const next: Array<string | null> = [];
+    for (let i = 0; i < rowCount; i++) {
+        const value = state.rowPaintStyleIds[i];
+        next.push(typeof value === 'string' && value.trim() ? value : null);
+    }
+    state.rowPaintStyleIds = next;
+    return state.rowPaintStyleIds;
+}
+
 export function ensureColHeaderColorsLength(colCount: number) {
     const next: string[] = [];
     for (let i = 0; i < colCount; i++) {
@@ -267,6 +291,25 @@ export function ensureColHeaderColorsLength(colCount: number) {
     }
     state.colHeaderColors = next;
     return state.colHeaderColors;
+}
+
+export function ensureColHeaderColorModesLength(colCount: number) {
+    const next: ColorMode[] = [];
+    for (let i = 0; i < colCount; i++) {
+        next.push(state.colHeaderColorModes[i] === 'paint_style' ? 'paint_style' : 'hex');
+    }
+    state.colHeaderColorModes = next;
+    return state.colHeaderColorModes;
+}
+
+export function ensureColHeaderPaintStyleIdsLength(colCount: number) {
+    const next: Array<string | null> = [];
+    for (let i = 0; i < colCount; i++) {
+        const value = state.colHeaderPaintStyleIds[i];
+        next.push(typeof value === 'string' && value.trim() ? value : null);
+    }
+    state.colHeaderPaintStyleIds = next;
+    return state.colHeaderPaintStyleIds;
 }
 
 export function ensureColHeaderColorEnabledLength(colCount: number) {
@@ -330,6 +373,8 @@ export function applyIncomingRowColors(
     }
 
     state.rowColors = next;
+    ensureRowColorModesLength(rowCount);
+    ensureRowPaintStyleIdsLength(rowCount);
     return state.rowColors;
 }
 

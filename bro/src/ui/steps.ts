@@ -1,4 +1,4 @@
-import { state, CHART_ICONS, initData, getTotalStackedCols, ensureColHeaderColorEnabledLength, ensureColHeaderColorsLength, ensureColHeaderTitlesLength, ensureRowColorsLength, ensureRowHeaderLabelsLength, getGridColsForChart } from './state';
+import { state, CHART_ICONS, initData, getTotalStackedCols, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureColHeaderTitlesLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowHeaderLabelsLength, ensureRowPaintStyleIdsLength, getGridColsForChart } from './state';
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
@@ -241,8 +241,12 @@ export function submitData() {
             ? normalizeMarkRatio(state.markRatio)
             : undefined,
         rowColors: ensureRowColorsLength(state.rows),
+        rowColorModes: ensureRowColorModesLength(state.rows),
+        rowPaintStyleIds: ensureRowPaintStyleIdsLength(state.rows),
         rowHeaderLabels: ensureRowHeaderLabelsLength(state.rows, state.chartType),
         colColors: state.colHeaderColors,
+        colColorModes: ensureColHeaderColorModesLength(getGridColsForChart(state.chartType, state.cols)),
+        colPaintStyleIds: ensureColHeaderPaintStyleIdsLength(getGridColsForChart(state.chartType, state.cols)),
         colColorEnabled: ensureColHeaderColorEnabledLength(getGridColsForChart(state.chartType, state.cols)),
         markColorSource: state.markColorSource,
         assistLineVisible: state.assistLineVisible,

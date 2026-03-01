@@ -50,7 +50,11 @@ export const PLUGIN_DATA_KEYS = {
     // 스타일 관련 키
     LAST_BAR_PADDING: "lastBarPadding",
     LAST_ROW_COLORS: "lastRowColors",
+    LAST_ROW_COLOR_MODES: "lastRowColorModes",
+    LAST_ROW_PAINT_STYLE_IDS: "lastRowPaintStyleIds",
     LAST_COL_COLORS: "lastColColors",
+    LAST_COL_COLOR_MODES: "lastColColorModes",
+    LAST_COL_PAINT_STYLE_IDS: "lastColPaintStyleIds",
     LAST_COL_COLOR_ENABLED: "lastColColorEnabled",
     LAST_MARK_COLOR_SOURCE: "lastMarkColorSource",
     LAST_CORNER_RADIUS: "lastCornerRadius",

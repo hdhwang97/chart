@@ -1,6 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM, PLUGIN_DATA_KEYS } from '../constants';
 import { collectColumns, setVariantProperty } from './shared';
-import { normalizeHexColor, tryApplyFill, tryApplyStroke, traverse } from '../utils';
+import { normalizeHexColor, tryApplyFill, tryApplyFillStyleLink, tryApplyStroke, tryApplyStrokeStyleLink, traverse } from '../utils';
 
 // ==========================================
 // BAR CHART DRAWING
@@ -141,7 +141,37 @@ function getBarColor(config: any, rowIndex: number, colIndex: number) {
     return normalizeHexColor(config.rowColors[rowIndex]);
 }
 
-function applyBarMarkColor(target: SceneNode, color: string) {
+function getBarStyleId(config: any, rowIndex: number, colIndex: number): string | null {
+    const colEnabled = Array.isArray(config?.colColorEnabled)
+        ? Boolean(config.colColorEnabled[colIndex])
+        : false;
+    const colMode = Array.isArray(config?.colColorModes) ? config.colColorModes[colIndex] : null;
+    if (colEnabled && colMode === 'paint_style' && Array.isArray(config?.colPaintStyleIds)) {
+        const id = config.colPaintStyleIds[colIndex];
+        if (typeof id === 'string' && id.trim()) return id;
+    }
+    const rowMode = Array.isArray(config?.rowColorModes) ? config.rowColorModes[rowIndex] : null;
+    if (rowMode === 'paint_style' && Array.isArray(config?.rowPaintStyleIds)) {
+        const id = config.rowPaintStyleIds[rowIndex];
+        if (typeof id === 'string' && id.trim()) return id;
+    }
+    return null;
+}
+
+function applyBarMarkColor(target: SceneNode, color?: string | null, styleId?: string | null) {
+    if (styleId) {
+        let styleApplied = false;
+        if (tryApplyFillStyleLink(target, styleId)) styleApplied = true;
+        if (tryApplyStrokeStyleLink(target, styleId)) styleApplied = true;
+        traverse(target, (child) => {
+            if (child.id === target.id || !child.visible) return;
+            if (tryApplyFillStyleLink(child, styleId)) styleApplied = true;
+            if (tryApplyStrokeStyleLink(child, styleId)) styleApplied = true;
+        });
+        if (styleApplied) return true;
+    }
+
+    if (!color) return false;
     let applied = false;
     if (tryApplyFill(target, color)) applied = true;
     if (tryApplyStroke(target, color)) applied = true;
@@ -249,9 +279,8 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
 
                 if (barLayer) {
                     const markColor = getBarColor(config, m, cIdx);
-                    if (markColor) {
-                        applyBarMarkColor(barLayer as SceneNode, markColor);
-                    }
+                    const markStyleId = getBarStyleId(config, m, cIdx);
+                    applyBarMarkColor(barLayer as SceneNode, markColor, markStyleId);
                     if (measureWidth > 0) {
                         try {
                             const barWidthBefore = getNodeContentWidth(barLayer);

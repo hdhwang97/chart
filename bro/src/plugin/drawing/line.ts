@@ -1,5 +1,5 @@
 import { LINE_VARIANT_KEY_DEFAULT, LINE_VARIANT_VALUES } from '../constants';
-import { clamp, normalizeHexColor, tryApplyFill, tryApplyStroke, traverse } from '../utils';
+import { clamp, normalizeHexColor, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink, traverse } from '../utils';
 import { collectColumns, setVariantProperty } from './shared';
 
 // ==========================================
@@ -106,6 +106,15 @@ function applyStrokeThickness(target: SceneNode, thickness: number) {
     return true;
 }
 
+function getLineStyleId(config: any, rowIndex: number): string | null {
+    const rowMode = Array.isArray(config?.rowColorModes) ? config.rowColorModes[rowIndex] : null;
+    if (rowMode !== 'paint_style') return null;
+    if (!Array.isArray(config?.rowPaintStyleIds)) return null;
+    const id = config.rowPaintStyleIds[rowIndex];
+    if (typeof id !== 'string') return null;
+    return id.trim() ? id : null;
+}
+
 export function applyLine(config: any, H: number, graph: SceneNode) {
     const { values, mode } = config;
     const thickness = config.strokeWidth || 2;
@@ -141,6 +150,7 @@ export function applyLine(config: any, H: number, graph: SceneNode) {
 
     for (let r = 0; r < rowCount; r++) {
         const rowColor = normalizeHexColor(rowColors[r]);
+        const rowStyleId = getLineStyleId(config, r);
         const seriesData = values[r];
         const pointCols = Array.isArray(seriesData) ? seriesData.length : 0;
         const expectedSegments = Math.max(0, pointCols - 1);
@@ -168,6 +178,11 @@ export function applyLine(config: any, H: number, graph: SceneNode) {
                 let colorApplied = 0;
                 segmentTargets.forEach((target) => {
                     if (applyStrokeThickness(target, thickness)) thicknessApplied += 1;
+                    const isVectorLike = target.type === 'VECTOR' || target.type === 'LINE' || target.type === 'POLYGON' || target.type === 'RECTANGLE';
+                    if (rowStyleId && isVectorLike) {
+                        if (tryApplyStrokeStyleLink(target, rowStyleId)) colorApplied += 1;
+                        return;
+                    }
                     if (rowColor && tryApplyStroke(target, rowColor)) colorApplied += 1;
                 });
 

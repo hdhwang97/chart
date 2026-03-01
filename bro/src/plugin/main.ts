@@ -9,12 +9,14 @@ import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
-import { normalizeHexColor, traverse } from './utils';
+import { normalizeHexColor, rgbToHex, traverse } from './utils';
 import { deleteStyleTemplate, loadStyleTemplates, renameStyleTemplate, saveStyleTemplate } from './template-store';
 import { PerfTracker, shouldLogApplyPerf } from './perf';
 import type {
+    ColorMode,
     LocalStyleOverrideMask,
     LocalStyleOverrides,
+    PaintStyleSelection,
     StyleApplyMode
 } from '../shared/style-types';
 
@@ -51,6 +53,26 @@ function normalizeRowColors(value: unknown): string[] {
         .filter((item): item is string => Boolean(item));
 }
 
+function normalizeColorMode(value: unknown): ColorMode {
+    return value === 'paint_style' ? 'paint_style' : 'hex';
+}
+
+function normalizeColorModes(value: unknown): ColorMode[] {
+    if (!Array.isArray(value)) return [];
+    return value.map((item) => normalizeColorMode(item));
+}
+
+function normalizeStyleId(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+}
+
+function normalizeStyleIds(value: unknown): Array<string | null> {
+    if (!Array.isArray(value)) return [];
+    return value.map((item) => normalizeStyleId(item));
+}
+
 function resolveRowColorsFromNode(
     node: SceneNode,
     chartType: string,
@@ -76,6 +98,38 @@ function resolveRowColorsFromNode(
             normalizeHexColor(fallbackRowColors[i]) ||
             getDefaultRowColor(i);
         next.push(color);
+    }
+    return next;
+}
+
+function resolveRowColorModesFromNode(node: SceneNode, rowCount: number): ColorMode[] {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ROW_COLOR_MODES);
+    let saved: any[] = [];
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: ColorMode[] = [];
+    for (let i = 0; i < Math.max(1, rowCount); i++) {
+        next.push(normalizeColorMode(saved[i]));
+    }
+    return next;
+}
+
+function resolveRowPaintStyleIdsFromNode(node: SceneNode, rowCount: number): Array<string | null> {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ROW_PAINT_STYLE_IDS);
+    let saved: any[] = [];
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: Array<string | null> = [];
+    for (let i = 0; i < Math.max(1, rowCount); i++) {
+        next.push(normalizeStyleId(saved[i]));
     }
     return next;
 }
@@ -106,7 +160,8 @@ function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask
     const source = value as Record<string, unknown>;
     const next: LocalStyleOverrideMask = {};
     const keys: Array<keyof LocalStyleOverrideMask> = [
-        'rowColors', 'colColors', 'colColorEnabled', 'markColorSource',
+        'rowColors', 'rowColorModes', 'rowPaintStyleIds',
+        'colColors', 'colColorModes', 'colPaintStyleIds', 'colColorEnabled', 'markColorSource',
         'assistLineVisible', 'assistLineEnabled',
         'cellFillStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
         'assistLineStyle', 'markStyle', 'markStyles', 'rowStrokeStyles', 'colStrokeStyle'
@@ -126,7 +181,11 @@ function normalizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
     const source = value as LocalStyleOverrides;
     const next: LocalStyleOverrides = {};
     if (Array.isArray(source.rowColors)) next.rowColors = normalizeRowColors(source.rowColors);
+    if (Array.isArray(source.rowColorModes)) next.rowColorModes = normalizeColorModes(source.rowColorModes);
+    if (Array.isArray(source.rowPaintStyleIds)) next.rowPaintStyleIds = normalizeStyleIds(source.rowPaintStyleIds);
     if (Array.isArray(source.colColors)) next.colColors = normalizeRowColors(source.colColors);
+    if (Array.isArray(source.colColorModes)) next.colColorModes = normalizeColorModes(source.colColorModes);
+    if (Array.isArray(source.colPaintStyleIds)) next.colPaintStyleIds = normalizeStyleIds(source.colPaintStyleIds);
     if (Array.isArray(source.colColorEnabled)) next.colColorEnabled = source.colColorEnabled.map((v) => Boolean(v));
     if (source.markColorSource === 'col' || source.markColorSource === 'row') next.markColorSource = source.markColorSource;
     if (typeof source.assistLineVisible === 'boolean') next.assistLineVisible = source.assistLineVisible;
@@ -239,6 +298,74 @@ function resolveColColorsFromNode(node: SceneNode, colCount: number, fallbackCol
     return next;
 }
 
+function resolveColColorModesFromNode(node: SceneNode, colCount: number): ColorMode[] {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLOR_MODES);
+    let saved: any[] = [];
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: ColorMode[] = [];
+    for (let i = 0; i < Math.max(1, colCount); i++) {
+        next.push(normalizeColorMode(saved[i]));
+    }
+    return next;
+}
+
+function resolveColPaintStyleIdsFromNode(node: SceneNode, colCount: number): Array<string | null> {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_PAINT_STYLE_IDS);
+    let saved: any[] = [];
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: Array<string | null> = [];
+    for (let i = 0; i < Math.max(1, colCount); i++) {
+        next.push(normalizeStyleId(saved[i]));
+    }
+    return next;
+}
+
+function toPaintStyleSelection(style: PaintStyle): PaintStyleSelection {
+    const first = Array.isArray(style.paints) ? style.paints[0] : null;
+    const isSolid = Boolean(first && first.type === 'SOLID');
+    const colorHex = isSolid && first
+        ? rgbToHex((first as SolidPaint).color.r, (first as SolidPaint).color.g, (first as SolidPaint).color.b)
+        : '#000000';
+    return {
+        id: style.id,
+        name: style.name,
+        colorHex,
+        isSolid,
+        remote: Boolean((style as any).remote)
+    };
+}
+
+function buildSolidPaintFromHex(hex: string): SolidPaint | null {
+    const normalized = normalizeHexColor(hex);
+    if (!normalized) return null;
+    const raw = normalized.slice(1);
+    return {
+        type: 'SOLID',
+        color: {
+            r: parseInt(raw.slice(0, 2), 16) / 255,
+            g: parseInt(raw.slice(2, 4), 16) / 255,
+            b: parseInt(raw.slice(4, 6), 16) / 255
+        }
+    };
+}
+
+async function loadLocalPaintStyleSelections(): Promise<PaintStyleSelection[]> {
+    const styles = await figma.getLocalPaintStylesAsync();
+    return styles
+        .map((style) => toPaintStyleSelection(style))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
 function resolveColColorEnabledFromNode(node: SceneNode, colCount: number) {
     const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLOR_ENABLED);
     let saved: any[] = [];
@@ -292,7 +419,11 @@ figma.ui.onmessage = async (msg) => {
             strokeWidth,
             markRatio,
             rowColors,
+            rowColorModes,
+            rowPaintStyleIds,
             colColors,
+            colColorModes,
+            colPaintStyleIds,
             colColorEnabled,
             rowHeaderLabels,
             markColorSource,
@@ -317,7 +448,11 @@ figma.ui.onmessage = async (msg) => {
 
         const perf = new PerfTracker();
         const normalizedRowColors = normalizeRowColors(rowColors);
+        const normalizedRowColorModes = normalizeColorModes(rowColorModes);
+        const normalizedRowPaintStyleIds = normalizeStyleIds(rowPaintStyleIds);
         const normalizedColColors = normalizeRowColors(colColors);
+        const normalizedColColorModes = normalizeColorModes(colColorModes);
+        const normalizedColPaintStyleIds = normalizeStyleIds(colPaintStyleIds);
         const normalizedColColorEnabled = Array.isArray(colColorEnabled)
             ? colColorEnabled.map((v: unknown) => Boolean(v))
             : [];
@@ -462,9 +597,21 @@ figma.ui.onmessage = async (msg) => {
         const drawRowColors = !isDataOnlyApply
             ? normalizedRowColors
             : (effectiveLocalMask.rowColors ? normalizeRowColors(effectiveLocalOverrides.rowColors) : undefined);
+        const drawRowColorModes = !isDataOnlyApply
+            ? normalizedRowColorModes
+            : (effectiveLocalMask.rowColorModes ? normalizeColorModes(effectiveLocalOverrides.rowColorModes) : undefined);
+        const drawRowPaintStyleIds = !isDataOnlyApply
+            ? normalizedRowPaintStyleIds
+            : (effectiveLocalMask.rowPaintStyleIds ? normalizeStyleIds(effectiveLocalOverrides.rowPaintStyleIds) : undefined);
         const drawColColors = !isDataOnlyApply
             ? normalizedColColors
             : (effectiveLocalMask.colColors ? normalizeRowColors(effectiveLocalOverrides.colColors) : undefined);
+        const drawColColorModes = !isDataOnlyApply
+            ? normalizedColColorModes
+            : (effectiveLocalMask.colColorModes ? normalizeColorModes(effectiveLocalOverrides.colColorModes) : undefined);
+        const drawColPaintStyleIds = !isDataOnlyApply
+            ? normalizedColPaintStyleIds
+            : (effectiveLocalMask.colPaintStyleIds ? normalizeStyleIds(effectiveLocalOverrides.colPaintStyleIds) : undefined);
         const drawColColorEnabled = !isDataOnlyApply
             ? normalizedColColorEnabled
             : (effectiveLocalMask.colColorEnabled
@@ -492,7 +639,11 @@ figma.ui.onmessage = async (msg) => {
             strokeWidth,
             markRatio,
             rowColors: drawRowColors,
+            rowColorModes: drawRowColorModes,
+            rowPaintStyleIds: drawRowPaintStyleIds,
             colColors: drawColColors,
+            colColorModes: drawColColorModes,
+            colPaintStyleIds: drawColPaintStyleIds,
             colColorEnabled: drawColColorEnabled,
             markColorSource: drawMarkColorSource,
             assistLineVisible,
@@ -541,7 +692,11 @@ figma.ui.onmessage = async (msg) => {
                 chartType: type,
                 markNum,
                 ...(effectiveLocalMask.rowColors ? { rowColors: normalizeRowColors(effectiveLocalOverrides.rowColors) } : {}),
+                ...(effectiveLocalMask.rowColorModes ? { rowColorModes: normalizeColorModes(effectiveLocalOverrides.rowColorModes) } : {}),
+                ...(effectiveLocalMask.rowPaintStyleIds ? { rowPaintStyleIds: normalizeStyleIds(effectiveLocalOverrides.rowPaintStyleIds) } : {}),
                 ...(effectiveLocalMask.colColors ? { colColors: normalizeRowColors(effectiveLocalOverrides.colColors) } : {}),
+                ...(effectiveLocalMask.colColorModes ? { colColorModes: normalizeColorModes(effectiveLocalOverrides.colColorModes) } : {}),
+                ...(effectiveLocalMask.colPaintStyleIds ? { colPaintStyleIds: normalizeStyleIds(effectiveLocalOverrides.colPaintStyleIds) } : {}),
                 ...(effectiveLocalMask.colColorEnabled ? {
                     colColorEnabled: Array.isArray(effectiveLocalOverrides.colColorEnabled)
                         ? effectiveLocalOverrides.colColorEnabled.map((v) => Boolean(v))
@@ -562,7 +717,11 @@ figma.ui.onmessage = async (msg) => {
             : {
                 chartType: type,
                 rowColors: normalizedRowColors,
+                rowColorModes: normalizedRowColorModes,
+                rowPaintStyleIds: normalizedRowPaintStyleIds,
                 colColors: normalizedColColors,
+                colColorModes: normalizedColColorModes,
+                colPaintStyleIds: normalizedColPaintStyleIds,
                 colColorEnabled: normalizedColColorEnabled,
                 rowHeaderLabels: Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
                 xAxisLabels: Array.isArray(xAxisLabels) ? xAxisLabels : [],
@@ -595,14 +754,28 @@ figma.ui.onmessage = async (msg) => {
             : null;
         const fallbackRowCount = Number.isFinite(Number(rows)) ? Number(rows) : (Array.isArray(rawValues) ? rawValues.length : 1);
         const requestedRowColors = normalizedRowColors;
+        const requestedRowColorModes = normalizedRowColorModes;
+        const requestedRowPaintStyleIds = normalizedRowPaintStyleIds;
         const extractedRowColorsForUi = Array.from({ length: Math.max(1, fallbackRowCount) }, (_, i) =>
             normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
         );
+        const extractedRowColorModesForUi = Array.from({ length: Math.max(1, fallbackRowCount) }, () => 'hex' as ColorMode);
+        const extractedRowPaintStyleIdsForUi = Array.from({ length: Math.max(1, fallbackRowCount) }, () => null as string | null);
         const rowColorsForUiBase = targetNode.type === 'INSTANCE'
             ? extractedRowColorsForUi
             : ((!isDataOnlyApply && requestedRowColors.length > 0)
                 ? requestedRowColors
                 : resolveRowColorsFromNode(targetNode, type, fallbackRowCount, styleInfo.colors));
+        const rowColorModesForUiBase = targetNode.type === 'INSTANCE'
+            ? extractedRowColorModesForUi
+            : ((!isDataOnlyApply && requestedRowColorModes.length > 0)
+                ? requestedRowColorModes
+                : resolveRowColorModesFromNode(targetNode, fallbackRowCount));
+        const rowPaintStyleIdsForUiBase = targetNode.type === 'INSTANCE'
+            ? extractedRowPaintStyleIdsForUi
+            : ((!isDataOnlyApply && requestedRowPaintStyleIds.length > 0)
+                ? requestedRowPaintStyleIds
+                : resolveRowPaintStyleIdsFromNode(targetNode, fallbackRowCount));
         const colorsForUi = styleInfo.colors.length > 0
             ? styleInfo.colors
             : (isStackedType(type) ? rowColorsForUiBase.slice(1) : ['#3b82f6', '#9CA3AF']);
@@ -616,6 +789,16 @@ figma.ui.onmessage = async (msg) => {
             : ((!isDataOnlyApply && normalizedColColors.length > 0)
                 ? normalizedColColors
                 : resolveColColorsFromNode(targetNode, fallbackColCount, rowColorsForUiBase[0] || '#3B82F6'));
+        const colColorModesForUiBase = targetNode.type === 'INSTANCE'
+            ? Array.from({ length: fallbackColCount }, () => 'hex' as ColorMode)
+            : ((!isDataOnlyApply && normalizedColColorModes.length > 0)
+                ? normalizedColColorModes
+                : resolveColColorModesFromNode(targetNode, fallbackColCount));
+        const colPaintStyleIdsForUiBase = targetNode.type === 'INSTANCE'
+            ? Array.from({ length: fallbackColCount }, () => null as string | null)
+            : ((!isDataOnlyApply && normalizedColPaintStyleIds.length > 0)
+                ? normalizedColPaintStyleIds
+                : resolveColPaintStyleIdsFromNode(targetNode, fallbackColCount));
         const colColorEnabledForUiBase = targetNode.type === 'INSTANCE'
             ? Array.from({ length: fallbackColCount }, () => false)
             : ((!isDataOnlyApply && normalizedColColorEnabled.length > 0)
@@ -629,9 +812,21 @@ figma.ui.onmessage = async (msg) => {
         const rowColorsForUi = effectiveLocalMask.rowColors && Array.isArray(effectiveLocalOverrides.rowColors)
             ? normalizeRowColors(effectiveLocalOverrides.rowColors)
             : rowColorsForUiBase;
+        const rowColorModesForUi = effectiveLocalMask.rowColorModes && Array.isArray(effectiveLocalOverrides.rowColorModes)
+            ? normalizeColorModes(effectiveLocalOverrides.rowColorModes)
+            : rowColorModesForUiBase;
+        const rowPaintStyleIdsForUi = effectiveLocalMask.rowPaintStyleIds && Array.isArray(effectiveLocalOverrides.rowPaintStyleIds)
+            ? normalizeStyleIds(effectiveLocalOverrides.rowPaintStyleIds)
+            : rowPaintStyleIdsForUiBase;
         const colColorsForUi = effectiveLocalMask.colColors && Array.isArray(effectiveLocalOverrides.colColors)
             ? normalizeRowColors(effectiveLocalOverrides.colColors)
             : colColorsForUiBase;
+        const colColorModesForUi = effectiveLocalMask.colColorModes && Array.isArray(effectiveLocalOverrides.colColorModes)
+            ? normalizeColorModes(effectiveLocalOverrides.colColorModes)
+            : colColorModesForUiBase;
+        const colPaintStyleIdsForUi = effectiveLocalMask.colPaintStyleIds && Array.isArray(effectiveLocalOverrides.colPaintStyleIds)
+            ? normalizeStyleIds(effectiveLocalOverrides.colPaintStyleIds)
+            : colPaintStyleIdsForUiBase;
         const colColorEnabledForUi = effectiveLocalMask.colColorEnabled && Array.isArray(effectiveLocalOverrides.colColorEnabled)
             ? effectiveLocalOverrides.colColorEnabled.map((v) => Boolean(v))
             : colColorEnabledForUiBase;
@@ -654,7 +849,11 @@ figma.ui.onmessage = async (msg) => {
             colors: colorsForUi.length > 0 ? colorsForUi : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
             rowColors: rowColorsForUi,
+            rowColorModes: rowColorModesForUi,
+            rowPaintStyleIds: rowPaintStyleIdsForUi,
             colColors: colColorsForUi,
+            colColorModes: colColorModesForUi,
+            colPaintStyleIds: colPaintStyleIdsForUi,
             colColorEnabled: colColorEnabledForUi,
             markColorSource: markColorSourceForUi,
             assistLineVisible: effectiveLocalMask.assistLineVisible
@@ -695,7 +894,11 @@ figma.ui.onmessage = async (msg) => {
             isTemplateMasterTarget: applyPolicy === 'template-master',
             extractedStyleSnapshot: {
                 rowColors: extractedRowColorsForUi,
+                rowColorModes: extractedRowColorModesForUi,
+                rowPaintStyleIds: extractedRowPaintStyleIdsForUi,
                 colColors: colColorsForUiBase,
+                colColorModes: colColorModesForUiBase,
+                colPaintStyleIds: colPaintStyleIdsForUiBase,
                 colColorEnabled: colColorEnabledForUiBase,
                 markColorSource: markColorSourceForUiBase,
                 cellFillStyle: styleInfo.cellFillStyle || null,
@@ -782,7 +985,11 @@ figma.ui.onmessage = async (msg) => {
         const extractedRowColors = Array.from({ length: Math.max(1, rowCount) }, (_, i) =>
             normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
         );
+        const extractedRowColorModes = Array.from({ length: Math.max(1, rowCount) }, () => 'hex' as ColorMode);
+        const extractedRowPaintStyleIds = Array.from({ length: Math.max(1, rowCount) }, () => null as string | null);
         const extractedColColors = Array.from({ length: Math.max(1, colCount) }, () => extractedRowColors[0] || '#3B82F6');
+        const extractedColColorModes = Array.from({ length: Math.max(1, colCount) }, () => 'hex' as ColorMode);
+        const extractedColPaintStyleIds = Array.from({ length: Math.max(1, colCount) }, () => null as string | null);
         const extractedColEnabled = Array.from({ length: Math.max(1, colCount) }, () => false);
         const extractedMarkColorSource: 'row' | 'col' = 'row';
         const localOverrideState = isInstanceTarget
@@ -794,11 +1001,31 @@ figma.ui.onmessage = async (msg) => {
             : (isInstanceTarget
                 ? extractedRowColors
                 : resolveRowColorsFromNode(node, chartType, rowCount, styleInfo.colors));
+        const rowColorModesForUi = (localOverrideState.mask.rowColorModes && Array.isArray(localOverrideState.overrides.rowColorModes))
+            ? normalizeColorModes(localOverrideState.overrides.rowColorModes)
+            : (isInstanceTarget
+                ? extractedRowColorModes
+                : resolveRowColorModesFromNode(node, rowCount));
+        const rowPaintStyleIdsForUi = (localOverrideState.mask.rowPaintStyleIds && Array.isArray(localOverrideState.overrides.rowPaintStyleIds))
+            ? normalizeStyleIds(localOverrideState.overrides.rowPaintStyleIds)
+            : (isInstanceTarget
+                ? extractedRowPaintStyleIds
+                : resolveRowPaintStyleIdsFromNode(node, rowCount));
         const colColorsForUi = (localOverrideState.mask.colColors && Array.isArray(localOverrideState.overrides.colColors))
             ? normalizeRowColors(localOverrideState.overrides.colColors)
             : (isInstanceTarget
                 ? extractedColColors
                 : resolveColColorsFromNode(node, colCount, rowColorsForUi[0] || '#3B82F6'));
+        const colColorModesForUi = (localOverrideState.mask.colColorModes && Array.isArray(localOverrideState.overrides.colColorModes))
+            ? normalizeColorModes(localOverrideState.overrides.colColorModes)
+            : (isInstanceTarget
+                ? extractedColColorModes
+                : resolveColColorModesFromNode(node, colCount));
+        const colPaintStyleIdsForUi = (localOverrideState.mask.colPaintStyleIds && Array.isArray(localOverrideState.overrides.colPaintStyleIds))
+            ? normalizeStyleIds(localOverrideState.overrides.colPaintStyleIds)
+            : (isInstanceTarget
+                ? extractedColPaintStyleIds
+                : resolveColPaintStyleIdsFromNode(node, colCount));
         const colColorEnabledForUi = (localOverrideState.mask.colColorEnabled && Array.isArray(localOverrideState.overrides.colColorEnabled))
             ? localOverrideState.overrides.colColorEnabled.map((v) => Boolean(v))
             : (isInstanceTarget ? extractedColEnabled : resolveColColorEnabledFromNode(node, colCount));
@@ -828,7 +1055,11 @@ figma.ui.onmessage = async (msg) => {
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,
             rowColors: rowColorsForUi,
+            rowColorModes: rowColorModesForUi,
+            rowPaintStyleIds: rowPaintStyleIdsForUi,
             colColors: colColorsForUi,
+            colColorModes: colColorModesForUi,
+            colPaintStyleIds: colPaintStyleIdsForUi,
             colColorEnabled: colColorEnabledForUi,
             markColorSource,
             assistLineVisible,
@@ -846,7 +1077,11 @@ figma.ui.onmessage = async (msg) => {
             isInstanceTarget,
             extractedStyleSnapshot: {
                 rowColors: extractedRowColors,
+                rowColorModes: extractedRowColorModes,
+                rowPaintStyleIds: extractedRowPaintStyleIds,
                 colColors: extractedColColors,
+                colColorModes: extractedColColorModes,
+                colPaintStyleIds: extractedColPaintStyleIds,
                 colColorEnabled: extractedColEnabled,
                 markColorSource: extractedMarkColorSource,
                 cellFillStyle: styleInfo.cellFillStyle || null,
@@ -863,6 +1098,67 @@ figma.ui.onmessage = async (msg) => {
 
         figma.ui.postMessage({ type: 'style_extracted', source: 'extract_style', payload: payload });
         figma.notify("Style Extracted!");
+    }
+    else if (msg.type === 'list_paint_styles') {
+        const list = await loadLocalPaintStyleSelections();
+        figma.ui.postMessage({ type: 'paint_styles_loaded', list });
+    }
+    else if (msg.type === 'create_paint_style') {
+        const name = typeof msg.name === 'string' ? msg.name.trim() : '';
+        const paint = buildSolidPaintFromHex(msg.colorHex);
+        if (!name) {
+            figma.ui.postMessage({ type: 'paint_style_error', reason: 'Style name is required.' });
+            return;
+        }
+        if (!paint) {
+            figma.ui.postMessage({ type: 'paint_style_error', reason: 'Invalid HEX color.' });
+            return;
+        }
+        const created = figma.createPaintStyle();
+        created.name = name;
+        created.paints = [paint];
+        figma.ui.postMessage({ type: 'paint_style_created', style: toPaintStyleSelection(created) });
+        figma.ui.postMessage({ type: 'paint_styles_loaded', list: await loadLocalPaintStyleSelections() });
+    }
+    else if (msg.type === 'rename_paint_style') {
+        const id = typeof msg.id === 'string' ? msg.id : '';
+        const name = typeof msg.name === 'string' ? msg.name.trim() : '';
+        if (!id || !name) {
+            figma.ui.postMessage({ type: 'paint_style_error', reason: 'Invalid style id or name.' });
+            return;
+        }
+        const style = figma.getStyleById(id);
+        if (!style || style.type !== 'PAINT') {
+            figma.ui.postMessage({ type: 'paint_style_error', reason: 'Paint style not found.' });
+            return;
+        }
+        if ((style as PaintStyle).remote) {
+            figma.ui.postMessage({ type: 'paint_style_error', reason: 'Remote style cannot be renamed.' });
+            return;
+        }
+        (style as PaintStyle).name = name;
+        figma.ui.postMessage({ type: 'paint_style_renamed', id, name });
+        figma.ui.postMessage({ type: 'paint_styles_loaded', list: await loadLocalPaintStyleSelections() });
+    }
+    else if (msg.type === 'update_paint_style_color') {
+        const id = typeof msg.id === 'string' ? msg.id : '';
+        const paint = buildSolidPaintFromHex(msg.colorHex);
+        if (!id || !paint) {
+            figma.ui.postMessage({ type: 'paint_style_error', reason: 'Invalid style id or color.' });
+            return;
+        }
+        const style = figma.getStyleById(id);
+        if (!style || style.type !== 'PAINT') {
+            figma.ui.postMessage({ type: 'paint_style_error', reason: 'Paint style not found.' });
+            return;
+        }
+        if ((style as PaintStyle).remote) {
+            figma.ui.postMessage({ type: 'paint_style_error', reason: 'Remote style cannot be updated.' });
+            return;
+        }
+        (style as PaintStyle).paints = [paint];
+        figma.ui.postMessage({ type: 'paint_style_updated', id, colorHex: normalizeHexColor(msg.colorHex) || '#000000' });
+        figma.ui.postMessage({ type: 'paint_styles_loaded', list: await loadLocalPaintStyleSelections() });
     }
     else if (msg.type === 'load_style_templates') {
         const list = await loadStyleTemplates();

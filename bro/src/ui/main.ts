@@ -7,8 +7,12 @@ import {
     getGridColsForChart,
     applyIncomingRowColors,
     ensureRowColorsLength,
+    ensureRowColorModesLength,
+    ensureRowPaintStyleIdsLength,
     ensureRowHeaderLabelsLength,
     ensureColHeaderColorsLength,
+    ensureColHeaderColorModesLength,
+    ensureColHeaderPaintStyleIdsLength,
     ensureColHeaderColorEnabledLength,
     ensureColHeaderTitlesLength,
     getDefaultRowColor,
@@ -28,7 +32,7 @@ import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountF
 import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, refreshExportPreview } from './export';
 import { bindStyleTabEvents, buildTemplatePayloadFromDraft, buildLocalStyleOverridesFromDraft, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
-import type { LocalStyleOverrideMask, LocalStyleOverrides } from '../shared/style-types';
+import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection } from '../shared/style-types';
 import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
 
 // ==========================================
@@ -44,6 +48,7 @@ let rowColorPopoverOpen = false;
 let activeColorTarget: { type: 'row' | 'col'; index: number } | null = null;
 let rowColorPicker: any = null;
 let isSyncingFromPicker = false;
+let localPaintStyles: PaintStyleSelection[] = [];
 
 function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
@@ -107,7 +112,8 @@ function normalizeIncomingLocalMask(value: unknown): LocalStyleOverrideMask {
     if (!value || typeof value !== 'object') return {};
     const source = value as Record<string, unknown>;
     const keys: Array<keyof LocalStyleOverrideMask> = [
-        'rowColors', 'colColors', 'colColorEnabled', 'markColorSource',
+        'rowColors', 'rowColorModes', 'rowPaintStyleIds',
+        'colColors', 'colColorModes', 'colPaintStyleIds', 'colColorEnabled', 'markColorSource',
         'assistLineVisible', 'assistLineEnabled',
         'cellFillStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
         'assistLineStyle', 'markStyle', 'markStyles', 'rowStrokeStyles', 'colStrokeStyle'
@@ -124,7 +130,11 @@ function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
     const source = value as LocalStyleOverrides;
     const next: LocalStyleOverrides = {};
     if (Array.isArray(source.rowColors)) next.rowColors = source.rowColors.map((v) => normalizeHexColorInput(v) || '').filter((v) => Boolean(v));
+    if (Array.isArray(source.rowColorModes)) next.rowColorModes = source.rowColorModes.map((v) => v === 'paint_style' ? 'paint_style' : 'hex');
+    if (Array.isArray(source.rowPaintStyleIds)) next.rowPaintStyleIds = source.rowPaintStyleIds.map((v) => (typeof v === 'string' && v.trim()) ? v : null);
     if (Array.isArray(source.colColors)) next.colColors = source.colColors.map((v) => normalizeHexColorInput(v) || '').filter((v) => Boolean(v));
+    if (Array.isArray(source.colColorModes)) next.colColorModes = source.colColorModes.map((v) => v === 'paint_style' ? 'paint_style' : 'hex');
+    if (Array.isArray(source.colPaintStyleIds)) next.colPaintStyleIds = source.colPaintStyleIds.map((v) => (typeof v === 'string' && v.trim()) ? v : null);
     if (Array.isArray(source.colColorEnabled)) next.colColorEnabled = source.colColorEnabled.map((v) => Boolean(v));
     if (source.markColorSource === 'col' || source.markColorSource === 'row') next.markColorSource = source.markColorSource;
     if (typeof source.assistLineVisible === 'boolean') next.assistLineVisible = source.assistLineVisible;
@@ -152,8 +162,162 @@ function closeRowColorPopover() {
     activeColorTarget = null;
     ui.rowColorPopover.classList.add('hidden');
     ui.rowColorHexInput.classList.remove('row-color-hex-error');
+    ui.rowColorStyleMenu.classList.add('hidden');
     ui.rowColorResetBtn.classList.add('hidden');
     ui.rowColorResetBtn.disabled = true;
+}
+
+function getColorModeForTarget(target: { type: 'row' | 'col'; index: number }): ColorMode {
+    if (target.type === 'row') {
+        ensureRowColorModesLength(state.rows);
+        return state.rowColorModes[target.index] === 'paint_style' ? 'paint_style' : 'hex';
+    }
+    const totalCols = getGridColsForChart(state.chartType, state.cols);
+    ensureColHeaderColorModesLength(totalCols);
+    return state.colHeaderColorModes[target.index] === 'paint_style' ? 'paint_style' : 'hex';
+}
+
+function getPaintStyleIdForTarget(target: { type: 'row' | 'col'; index: number }): string | null {
+    if (target.type === 'row') {
+        ensureRowPaintStyleIdsLength(state.rows);
+        return state.rowPaintStyleIds[target.index];
+    }
+    const totalCols = getGridColsForChart(state.chartType, state.cols);
+    ensureColHeaderPaintStyleIdsLength(totalCols);
+    return state.colHeaderPaintStyleIds[target.index];
+}
+
+function setColorModeForTarget(target: { type: 'row' | 'col'; index: number }, mode: ColorMode) {
+    if (target.type === 'row') {
+        ensureRowColorModesLength(state.rows);
+        state.rowColorModes[target.index] = mode;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('rowColorModes', ensureRowColorModesLength(state.rows).slice());
+            recomputeEffectiveStyleSnapshot();
+        }
+        return;
+    }
+    const totalCols = getGridColsForChart(state.chartType, state.cols);
+    ensureColHeaderColorModesLength(totalCols);
+    state.colHeaderColorModes[target.index] = mode;
+    if (state.isInstanceTarget) {
+        setLocalStyleOverrideField('colColorModes', ensureColHeaderColorModesLength(totalCols).slice());
+        recomputeEffectiveStyleSnapshot();
+    }
+}
+
+function setPaintStyleIdForTarget(target: { type: 'row' | 'col'; index: number }, styleId: string | null) {
+    if (target.type === 'row') {
+        ensureRowPaintStyleIdsLength(state.rows);
+        state.rowPaintStyleIds[target.index] = styleId;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('rowPaintStyleIds', ensureRowPaintStyleIdsLength(state.rows).slice());
+            recomputeEffectiveStyleSnapshot();
+        }
+        return;
+    }
+    const totalCols = getGridColsForChart(state.chartType, state.cols);
+    ensureColHeaderPaintStyleIdsLength(totalCols);
+    state.colHeaderPaintStyleIds[target.index] = styleId;
+    if (state.isInstanceTarget) {
+        setLocalStyleOverrideField('colPaintStyleIds', ensureColHeaderPaintStyleIdsLength(totalCols).slice());
+        recomputeEffectiveStyleSnapshot();
+    }
+}
+
+function requestPaintStyleList() {
+    parent.postMessage({ pluginMessage: { type: 'list_paint_styles' } }, '*');
+}
+
+function resolveDefaultColorForTarget(target: { type: 'row' | 'col'; index: number }): string {
+    return target.type === 'row'
+        ? getRowColor(target.index)
+        : (state.colHeaderColorEnabled[target.index]
+            ? (normalizeHexColorInput(state.colHeaderColors[target.index]) || getRowColor(0))
+            : getRowColor(0));
+}
+
+function renderPaintStyleMenu() {
+    ui.rowColorStyleMenuList.innerHTML = '';
+    if (!activeColorTarget) return;
+    const activeStyleId = getPaintStyleIdForTarget(activeColorTarget);
+    if (localPaintStyles.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'px-2 py-1.5 text-[10px] text-text-sub';
+        empty.textContent = 'No local paint styles';
+        ui.rowColorStyleMenuList.appendChild(empty);
+        return;
+    }
+    localPaintStyles.forEach((style) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        const disabled = style.isSolid === false;
+        item.className = `row-color-style-item${disabled ? ' is-disabled' : ''}`;
+        item.disabled = disabled;
+        const swatch = document.createElement('span');
+        swatch.className = 'row-color-style-item-swatch';
+        swatch.style.backgroundColor = style.colorHex || '#FFFFFF';
+        const label = document.createElement('span');
+        label.className = 'truncate';
+        label.textContent = style.name;
+        item.appendChild(swatch);
+        item.appendChild(label);
+        if (style.id === activeStyleId) {
+            item.style.backgroundColor = '#EFF6FF';
+        }
+        item.addEventListener('click', () => {
+            if (!activeColorTarget) return;
+            setColorModeForTarget(activeColorTarget, 'paint_style');
+            setPaintStyleIdForTarget(activeColorTarget, style.id);
+            applyColorHex(activeColorTarget, style.colorHex, true);
+            updateColorPopoverUi(activeColorTarget, style.colorHex);
+            ui.rowColorStyleMenu.classList.add('hidden');
+        });
+        ui.rowColorStyleMenuList.appendChild(item);
+    });
+}
+
+function updatePaintStyleChipUi(target: { type: 'row' | 'col'; index: number }) {
+    const mode = getColorModeForTarget(target);
+    const selectedId = getPaintStyleIdForTarget(target);
+    const selected = selectedId ? localPaintStyles.find((item) => item.id === selectedId) || null : null;
+    const shouldShowChip = mode === 'paint_style' && Boolean(selected);
+    ui.rowColorStyleChip.classList.toggle('hidden', !shouldShowChip);
+    ui.rowColorStyleChipEmpty.classList.toggle('hidden', shouldShowChip);
+    if (!shouldShowChip) {
+        ui.rowColorStyleChipText.textContent = '';
+        ui.rowColorStyleChipEmpty.textContent = mode === 'paint_style' ? 'Select Paint Style' : 'Hex mode';
+        return;
+    }
+    ui.rowColorStyleChipText.textContent = selected?.name || 'Unknown Style';
+}
+
+function updatePopoverModeUi(target: { type: 'row' | 'col'; index: number }) {
+    const mode = getColorModeForTarget(target);
+    ui.rowColorModeSelect.value = mode;
+    ui.rowColorStyleInputBox.classList.toggle('hidden', mode !== 'paint_style');
+    ui.rowColorModeFieldLabel.textContent = mode === 'paint_style' ? 'Color field' : 'Hex';
+    ui.rowColorAddBtn.classList.toggle('hidden', mode !== 'hex');
+    ui.rowColorAddBtn.disabled = mode !== 'hex';
+    updatePaintStyleChipUi(target);
+    renderPaintStyleMenu();
+}
+
+function buildDefaultPaintStyleName(target: { type: 'row' | 'col'; index: number }) {
+    const indexToken = String(target.index + 1).padStart(2, '0');
+    const prefix = target.type === 'row'
+        ? `type-row_${indexToken}-`
+        : `type-col_${indexToken}-`;
+    let maxSeq = 0;
+    localPaintStyles.forEach((item) => {
+        if (!item.name.startsWith(prefix)) return;
+        const tail = item.name.slice(prefix.length);
+        const parsed = Number(tail);
+        if (Number.isFinite(parsed)) {
+            maxSeq = Math.max(maxSeq, Math.floor(parsed));
+        }
+    });
+    return `${prefix}${String(maxSeq + 1).padStart(2, '0')}`;
 }
 
 function initializeRowColorPicker() {
@@ -221,6 +385,7 @@ function updateColorPopoverUi(target: { type: 'row' | 'col'; index: number }, co
     ui.rowColorResetBtn.disabled = !isColTarget;
     if (target.type === 'row') {
         updateRowColorPopoverUi(target.index, colorHex);
+        updatePopoverModeUi(target);
         return;
     }
     const color = normalizeHexColorInput(colorHex)
@@ -236,6 +401,7 @@ function updateColorPopoverUi(target: { type: 'row' | 'col'; index: number }, co
         rowColorPicker.color.hexString = color;
         isSyncingFromPicker = false;
     }
+    updatePopoverModeUi(target);
 }
 
 function positionRowColorPopover(anchorRect: { left: number; top: number; right: number; bottom: number }) {
@@ -325,9 +491,14 @@ function openColorPopover(target: { type: 'row' | 'col'; index: number }, anchor
     if (target.type === 'row' && isRowColorDisabledByColOverrides()) return;
     if (assistLinePopoverOpen) closeAssistLinePopover();
     ensureRowColorsLength(state.rows);
+    ensureRowColorModesLength(state.rows);
+    ensureRowPaintStyleIdsLength(state.rows);
     const totalCols = getGridColsForChart(state.chartType, state.cols);
     ensureColHeaderColorsLength(totalCols);
+    ensureColHeaderColorModesLength(totalCols);
+    ensureColHeaderPaintStyleIdsLength(totalCols);
     initializeRowColorPicker();
+    requestPaintStyleList();
     activeColorTarget = target;
     rowColorPopoverOpen = true;
     ui.rowColorPopover.classList.remove('hidden');
@@ -342,11 +513,22 @@ function openColorPopover(target: { type: 'row' | 'col'; index: number }, anchor
 
 function commitRowColorPopoverIfOpen() {
     if (!rowColorPopoverOpen || !activeColorTarget) return false;
+    const mode = getColorModeForTarget(activeColorTarget);
+    if (mode === 'paint_style') {
+        const styleId = getPaintStyleIdForTarget(activeColorTarget);
+        if (!styleId) {
+            window.alert('Paint Style을 먼저 선택해주세요.');
+            return false;
+        }
+        const color = normalizeHexColorInput(ui.rowColorHexInput.value) || resolveDefaultColorForTarget(activeColorTarget);
+        parent.postMessage({ pluginMessage: { type: 'update_paint_style_color', id: styleId, colorHex: color } }, '*');
+        const applied = applyColorHex(activeColorTarget, color, true);
+        closeRowColorPopover();
+        return applied;
+    }
     const fallback = activeColorTarget.type === 'row'
         ? getRowColor(activeColorTarget.index)
-        : (state.colHeaderColorEnabled[activeColorTarget.index]
-            ? (normalizeHexColorInput(state.colHeaderColors[activeColorTarget.index]) || getRowColor(0))
-            : getRowColor(0));
+        : resolveDefaultColorForTarget(activeColorTarget);
     const candidate = normalizeHexColorInput(ui.rowColorHexInput.value) || fallback;
     const applied = applyColorHex(activeColorTarget, candidate, true);
     closeRowColorPopover();
@@ -411,9 +593,13 @@ function handlePluginMessage(msg: any) {
             state.mode = 'edit';
             state.markRatio = 0.8;
             state.rowColors = [getDefaultRowColor(0), getDefaultRowColor(1), getDefaultRowColor(2)];
+            state.rowColorModes = ['hex', 'hex', 'hex'];
+            state.rowPaintStyleIds = [null, null, null];
             state.rowHeaderLabels = ['R1', 'R2', 'R3'];
             state.colHeaderTitles = ['C1', 'C2', 'C3'];
             state.colHeaderColors = [getDefaultRowColor(0), getDefaultRowColor(1), getDefaultRowColor(2)];
+            state.colHeaderColorModes = ['hex', 'hex', 'hex'];
+            state.colHeaderPaintStyleIds = [null, null, null];
             state.colHeaderColorEnabled = [false, false, false];
             state.markColorSource = 'row';
             state.assistLineVisible = false;
@@ -490,6 +676,22 @@ function handlePluginMessage(msg: any) {
         }
         syncMarkCountFromRows();
         applyRowColorsFromPayload(msg.chartType, state.rows, msg.rowColors, msg.markColors);
+        state.rowColorModes = [];
+        state.rowPaintStyleIds = [];
+        ensureRowColorModesLength(state.rows);
+        ensureRowPaintStyleIdsLength(state.rows);
+        if (Array.isArray(msg.rowColorModes)) {
+            state.rowColorModes = msg.rowColorModes
+                .map((value: unknown) => value === 'paint_style' ? 'paint_style' : 'hex')
+                .slice(0, state.rows);
+            ensureRowColorModesLength(state.rows);
+        }
+        if (Array.isArray(msg.rowPaintStyleIds)) {
+            state.rowPaintStyleIds = msg.rowPaintStyleIds
+                .map((value: unknown) => (typeof value === 'string' && value.trim()) ? value : null)
+                .slice(0, state.rows);
+            ensureRowPaintStyleIdsLength(state.rows);
+        }
         applyRowHeaderLabelsFromPayload(msg.savedRowHeaderLabels, state.rows, msg.chartType);
         ensureRowColorsLength(state.rows);
         const initTotalCols = msg.chartType === 'stackedBar'
@@ -500,7 +702,11 @@ function handlePluginMessage(msg: any) {
             : initTotalCols;
         applyColHeaderTitlesFromPayload(msg.savedXAxisLabels, initHeaderCols, msg.chartType);
         state.colHeaderColorEnabled = [];
+        state.colHeaderColorModes = [];
+        state.colHeaderPaintStyleIds = [];
         ensureColHeaderColorsLength(initTotalCols);
+        ensureColHeaderColorModesLength(initTotalCols);
+        ensureColHeaderPaintStyleIdsLength(initTotalCols);
         ensureColHeaderColorEnabledLength(initTotalCols);
         if (Array.isArray(msg.colColors)) {
             state.colHeaderColors = msg.colColors
@@ -508,6 +714,18 @@ function handlePluginMessage(msg: any) {
                 .map((c: string | null, i: number) => c || getDefaultRowColor(i))
                 .slice(0, initTotalCols);
             ensureColHeaderColorsLength(initTotalCols);
+        }
+        if (Array.isArray(msg.colColorModes)) {
+            state.colHeaderColorModes = msg.colColorModes
+                .map((value: unknown) => value === 'paint_style' ? 'paint_style' : 'hex')
+                .slice(0, initTotalCols);
+            ensureColHeaderColorModesLength(initTotalCols);
+        }
+        if (Array.isArray(msg.colPaintStyleIds)) {
+            state.colHeaderPaintStyleIds = msg.colPaintStyleIds
+                .map((value: unknown) => (typeof value === 'string' && value.trim()) ? value : null)
+                .slice(0, initTotalCols);
+            ensureColHeaderPaintStyleIdsLength(initTotalCols);
         }
         if (Array.isArray(msg.colColorEnabled)) {
             state.colHeaderColorEnabled = msg.colColorEnabled.map((v: unknown) => Boolean(v)).slice(0, initTotalCols);
@@ -597,6 +815,49 @@ function handlePluginMessage(msg: any) {
     if (msg.type === 'style_templates_loaded') {
         setStyleTemplateList(msg.list || []);
     }
+    if (msg.type === 'paint_styles_loaded') {
+        const incoming = Array.isArray(msg.list) ? msg.list : [];
+        localPaintStyles = incoming
+            .map((item: any) => ({
+                id: typeof item?.id === 'string' ? item.id : '',
+                name: typeof item?.name === 'string' ? item.name : '',
+                colorHex: normalizeHexColorInput(item?.colorHex) || '#000000',
+                isSolid: item?.isSolid !== false,
+                remote: Boolean(item?.remote)
+            }))
+            .filter((item: PaintStyleSelection) => Boolean(item.id) && Boolean(item.name));
+        if (rowColorPopoverOpen && activeColorTarget) {
+            updateColorPopoverUi(activeColorTarget, ui.rowColorHexInput.value);
+        }
+    }
+    if (msg.type === 'paint_style_created') {
+        if (!activeColorTarget || !msg.style) return;
+        const createdId = typeof msg.style.id === 'string' ? msg.style.id : '';
+        const createdHex = normalizeHexColorInput(msg.style.colorHex) || resolveDefaultColorForTarget(activeColorTarget);
+        if (!createdId) return;
+        setColorModeForTarget(activeColorTarget, 'paint_style');
+        setPaintStyleIdForTarget(activeColorTarget, createdId);
+        applyColorHex(activeColorTarget, createdHex, true);
+        updateColorPopoverUi(activeColorTarget, createdHex);
+    }
+    if (msg.type === 'paint_style_renamed') {
+        if (rowColorPopoverOpen && activeColorTarget) {
+            updateColorPopoverUi(activeColorTarget, ui.rowColorHexInput.value);
+        }
+    }
+    if (msg.type === 'paint_style_updated') {
+        if (rowColorPopoverOpen && activeColorTarget) {
+            const styleId = getPaintStyleIdForTarget(activeColorTarget);
+            if (styleId && styleId === msg.id) {
+                const nextHex = normalizeHexColorInput(msg.colorHex) || ui.rowColorHexInput.value;
+                applyColorHex(activeColorTarget, nextHex, true);
+                updateColorPopoverUi(activeColorTarget, nextHex);
+            }
+        }
+    }
+    if (msg.type === 'paint_style_error') {
+        window.alert(msg.reason || 'Paint Style 처리 중 오류가 발생했습니다.');
+    }
     if (msg.type === 'style_template_saved') {
         setStyleTemplateList(msg.list || []);
     }
@@ -661,12 +922,32 @@ function handlePluginMessage(msg: any) {
             ui.settingStrokeInput.value = String(state.strokeWidth);
         }
         applyRowColorsFromPayload(state.chartType, state.rows, msg.payload?.rowColors, msg.payload?.colors);
+        state.rowColorModes = [];
+        state.rowPaintStyleIds = [];
+        ensureRowColorModesLength(state.rows);
+        ensureRowPaintStyleIdsLength(state.rows);
+        if (Array.isArray(msg.payload?.rowColorModes)) {
+            state.rowColorModes = msg.payload.rowColorModes
+                .map((value: unknown) => value === 'paint_style' ? 'paint_style' : 'hex')
+                .slice(0, state.rows);
+            ensureRowColorModesLength(state.rows);
+        }
+        if (Array.isArray(msg.payload?.rowPaintStyleIds)) {
+            state.rowPaintStyleIds = msg.payload.rowPaintStyleIds
+                .map((value: unknown) => (typeof value === 'string' && value.trim()) ? value : null)
+                .slice(0, state.rows);
+            ensureRowPaintStyleIdsLength(state.rows);
+        }
         ensureRowColorsLength(state.rows);
         const payloadTotalCols = state.chartType === 'stackedBar'
             ? getTotalStackedCols()
             : getGridColsForChart(state.chartType, state.cols);
         state.colHeaderColorEnabled = [];
+        state.colHeaderColorModes = [];
+        state.colHeaderPaintStyleIds = [];
         ensureColHeaderColorsLength(payloadTotalCols);
+        ensureColHeaderColorModesLength(payloadTotalCols);
+        ensureColHeaderPaintStyleIdsLength(payloadTotalCols);
         ensureColHeaderColorEnabledLength(payloadTotalCols);
         if (Array.isArray(msg.payload?.colColors)) {
             state.colHeaderColors = msg.payload.colColors
@@ -674,6 +955,18 @@ function handlePluginMessage(msg: any) {
                 .map((c: string | null, i: number) => c || getDefaultRowColor(i))
                 .slice(0, payloadTotalCols);
             ensureColHeaderColorsLength(payloadTotalCols);
+        }
+        if (Array.isArray(msg.payload?.colColorModes)) {
+            state.colHeaderColorModes = msg.payload.colColorModes
+                .map((value: unknown) => value === 'paint_style' ? 'paint_style' : 'hex')
+                .slice(0, payloadTotalCols);
+            ensureColHeaderColorModesLength(payloadTotalCols);
+        }
+        if (Array.isArray(msg.payload?.colPaintStyleIds)) {
+            state.colHeaderPaintStyleIds = msg.payload.colPaintStyleIds
+                .map((value: unknown) => (typeof value === 'string' && value.trim()) ? value : null)
+                .slice(0, payloadTotalCols);
+            ensureColHeaderPaintStyleIdsLength(payloadTotalCols);
         }
         if (Array.isArray(msg.payload?.colColorEnabled)) {
             state.colHeaderColorEnabled = msg.payload.colColorEnabled
@@ -791,6 +1084,60 @@ function bindUiEvents() {
         if (!custom.detail || typeof custom.detail.col !== 'number') return;
         openColorPopover({ type: 'col', index: custom.detail.col }, custom.detail.anchorRect);
     }) as EventListener);
+    ui.rowColorModeSelect.addEventListener('change', () => {
+        if (!activeColorTarget) return;
+        const mode = ui.rowColorModeSelect.value === 'paint_style' ? 'paint_style' : 'hex';
+        setColorModeForTarget(activeColorTarget, mode);
+        if (mode === 'hex') {
+            setPaintStyleIdForTarget(activeColorTarget, null);
+            ui.rowColorStyleMenu.classList.add('hidden');
+        } else {
+            requestPaintStyleList();
+        }
+        updateColorPopoverUi(activeColorTarget, ui.rowColorHexInput.value);
+    });
+    ui.rowColorStyleCaretBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!activeColorTarget) return;
+        if (getColorModeForTarget(activeColorTarget) !== 'paint_style') return;
+        renderPaintStyleMenu();
+        const nextHidden = !ui.rowColorStyleMenu.classList.contains('hidden');
+        ui.rowColorStyleMenu.classList.toggle('hidden', nextHidden);
+    });
+    ui.rowColorStyleChipClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!activeColorTarget) return;
+        setPaintStyleIdForTarget(activeColorTarget, null);
+        setColorModeForTarget(activeColorTarget, 'hex');
+        ui.rowColorStyleMenu.classList.add('hidden');
+        updateColorPopoverUi(activeColorTarget, ui.rowColorHexInput.value);
+    });
+    ui.rowColorStyleChipText.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!activeColorTarget) return;
+        if (getColorModeForTarget(activeColorTarget) !== 'paint_style') return;
+        const styleId = getPaintStyleIdForTarget(activeColorTarget);
+        if (!styleId) return;
+        const current = localPaintStyles.find((item) => item.id === styleId);
+        if (!current) return;
+        if (current.remote) {
+            window.alert('Remote style은 이름을 변경할 수 없습니다.');
+            return;
+        }
+        const nextName = window.prompt('Paint Style name', current.name);
+        if (!nextName) return;
+        const normalized = nextName.trim();
+        if (!normalized) return;
+        parent.postMessage({ pluginMessage: { type: 'rename_paint_style', id: styleId, name: normalized } }, '*');
+    });
+    ui.rowColorAddBtn.addEventListener('click', () => {
+        if (!activeColorTarget) return;
+        if (getColorModeForTarget(activeColorTarget) !== 'hex') return;
+        const fallback = resolveDefaultColorForTarget(activeColorTarget);
+        const hex = normalizeHexColorInput(ui.rowColorHexInput.value) || fallback;
+        const name = buildDefaultPaintStyleName(activeColorTarget);
+        parent.postMessage({ pluginMessage: { type: 'create_paint_style', name, colorHex: hex } }, '*');
+    });
     ui.rowColorHexInput.addEventListener('input', () => {
         if (!activeColorTarget) return;
         const normalized = normalizeHexColorInput(ui.rowColorHexInput.value);
@@ -812,19 +1159,7 @@ function bindUiEvents() {
         }
     });
     ui.rowColorSaveBtn.addEventListener('click', () => {
-        if (!activeColorTarget) {
-            closeRowColorPopover();
-            return;
-        }
-        const candidate = normalizeHexColorInput(ui.rowColorHexInput.value)
-            || (activeColorTarget.type === 'row'
-                ? getRowColor(activeColorTarget.index)
-                : (state.colHeaderColorEnabled[activeColorTarget.index]
-                    ? (normalizeHexColorInput(state.colHeaderColors[activeColorTarget.index]) || getRowColor(0))
-                    : getRowColor(0)));
-        const applied = applyColorHex(activeColorTarget, candidate);
-        if (!applied) return;
-        closeRowColorPopover();
+        commitRowColorPopoverIfOpen();
     });
     ui.rowColorResetBtn.addEventListener('click', () => {
         if (!activeColorTarget || activeColorTarget.type !== 'col') {
@@ -835,9 +1170,15 @@ function bindUiEvents() {
         ensureColHeaderColorEnabledLength(totalCols);
         state.colHeaderColorEnabled[activeColorTarget.index] = false;
         state.colHeaderColors[activeColorTarget.index] = getRowColor(0);
+        ensureColHeaderColorModesLength(totalCols);
+        ensureColHeaderPaintStyleIdsLength(totalCols);
+        state.colHeaderColorModes[activeColorTarget.index] = 'hex';
+        state.colHeaderPaintStyleIds[activeColorTarget.index] = null;
         if (state.isInstanceTarget) {
             const totalCols = getGridColsForChart(state.chartType, state.cols);
             setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());
+            setLocalStyleOverrideField('colColorModes', ensureColHeaderColorModesLength(totalCols).slice());
+            setLocalStyleOverrideField('colPaintStyleIds', ensureColHeaderPaintStyleIdsLength(totalCols).slice());
             setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
             recomputeEffectiveStyleSnapshot();
         }
@@ -940,6 +1281,7 @@ function initializeUi() {
     bindUiEvents();
     initGraphSettingTooltip();
     updateAssistLineToggleUi();
+    requestPaintStyleList();
     setDataTabRenderer(() => {
         renderGrid();
         renderPreview();

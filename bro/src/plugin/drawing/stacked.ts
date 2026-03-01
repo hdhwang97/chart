@@ -1,6 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM } from '../constants';
 import { collectColumns, setVariantProperty, type ColRef } from './shared';
-import { normalizeHexColor, rgbToHex, tryApplyFill, tryApplyStroke } from '../utils';
+import { normalizeHexColor, rgbToHex, tryApplyFill, tryApplyFillStyleLink, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
 
 // ==========================================
 // STACKED BAR CHART DRAWING
@@ -283,7 +283,18 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode, precom
                     setVisibleIfChanged(subBar, true);
                     applySegmentResizeModes(subBar);
                     applyStackedMarkRatioToSubBar(subBar, cellWidth, targetRatio, currentGroupBarCount);
-                    applySegmentsToBar(subBar, values, globalDataIdx, rowCount, H, globalMaxSum, mode, config.rowColors);
+                    applySegmentsToBar(
+                        subBar,
+                        values,
+                        globalDataIdx,
+                        rowCount,
+                        H,
+                        globalMaxSum,
+                        mode,
+                        config.rowColors,
+                        config.rowColorModes,
+                        config.rowPaintStyleIds
+                    );
                     applySegmentResizeModes(subBar);
                     globalDataIdx++;
                 } else {
@@ -302,12 +313,20 @@ export function applySegmentsToBar(
     H: number,
     maxSum: number,
     mode: string,
-    rowColors?: string[]
+    rowColors?: string[],
+    rowColorModes?: string[],
+    rowPaintStyleIds?: Array<string | null>
 ) {
     if (!('children' in barInstance)) return;
     const segmentByIndex = buildSegmentLayerMap(barInstance);
     const normalizedRowColors = Array.isArray(rowColors)
         ? rowColors.map((color) => normalizeHexColor(color))
+        : [];
+    const normalizedModes = Array.isArray(rowColorModes)
+        ? rowColorModes.map((value) => value === 'paint_style' ? 'paint_style' : 'hex')
+        : [];
+    const normalizedStyleIds = Array.isArray(rowPaintStyleIds)
+        ? rowPaintStyleIds.map((value) => (typeof value === 'string' && value.trim()) ? value : null)
         : [];
 
     for (let r = 0; r < rowCount; r++) {
@@ -321,7 +340,14 @@ export function applySegmentsToBar(
                 setVisibleIfChanged(targetLayer, false);
             } else {
                 setVisibleIfChanged(targetLayer, true);
-                if (rowColor) {
+                const rowMode = normalizedModes[r + 1] || 'hex';
+                const rowStyleId = normalizedStyleIds[r + 1];
+                let appliedViaStyleLink = false;
+                if (rowMode === 'paint_style' && rowStyleId) {
+                    if (tryApplyFillStyleLink(targetLayer as SceneNode, rowStyleId)) appliedViaStyleLink = true;
+                    if (tryApplyStrokeStyleLink(targetLayer as SceneNode, rowStyleId)) appliedViaStyleLink = true;
+                }
+                if (!appliedViaStyleLink && rowColor) {
                     if (!hasSameSolidFill(targetLayer as SceneNode, rowColor)) {
                         tryApplyFill(targetLayer as SceneNode, rowColor);
                     }

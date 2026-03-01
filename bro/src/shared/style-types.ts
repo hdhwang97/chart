@@ -1,6 +1,15 @@
 export type StrokeAlign = 'CENTER' | 'INSIDE' | 'OUTSIDE';
 export type StyleApplyMode = 'data_only' | 'include_style';
 export type StyleSourceMode = 'master_extracted' | 'local_override';
+export type ColorMode = 'hex' | 'paint_style';
+
+export type PaintStyleSelection = {
+    id: string;
+    name: string;
+    colorHex: string;
+    isSolid?: boolean;
+    remote?: boolean;
+};
 
 export type StrokeStyleSnapshot = {
     color?: string;
@@ -77,7 +86,11 @@ export type StrokeInjectionPayload = {
 
 export type LocalStyleOverrides = {
     rowColors?: string[];
+    rowColorModes?: ColorMode[];
+    rowPaintStyleIds?: Array<string | null>;
     colColors?: string[];
+    colColorModes?: ColorMode[];
+    colPaintStyleIds?: Array<string | null>;
     colColorEnabled?: boolean[];
     markColorSource?: 'row' | 'col';
     assistLineVisible?: boolean;
@@ -95,7 +108,11 @@ export type LocalStyleOverrides = {
 
 export type LocalStyleOverrideMask = {
     rowColors?: boolean;
+    rowColorModes?: boolean;
+    rowPaintStyleIds?: boolean;
     colColors?: boolean;
+    colColorModes?: boolean;
+    colPaintStyleIds?: boolean;
     colColorEnabled?: boolean;
     markColorSource?: boolean;
     assistLineVisible?: boolean;

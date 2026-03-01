@@ -17,6 +17,7 @@ import { resolveEffectiveYRange } from './drawing/y-range';
 import type {
     AssistLineInjectionStyle,
     CellFillInjectionStyle,
+    ColorMode,
     GridStrokeInjectionStyle,
     LocalStyleOverrideMask,
     LocalStyleOverrides,
@@ -173,6 +174,16 @@ function getDefaultRowColor(index: number) {
     return DEFAULT_ROW_COLORS[index % DEFAULT_ROW_COLORS.length];
 }
 
+function normalizeColorMode(value: unknown): ColorMode {
+    return value === 'paint_style' ? 'paint_style' : 'hex';
+}
+
+function normalizeStyleId(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+}
+
 function resolveRowColorsFromNode(
     node: SceneNode,
     chartType: string,
@@ -204,6 +215,38 @@ function resolveRowColorsFromNode(
     return next;
 }
 
+function resolveRowColorModesFromNode(node: SceneNode, rowCount: number): ColorMode[] {
+    const savedRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ROW_COLOR_MODES);
+    let saved: any[] = [];
+    if (savedRaw) {
+        try {
+            const parsed = JSON.parse(savedRaw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: ColorMode[] = [];
+    for (let i = 0; i < rowCount; i++) {
+        next.push(normalizeColorMode(saved[i]));
+    }
+    return next;
+}
+
+function resolveRowPaintStyleIdsFromNode(node: SceneNode, rowCount: number): Array<string | null> {
+    const savedRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ROW_PAINT_STYLE_IDS);
+    let saved: any[] = [];
+    if (savedRaw) {
+        try {
+            const parsed = JSON.parse(savedRaw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: Array<string | null> = [];
+    for (let i = 0; i < rowCount; i++) {
+        next.push(normalizeStyleId(saved[i]));
+    }
+    return next;
+}
+
 function resolveColColorsFromNode(node: SceneNode, colCount: number) {
     const savedRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLORS);
     let saved: any[] = [];
@@ -216,6 +259,38 @@ function resolveColColorsFromNode(node: SceneNode, colCount: number) {
     const next: string[] = [];
     for (let i = 0; i < colCount; i++) {
         next.push(normalizeHexColor(saved[i]) || getDefaultRowColor(i));
+    }
+    return next;
+}
+
+function resolveColColorModesFromNode(node: SceneNode, colCount: number): ColorMode[] {
+    const savedRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLOR_MODES);
+    let saved: any[] = [];
+    if (savedRaw) {
+        try {
+            const parsed = JSON.parse(savedRaw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: ColorMode[] = [];
+    for (let i = 0; i < colCount; i++) {
+        next.push(normalizeColorMode(saved[i]));
+    }
+    return next;
+}
+
+function resolveColPaintStyleIdsFromNode(node: SceneNode, colCount: number): Array<string | null> {
+    const savedRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_PAINT_STYLE_IDS);
+    let saved: any[] = [];
+    if (savedRaw) {
+        try {
+            const parsed = JSON.parse(savedRaw);
+            if (Array.isArray(parsed)) saved = parsed;
+        } catch { }
+    }
+    const next: Array<string | null> = [];
+    for (let i = 0; i < colCount; i++) {
+        next.push(normalizeStyleId(saved[i]));
     }
     return next;
 }
@@ -339,10 +414,18 @@ export async function initPluginUI(
             ? loadLocalStyleOverrides(node)
             : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
         const runtimeRowColors = localOverrideState.mask.rowColors ? localOverrideState.overrides.rowColors : undefined;
+        const runtimeRowColorModes = localOverrideState.mask.rowColorModes ? localOverrideState.overrides.rowColorModes : undefined;
+        const runtimeRowPaintStyleIds = localOverrideState.mask.rowPaintStyleIds ? localOverrideState.overrides.rowPaintStyleIds : undefined;
         const runtimeColColors = localOverrideState.mask.colColors ? localOverrideState.overrides.colColors : undefined;
+        const runtimeColColorModes = localOverrideState.mask.colColorModes ? localOverrideState.overrides.colColorModes : undefined;
+        const runtimeColPaintStyleIds = localOverrideState.mask.colPaintStyleIds ? localOverrideState.overrides.colPaintStyleIds : undefined;
         const runtimeColEnabled = localOverrideState.mask.colColorEnabled ? localOverrideState.overrides.colColorEnabled : undefined;
         const runtimeMarkColorSource = localOverrideState.mask.markColorSource ? localOverrideState.overrides.markColorSource : undefined;
         const runtimeAssistLineStyle = localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined;
+        const rowCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
+        const colCount = chartType === 'stackedBar' || chartType === 'stacked'
+            ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((acc, cur) => acc + (Number(cur) || 0), 0) : 0)
+            : (Array.isArray(valuesToUse) && Array.isArray(valuesToUse[0]) ? valuesToUse[0].length : 1);
         const payload = {
             type: chartType,
             mode,
@@ -360,8 +443,12 @@ export async function initPluginUI(
                 : undefined,
             assistLineVisible,
             assistLineEnabled,
-            rowColors: runtimeRowColors,
-            colColors: runtimeColColors,
+            rowColors: runtimeRowColors ?? resolveRowColorsFromNode(node, chartType, Math.max(1, rowCount)),
+            rowColorModes: runtimeRowColorModes ?? resolveRowColorModesFromNode(node, Math.max(1, rowCount)),
+            rowPaintStyleIds: runtimeRowPaintStyleIds ?? resolveRowPaintStyleIdsFromNode(node, Math.max(1, rowCount)),
+            colColors: runtimeColColors ?? resolveColColorsFromNode(node, Math.max(1, colCount)),
+            colColorModes: runtimeColColorModes ?? resolveColColorModesFromNode(node, Math.max(1, colCount)),
+            colPaintStyleIds: runtimeColPaintStyleIds ?? resolveColPaintStyleIdsFromNode(node, Math.max(1, colCount)),
             colColorEnabled: runtimeColEnabled,
             markColorSource: runtimeMarkColorSource,
             assistLineStyle: runtimeAssistLineStyle,
@@ -379,7 +466,11 @@ export async function initPluginUI(
                 chartType,
                 markNum: chartData.markNum,
                 ...(localOverrideState.mask.rowColors ? { rowColors: localOverrideState.overrides.rowColors } : {}),
+                ...(localOverrideState.mask.rowColorModes ? { rowColorModes: localOverrideState.overrides.rowColorModes } : {}),
+                ...(localOverrideState.mask.rowPaintStyleIds ? { rowPaintStyleIds: localOverrideState.overrides.rowPaintStyleIds } : {}),
                 ...(localOverrideState.mask.colColors ? { colColors: localOverrideState.overrides.colColors } : {}),
+                ...(localOverrideState.mask.colColorModes ? { colColorModes: localOverrideState.overrides.colColorModes } : {}),
+                ...(localOverrideState.mask.colPaintStyleIds ? { colPaintStyleIds: localOverrideState.overrides.colPaintStyleIds } : {}),
                 ...(localOverrideState.mask.colColorEnabled ? { colColorEnabled: localOverrideState.overrides.colColorEnabled } : {}),
                 ...(localOverrideState.mask.cellFillStyle ? { cellFillStyle: localOverrideState.overrides.cellFillStyle } : {}),
                 ...(localOverrideState.mask.cellTopStyle ? { cellTopStyle: localOverrideState.overrides.cellTopStyle } : {}),
@@ -435,9 +526,21 @@ export async function initPluginUI(
             rowColors: shouldUseSavedPaletteForInstance
                 ? resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors)
                 : extractedRowColors,
+            rowColorModes: shouldUseSavedPaletteForInstance
+                ? resolveRowColorModesFromNode(node, rowColorCount)
+                : Array.from({ length: Math.max(1, rowColorCount) }, () => 'hex' as ColorMode),
+            rowPaintStyleIds: shouldUseSavedPaletteForInstance
+                ? resolveRowPaintStyleIdsFromNode(node, rowColorCount)
+                : Array.from({ length: Math.max(1, rowColorCount) }, () => null as string | null),
             colColors: shouldUseSavedPaletteForInstance
                 ? resolveColColorsFromNode(node, Math.max(1, colCount))
                 : extractedColColors,
+            colColorModes: shouldUseSavedPaletteForInstance
+                ? resolveColColorModesFromNode(node, Math.max(1, colCount))
+                : Array.from({ length: Math.max(1, colCount) }, () => 'hex' as ColorMode),
+            colPaintStyleIds: shouldUseSavedPaletteForInstance
+                ? resolveColPaintStyleIdsFromNode(node, Math.max(1, colCount))
+                : Array.from({ length: Math.max(1, colCount) }, () => null as string | null),
             colColorEnabled: shouldUseSavedPaletteForInstance
                 ? resolveColColorEnabledFromNode(node, Math.max(1, colCount))
                 : extractedColEnabled,
@@ -456,7 +559,11 @@ export async function initPluginUI(
         }
         : {
             rowColors: resolveRowColorsFromNode(node, chartType, rowColorCount, styleInfo.colors),
+            rowColorModes: resolveRowColorModesFromNode(node, rowColorCount),
+            rowPaintStyleIds: resolveRowPaintStyleIdsFromNode(node, rowColorCount),
             colColors: resolveColColorsFromNode(node, Math.max(1, colCount)),
+            colColorModes: resolveColColorModesFromNode(node, Math.max(1, colCount)),
+            colPaintStyleIds: resolveColPaintStyleIdsFromNode(node, Math.max(1, colCount)),
             colColorEnabled: resolveColColorEnabledFromNode(node, Math.max(1, colCount)),
             markColorSource: node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row'
         };
@@ -464,7 +571,19 @@ export async function initPluginUI(
         ? applyLocalOverridesToUiSnapshot(baseUiSnapshot, localOverrideState.overrides, localOverrideState.mask)
         : baseUiSnapshot;
     const rowColors = Array.isArray(effectiveUiSnapshot.rowColors) ? effectiveUiSnapshot.rowColors : extractedRowColors;
+    const rowColorModes = Array.isArray(effectiveUiSnapshot.rowColorModes)
+        ? effectiveUiSnapshot.rowColorModes.map((value) => normalizeColorMode(value))
+        : Array.from({ length: Math.max(1, rowColorCount) }, () => 'hex' as ColorMode);
+    const rowPaintStyleIds = Array.isArray(effectiveUiSnapshot.rowPaintStyleIds)
+        ? effectiveUiSnapshot.rowPaintStyleIds.map((value) => normalizeStyleId(value))
+        : Array.from({ length: Math.max(1, rowColorCount) }, () => null as string | null);
     const colColors = Array.isArray(effectiveUiSnapshot.colColors) ? effectiveUiSnapshot.colColors : extractedColColors;
+    const colColorModes = Array.isArray(effectiveUiSnapshot.colColorModes)
+        ? effectiveUiSnapshot.colColorModes.map((value) => normalizeColorMode(value))
+        : Array.from({ length: Math.max(1, colCount) }, () => 'hex' as ColorMode);
+    const colPaintStyleIds = Array.isArray(effectiveUiSnapshot.colPaintStyleIds)
+        ? effectiveUiSnapshot.colPaintStyleIds.map((value) => normalizeStyleId(value))
+        : Array.from({ length: Math.max(1, colCount) }, () => null as string | null);
     const colColorEnabled = Array.isArray(effectiveUiSnapshot.colColorEnabled) ? effectiveUiSnapshot.colColorEnabled : extractedColEnabled;
     const markColorSource = effectiveUiSnapshot.markColorSource === 'col' ? 'col' : 'row';
 
@@ -483,7 +602,11 @@ export async function initPluginUI(
 
         markColors: extractedColors,
         rowColors,
+        rowColorModes,
+        rowPaintStyleIds,
         colColors,
+        colColorModes,
+        colPaintStyleIds,
         colColorEnabled,
         markColorSource,
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
@@ -526,7 +649,11 @@ export async function initPluginUI(
         isTemplateMasterTarget: node.type === 'COMPONENT',
         extractedStyleSnapshot: {
             rowColors: extractedRowColors,
+            rowColorModes: Array.from({ length: Math.max(1, rowColorCount) }, () => 'hex' as ColorMode),
+            rowPaintStyleIds: Array.from({ length: Math.max(1, rowColorCount) }, () => null as string | null),
             colColors: extractedColColors,
+            colColorModes: Array.from({ length: Math.max(1, colCount) }, () => 'hex' as ColorMode),
+            colPaintStyleIds: Array.from({ length: Math.max(1, colCount) }, () => null as string | null),
             colColorEnabled: extractedColEnabled,
             markColorSource: 'row',
             cellFillStyle: styleInfo.cellFillStyle || null,

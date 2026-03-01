@@ -106,6 +106,42 @@ export function tryApplyStroke(node: SceneNode, hex: string) {
     }
 }
 
+export function tryApplyFillStyleLink(node: SceneNode, styleId: string) {
+    const target = node as SceneNode & { fillStyleId?: string };
+    if (!target || !('fillStyleId' in target)) return false;
+    if (typeof styleId !== 'string' || !styleId.trim()) return false;
+    try {
+        target.fillStyleId = styleId;
+        return true;
+    } catch (e) {
+        console.warn('[chart-plugin][color] fill style link skipped', {
+            nodeId: node.id,
+            nodeName: node.name,
+            styleId,
+            error: e instanceof Error ? e.message : String(e)
+        });
+        return false;
+    }
+}
+
+export function tryApplyStrokeStyleLink(node: SceneNode, styleId: string) {
+    const target = node as SceneNode & { strokeStyleId?: string };
+    if (!target || !('strokeStyleId' in target)) return false;
+    if (typeof styleId !== 'string' || !styleId.trim()) return false;
+    try {
+        target.strokeStyleId = styleId;
+        return true;
+    } catch (e) {
+        console.warn('[chart-plugin][color] stroke style link skipped', {
+            nodeId: node.id,
+            nodeName: node.name,
+            styleId,
+            error: e instanceof Error ? e.message : String(e)
+        });
+        return false;
+    }
+}
+
 export function tryApplyDashPattern(node: SceneNode, pattern: number[]) {
     if (!('dashPattern' in node)) return false;
     try {
