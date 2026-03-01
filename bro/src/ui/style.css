@@ -68,15 +68,70 @@ input[type=number]::-webkit-outer-spin-button {
     justify-content: center;
 }
 
-.row-color-style-chip {
+.row-color-mode-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+
+.row-color-mode-tab {
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    background: #F8FAFC;
+    color: #64748B;
+    font-size: 10px;
+    line-height: 1.2;
+    font-weight: 600;
+    padding: 6px 8px;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+
+.row-color-mode-tab.is-active {
+    background: #EFF6FF;
+    border-color: #93C5FD;
+    color: #1D4ED8;
+    opacity: 1;
+}
+
+.row-color-edit-btn.is-active {
+    background: #EFF6FF;
+    border-color: #93C5FD;
+    color: #1D4ED8;
+}
+
+.row-color-hex-input-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.row-color-input-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid #D1D5DB;
+    background: #FFFFFF;
+    flex: 0 0 14px;
+}
+
+.row-color-style-main-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.row-color-style-main {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    max-width: 182px;
-    padding: 2px 6px;
+    gap: 6px;
+    width: calc(100% - 26px);
+    min-height: 24px;
+    padding: 3px 6px;
     border: 1px solid #D1D5DB;
-    border-radius: 999px;
-    background: #F8FAFC;
+    border-radius: 6px;
+    background: #FFFFFF;
 }
 
 .row-color-style-chip-text {
@@ -97,6 +152,30 @@ input[type=number]::-webkit-outer-spin-button {
     line-height: 1;
     cursor: pointer;
     padding: 0;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.row-color-style-main:hover .row-color-style-chip-close:not(.hidden) {
+    opacity: 1;
+}
+
+.row-color-style-caret-btn {
+    width: 22px;
+    height: 22px;
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    background: #FFFFFF;
+    color: #64748B;
+    cursor: pointer;
+}
+
+.row-color-style-caret-btn:hover {
+    background: #F8FAFC;
+}
+
+.row-color-style-edit-box {
+    margin-top: 6px;
 }
 
 .row-color-style-menu {
@@ -126,6 +205,12 @@ input[type=number]::-webkit-outer-spin-button {
 
 .row-color-style-item:hover {
     background: #F8FAFC;
+}
+
+.row-color-style-item-label-editable {
+    cursor: text;
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
 .row-color-style-item.is-disabled {

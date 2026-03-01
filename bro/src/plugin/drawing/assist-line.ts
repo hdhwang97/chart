@@ -1,12 +1,13 @@
 import { collectColumns } from './shared';
 import { clamp, traverse, findActualPropKey, normalizeHexColor, tryApplyDashPattern, tryApplyStroke } from '../utils';
 
-type AssistMetricType = 'min' | 'max' | 'avg';
+type AssistMetricType = 'min' | 'max' | 'avg' | 'ctr';
 
 type AssistLineEnabled = {
     min: boolean;
     max: boolean;
     avg: boolean;
+    ctr: boolean;
 };
 
 type AssistLineStyle = {
@@ -18,7 +19,8 @@ type AssistLineStyle = {
 const DEFAULT_ASSIST_LINE_ENABLED: AssistLineEnabled = {
     min: false,
     max: false,
-    avg: false
+    avg: false,
+    ctr: false
 };
 
 function normalizeAssistLineEnabled(value: any): AssistLineEnabled {
@@ -28,7 +30,8 @@ function normalizeAssistLineEnabled(value: any): AssistLineEnabled {
     return {
         min: Boolean((value as any).min),
         max: Boolean((value as any).max),
-        avg: Boolean((value as any).avg)
+        avg: Boolean((value as any).avg),
+        ctr: Boolean((value as any).ctr)
     };
 }
 
@@ -38,6 +41,7 @@ function parseMetricFromName(name: string): AssistMetricType | null {
     if (lower.includes('min') || lower.includes('최소')) return 'min';
     if (lower.includes('max') || lower.includes('최대')) return 'max';
     if (lower.includes('avg') || lower.includes('average') || lower.includes('평균')) return 'avg';
+    if (lower.includes('ctr') || lower.includes('center') || lower.includes('mid') || lower.includes('중앙')) return 'ctr';
     return null;
 }
 
@@ -45,7 +49,8 @@ function resolveAssistLineNodes(graph: SceneNode): Record<AssistMetricType, Scen
     const nodes: Record<AssistMetricType, SceneNode[]> = {
         min: [],
         max: [],
-        avg: []
+        avg: [],
+        ctr: []
     };
 
     traverse(graph, (node) => {
@@ -66,7 +71,7 @@ function resolveChartContainerNodes(graph: SceneNode): SceneNode[] {
     return nodes;
 }
 
-function computeMetrics(values: any[][]): Record<AssistMetricType, number> {
+function computeMetrics(values: any[][], yMin: number, yMax: number): Record<AssistMetricType, number> {
     const flat: number[] = [];
     if (Array.isArray(values)) {
         values.forEach((row) => {
@@ -79,14 +84,16 @@ function computeMetrics(values: any[][]): Record<AssistMetricType, number> {
     }
 
     if (flat.length === 0) {
-        return { min: 0, max: 0, avg: 0 };
+        const ctr = yMin + ((yMax - yMin) / 2);
+        return { min: 0, max: 0, avg: 0, ctr };
     }
 
     const min = Math.min(...flat);
     const max = Math.max(...flat);
     const sum = flat.reduce((acc, n) => acc + n, 0);
     const avg = sum / flat.length;
-    return { min, max, avg };
+    const ctr = yMin + ((yMax - yMin) / 2);
+    return { min, max, avg, ctr };
 }
 
 function formatMetricValue(value: number): string {
@@ -203,9 +210,9 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
     const assistLineVisible = Boolean(config?.assistLineVisible);
     const enabled = normalizeAssistLineEnabled(config?.assistLineEnabled);
     const values = Array.isArray(config?.values) ? config.values : [];
-    const metrics = computeMetrics(values);
     const yMin = Number.isFinite(Number(config?.yMin)) ? Number(config.yMin) : 0;
     const yMax = Number.isFinite(Number(config?.yMax)) ? Number(config.yMax) : 100;
+    const metrics = computeMetrics(values, yMin, yMax);
     const graphHeight = resolveReferenceHeight(graph, fallbackHeight);
     const xEmptyHeight = Number.isFinite(Number(options?.xEmptyHeight)) ? Math.max(0, Number(options?.xEmptyHeight)) : 0;
     const nodesByMetric = resolveAssistLineNodes(graph);
@@ -222,7 +229,7 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
         }
     });
 
-    (['min', 'max', 'avg'] as AssistMetricType[]).forEach((metric) => {
+    (['min', 'max', 'avg', 'ctr'] as AssistMetricType[]).forEach((metric) => {
         const metricNodes = nodesByMetric[metric];
         const isEnabled = assistLineVisible && enabled[metric];
         const metricValue = metrics[metric];

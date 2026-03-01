@@ -27,12 +27,13 @@ function normalizeMarkRatio(value: unknown): number | null {
 
 function normalizeAssistLineEnabled(value: any) {
     if (!value || typeof value !== 'object') {
-        return { min: false, max: false, avg: false };
+        return { min: false, max: false, avg: false, ctr: false };
     }
     return {
         min: Boolean(value.min),
         max: Boolean(value.max),
-        avg: Boolean(value.avg)
+        avg: Boolean(value.avg),
+        ctr: Boolean(value.ctr)
     };
 }
 

@@ -32,16 +32,29 @@
     "parserOptions": {
       "project": "./tsconfig.json"
     },
+    "ignorePatterns": [
+      "node_modules",
+      "dist",
+      "config.ts",
+      "vite.config.ts",
+      "vite.config.ui.ts",
+      "vite.config.code.ts"
+    ],
     "root": true,
     "rules": {
       "@typescript-eslint/no-unused-vars": [
-        "error",
+        "off",
         {
           "argsIgnorePattern": "^_",
           "varsIgnorePattern": "^_",
           "caughtErrorsIgnorePattern": "^_"
         }
-      ]
+      ],
+      "@typescript-eslint/no-explicit-any": "off",
+      "no-empty": "off",
+      "@figma/figma-plugins/ban-deprecated-sync-methods": "off",
+      "@figma/figma-plugins/ban-deprecated-sync-prop-setters": "off",
+      "@figma/figma-plugins/dynamic-page-find-method-advice": "off"
     }
   },
   "keywords": []

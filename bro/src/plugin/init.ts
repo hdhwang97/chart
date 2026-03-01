@@ -49,17 +49,18 @@ function resolveMarkRatioFromNode(node: SceneNode, extractedRatio?: number): num
 function resolveAssistLineEnabledFromNode(node: SceneNode) {
     const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
     if (!raw) {
-        return { min: false, max: false, avg: false };
+        return { min: false, max: false, avg: false, ctr: false };
     }
     try {
         const parsed = JSON.parse(raw);
         return {
             min: Boolean(parsed?.min),
             max: Boolean(parsed?.max),
-            avg: Boolean(parsed?.avg)
+            avg: Boolean(parsed?.avg),
+            ctr: Boolean(parsed?.ctr)
         };
     } catch {
-        return { min: false, max: false, avg: false };
+        return { min: false, max: false, avg: false, ctr: false };
     }
 }
 

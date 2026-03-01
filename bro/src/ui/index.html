@@ -267,6 +267,10 @@
                                         <input id="assist-line-avg-check" type="checkbox" class="cursor-pointer">
                                         <span>avg</span>
                                     </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="assist-line-ctr-check" type="checkbox" class="cursor-pointer">
+                                        <span>ctr</span>
+                                    </label>
                                 </div>
                             </div>
                             <div id="mode-toggle-container"
@@ -605,42 +609,42 @@
 
     <div id="row-color-popover"
         class="hidden fixed z-[80] w-64 rounded border border-border bg-white shadow-lg p-2 text-xxs text-text">
-        <div class="flex items-center justify-between mb-2">
-            <span id="row-color-popover-title" class="font-semibold text-text-sub">Row Color</span>
-            <span id="row-color-preview" class="w-4 h-4 rounded border border-border block"></span>
+        <div class="row-color-mode-tabs mb-2">
+            <button id="row-color-mode-tab-hex" type="button" class="row-color-mode-tab is-active">Hex</button>
+            <button id="row-color-mode-tab-style" type="button" class="row-color-mode-tab">Paint Style</button>
         </div>
         <div id="row-color-wheel" class="row-color-wheel mb-2"></div>
-        <label class="block mb-2">
-            <span class="block text-[10px] text-text-sub mb-0.5">Mode</span>
-            <select id="row-color-mode-select"
-                class="w-full px-1.5 py-1 border border-border rounded text-xxs focus:border-primary focus:outline-none transition-colors">
-                <option value="hex">Hex mode</option>
-                <option value="paint_style">Paint Style mode</option>
-            </select>
-        </label>
         <label class="block">
-            <span id="row-color-mode-field-label" class="block text-[10px] text-text-sub mb-0.5">Hex</span>
-            <input id="row-color-hex-input" type="text" value="#3B82F6"
-                class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-            <div id="row-color-style-input-box"
-                class="hidden mt-1 w-full px-1.5 py-1 border border-border rounded text-xxs bg-white">
-                <div class="flex items-center justify-between gap-1">
-                    <div id="row-color-style-chip" class="row-color-style-chip hidden">
+            <div id="row-color-hex-input-box" class="row-color-hex-input-box">
+                <span id="row-color-preview" class="row-color-input-swatch"></span>
+                <input id="row-color-hex-input" type="text" value="#3B82F6"
+                    class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+            </div>
+            <div id="row-color-style-input-box" class="hidden mt-1 w-full text-xxs bg-white">
+                <div class="row-color-style-main-wrap">
+                    <div id="row-color-style-chip" class="row-color-style-main">
+                        <span id="row-color-style-main-swatch" class="row-color-style-item-swatch"></span>
                         <span id="row-color-style-chip-text" class="row-color-style-chip-text"></span>
-                        <button id="row-color-style-chip-close" type="button" class="row-color-style-chip-close" aria-label="Clear style">×</button>
+                        <span id="row-color-style-chip-empty" class="text-[10px] text-text-sub">Select Paint Style</span>
+                        <button id="row-color-style-chip-close" type="button" class="row-color-style-chip-close hidden" aria-label="Clear style">×</button>
                     </div>
-                    <span id="row-color-style-chip-empty" class="text-[10px] text-text-sub">Select Paint Style</span>
-                    <button id="row-color-style-caret-btn" type="button"
-                        class="px-1 py-0.5 rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer">▾</button>
+                    <button id="row-color-style-caret-btn" type="button" class="row-color-style-caret-btn">▾</button>
                 </div>
                 <div id="row-color-style-menu" class="row-color-style-menu hidden">
                     <div id="row-color-style-menu-list" class="row-color-style-menu-list"></div>
+                </div>
+                <div id="row-color-style-edit-box" class="row-color-style-edit-box hidden">
+                    <input id="row-color-style-edit-hex-input" type="text" value="#3B82F6"
+                        class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors"
+                        placeholder="#RRGGBB" />
                 </div>
             </div>
         </label>
         <div class="mt-2 flex justify-end gap-1.5">
             <button id="row-color-add-btn" type="button"
                 class="px-2 py-1 text-xxs font-semibold rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer">Add</button>
+            <button id="row-color-edit-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer hidden">Edit</button>
             <button id="row-color-reset-btn" type="button"
                 class="px-2 py-1 text-xxs font-semibold rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer">Reset</button>
             <button id="row-color-save-btn" type="button"

@@ -49,6 +49,11 @@ let activeColorTarget: { type: 'row' | 'col'; index: number } | null = null;
 let rowColorPicker: any = null;
 let isSyncingFromPicker = false;
 let localPaintStyles: PaintStyleSelection[] = [];
+let rowColorStyleEditMode = false;
+let rowColorDraftHex: string | null = null;
+let rowColorDraftMode: ColorMode | null = null;
+let rowColorDraftStyleId: string | null = null;
+let rowColorDraftColReset = false;
 
 function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
@@ -142,7 +147,8 @@ function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
         next.assistLineEnabled = {
             min: Boolean(source.assistLineEnabled.min),
             max: Boolean(source.assistLineEnabled.max),
-            avg: Boolean(source.assistLineEnabled.avg)
+            avg: Boolean(source.assistLineEnabled.avg),
+            ctr: Boolean(source.assistLineEnabled.ctr)
         };
     }
     if (source.cellFillStyle) next.cellFillStyle = source.cellFillStyle;
@@ -160,11 +166,47 @@ function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
 function closeRowColorPopover() {
     rowColorPopoverOpen = false;
     activeColorTarget = null;
+    rowColorStyleEditMode = false;
+    rowColorDraftHex = null;
+    rowColorDraftMode = null;
+    rowColorDraftStyleId = null;
+    rowColorDraftColReset = false;
     ui.rowColorPopover.classList.add('hidden');
     ui.rowColorHexInput.classList.remove('row-color-hex-error');
     ui.rowColorStyleMenu.classList.add('hidden');
+    ui.rowColorStyleEditBox.classList.add('hidden');
     ui.rowColorResetBtn.classList.add('hidden');
     ui.rowColorResetBtn.disabled = true;
+}
+
+function getDraftMode(target: { type: 'row' | 'col'; index: number }): ColorMode {
+    if (rowColorDraftMode) return rowColorDraftMode;
+    return getColorModeForTarget(target);
+}
+
+function getDraftStyleId(target: { type: 'row' | 'col'; index: number }): string | null {
+    if (rowColorDraftStyleId !== null) return rowColorDraftStyleId;
+    return getPaintStyleIdForTarget(target);
+}
+
+function getDraftColor(target: { type: 'row' | 'col'; index: number }): string {
+    return normalizeHexColorInput(rowColorDraftHex) || resolveDefaultColorForTarget(target);
+}
+
+function syncRowColorDraftUi(target: { type: 'row' | 'col'; index: number }, rawColor: string) {
+    const color = normalizeHexColorInput(rawColor) || resolveDefaultColorForTarget(target);
+    rowColorDraftHex = color;
+    ui.rowColorPreview.style.backgroundColor = color;
+    ui.rowColorHexInput.value = color;
+    ui.rowColorStyleEditHexInput.value = color;
+    ui.rowColorHexInput.classList.remove('row-color-hex-error');
+    ui.rowColorStyleEditHexInput.classList.remove('row-color-hex-error');
+    if (rowColorPicker) {
+        isSyncingFromPicker = true;
+        rowColorPicker.color.hexString = color;
+        isSyncingFromPicker = false;
+    }
+    rowColorDraftColReset = false;
 }
 
 function getColorModeForTarget(target: { type: 'row' | 'col'; index: number }): ColorMode {
@@ -240,7 +282,7 @@ function resolveDefaultColorForTarget(target: { type: 'row' | 'col'; index: numb
 function renderPaintStyleMenu() {
     ui.rowColorStyleMenuList.innerHTML = '';
     if (!activeColorTarget) return;
-    const activeStyleId = getPaintStyleIdForTarget(activeColorTarget);
+    const activeStyleId = getDraftStyleId(activeColorTarget);
     if (localPaintStyles.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'px-2 py-1.5 text-[10px] text-text-sub';
@@ -258,19 +300,39 @@ function renderPaintStyleMenu() {
         swatch.className = 'row-color-style-item-swatch';
         swatch.style.backgroundColor = style.colorHex || '#FFFFFF';
         const label = document.createElement('span');
-        label.className = 'truncate';
+        label.className = `truncate${rowColorStyleEditMode ? ' row-color-style-item-label-editable' : ''}`;
         label.textContent = style.name;
+        label.dataset.role = 'style-label';
+        if (rowColorStyleEditMode && !disabled && !style.remote) {
+            item.title = '텍스트 클릭: 이름 변경';
+        }
         item.appendChild(swatch);
         item.appendChild(label);
         if (style.id === activeStyleId) {
             item.style.backgroundColor = '#EFF6FF';
         }
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (event) => {
+            const targetEl = event.target as HTMLElement | null;
+            const clickedLabel = Boolean(targetEl?.closest('[data-role="style-label"]'));
+            if (rowColorStyleEditMode && clickedLabel) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (style.remote) {
+                    window.alert('Remote style은 이름을 변경할 수 없습니다.');
+                    return;
+                }
+                const nextName = window.prompt('Paint Style name', style.name);
+                if (!nextName) return;
+                const normalized = nextName.trim();
+                if (!normalized) return;
+                parent.postMessage({ pluginMessage: { type: 'rename_paint_style', id: style.id, name: normalized } }, '*');
+                return;
+            }
             if (!activeColorTarget) return;
-            setColorModeForTarget(activeColorTarget, 'paint_style');
-            setPaintStyleIdForTarget(activeColorTarget, style.id);
-            applyColorHex(activeColorTarget, style.colorHex, true);
-            updateColorPopoverUi(activeColorTarget, style.colorHex);
+            rowColorDraftMode = 'paint_style';
+            rowColorDraftStyleId = style.id;
+            syncRowColorDraftUi(activeColorTarget, style.colorHex);
+            updatePopoverModeUi(activeColorTarget);
             ui.rowColorStyleMenu.classList.add('hidden');
         });
         ui.rowColorStyleMenuList.appendChild(item);
@@ -278,36 +340,47 @@ function renderPaintStyleMenu() {
 }
 
 function updatePaintStyleChipUi(target: { type: 'row' | 'col'; index: number }) {
-    const mode = getColorModeForTarget(target);
-    const selectedId = getPaintStyleIdForTarget(target);
+    const mode = getDraftMode(target);
+    const selectedId = getDraftStyleId(target);
     const selected = selectedId ? localPaintStyles.find((item) => item.id === selectedId) || null : null;
-    const shouldShowChip = mode === 'paint_style' && Boolean(selected);
-    ui.rowColorStyleChip.classList.toggle('hidden', !shouldShowChip);
-    ui.rowColorStyleChipEmpty.classList.toggle('hidden', shouldShowChip);
-    if (!shouldShowChip) {
+    const hasSelected = mode === 'paint_style' && Boolean(selected);
+    ui.rowColorStyleChipEmpty.classList.toggle('hidden', hasSelected);
+    ui.rowColorStyleChipClose.classList.toggle('hidden', !hasSelected);
+    if (!hasSelected) {
         ui.rowColorStyleChipText.textContent = '';
-        ui.rowColorStyleChipEmpty.textContent = mode === 'paint_style' ? 'Select Paint Style' : 'Hex mode';
+        ui.rowColorStyleMainSwatch.style.backgroundColor = getDraftColor(target);
+        ui.rowColorStyleChipEmpty.textContent = 'Select Paint Style';
         return;
     }
     ui.rowColorStyleChipText.textContent = selected?.name || 'Unknown Style';
+    ui.rowColorStyleMainSwatch.style.backgroundColor = selected?.colorHex || '#FFFFFF';
 }
 
 function updatePopoverModeUi(target: { type: 'row' | 'col'; index: number }) {
-    const mode = getColorModeForTarget(target);
-    ui.rowColorModeSelect.value = mode;
+    const mode = getDraftMode(target);
+    ui.rowColorModeTabHex.classList.toggle('is-active', mode === 'hex');
+    ui.rowColorModeTabStyle.classList.toggle('is-active', mode === 'paint_style');
+    ui.rowColorHexInputBox.classList.toggle('hidden', mode !== 'hex');
     ui.rowColorStyleInputBox.classList.toggle('hidden', mode !== 'paint_style');
-    ui.rowColorModeFieldLabel.textContent = mode === 'paint_style' ? 'Color field' : 'Hex';
     ui.rowColorAddBtn.classList.toggle('hidden', mode !== 'hex');
     ui.rowColorAddBtn.disabled = mode !== 'hex';
+    ui.rowColorEditBtn.classList.toggle('hidden', mode !== 'paint_style');
+    ui.rowColorEditBtn.classList.toggle('is-active', mode === 'paint_style' && rowColorStyleEditMode);
+    ui.rowColorStyleEditBox.classList.toggle('hidden', !(mode === 'paint_style' && rowColorStyleEditMode));
+    ui.rowColorEditBtn.textContent = rowColorStyleEditMode ? 'Done' : 'Edit';
+    ui.rowColorStyleEditHexInput.value = getDraftColor(target);
     updatePaintStyleChipUi(target);
     renderPaintStyleMenu();
 }
 
 function buildDefaultPaintStyleName(target: { type: 'row' | 'col'; index: number }) {
+    const chartTypeToken = state.chartType === 'stackedBar'
+        ? 'stacked-bar'
+        : (state.chartType || 'chart').toLowerCase();
     const indexToken = String(target.index + 1).padStart(2, '0');
     const prefix = target.type === 'row'
-        ? `type-row_${indexToken}-`
-        : `type-col_${indexToken}-`;
+        ? `${chartTypeToken}-row_${indexToken}-`
+        : `${chartTypeToken}-col_${indexToken}-`;
     let maxSeq = 0;
     localPaintStyles.forEach((item) => {
         if (!item.name.startsWith(prefix)) return;
@@ -338,9 +411,8 @@ function initializeRowColorPicker() {
         const hex = normalizeHexColorInput(color?.hexString || '') || toHex6FromRgb(color);
         if (!hex) return;
         if (isSyncingFromPicker) return;
-        ui.rowColorHexInput.value = hex;
-        ui.rowColorHexInput.classList.remove('row-color-hex-error');
-        applyColorHex(activeColorTarget, hex);
+        syncRowColorDraftUi(activeColorTarget, hex);
+        updatePopoverModeUi(activeColorTarget);
     });
 }
 
@@ -354,18 +426,8 @@ function updateRowColorSwatchDom(row: number) {
 }
 
 function updateRowColorPopoverUi(row: number, colorHex: string) {
-    const color = normalizeHexColorInput(colorHex) || getRowColor(row);
-    const rowLabel = state.chartType === 'stackedBar' ? `R${row}` : `R${row + 1}`;
-
-    ui.rowColorPopoverTitle.textContent = `Row ${rowLabel}`;
-    ui.rowColorPreview.style.backgroundColor = color;
-    ui.rowColorHexInput.value = color;
-    ui.rowColorHexInput.classList.remove('row-color-hex-error');
-    if (rowColorPicker) {
-        isSyncingFromPicker = true;
-        rowColorPicker.color.hexString = color;
-        isSyncingFromPicker = false;
-    }
+    if (!activeColorTarget) return;
+    syncRowColorDraftUi(activeColorTarget, colorHex);
 }
 
 function updateColColorSwatchDom(col: number) {
@@ -392,15 +454,7 @@ function updateColorPopoverUi(target: { type: 'row' | 'col'; index: number }, co
         || (state.colHeaderColorEnabled[target.index]
             ? (normalizeHexColorInput(state.colHeaderColors[target.index]) || getRowColor(0))
             : getRowColor(0));
-    ui.rowColorPopoverTitle.textContent = `Col C${target.index + 1}`;
-    ui.rowColorPreview.style.backgroundColor = color;
-    ui.rowColorHexInput.value = color;
-    ui.rowColorHexInput.classList.remove('row-color-hex-error');
-    if (rowColorPicker) {
-        isSyncingFromPicker = true;
-        rowColorPicker.color.hexString = color;
-        isSyncingFromPicker = false;
-    }
+    syncRowColorDraftUi(target, color);
     updatePopoverModeUi(target);
 }
 
@@ -500,6 +554,10 @@ function openColorPopover(target: { type: 'row' | 'col'; index: number }, anchor
     initializeRowColorPicker();
     requestPaintStyleList();
     activeColorTarget = target;
+    rowColorStyleEditMode = false;
+    rowColorDraftMode = getColorModeForTarget(target);
+    rowColorDraftStyleId = getPaintStyleIdForTarget(target);
+    rowColorDraftColReset = false;
     rowColorPopoverOpen = true;
     ui.rowColorPopover.classList.remove('hidden');
     const color = target.type === 'row'
@@ -507,30 +565,55 @@ function openColorPopover(target: { type: 'row' | 'col'; index: number }, anchor
         : (state.colHeaderColorEnabled[target.index]
             ? (normalizeHexColorInput(state.colHeaderColors[target.index]) || getRowColor(0))
             : getRowColor(0));
+    rowColorDraftHex = normalizeHexColorInput(color) || resolveDefaultColorForTarget(target);
     updateColorPopoverUi(target, color);
     positionRowColorPopover(anchorRect);
 }
 
 function commitRowColorPopoverIfOpen() {
     if (!rowColorPopoverOpen || !activeColorTarget) return false;
-    const mode = getColorModeForTarget(activeColorTarget);
+    const mode = getDraftMode(activeColorTarget);
+    const draftColor = getDraftColor(activeColorTarget);
     if (mode === 'paint_style') {
-        const styleId = getPaintStyleIdForTarget(activeColorTarget);
+        const styleId = getDraftStyleId(activeColorTarget);
         if (!styleId) {
             window.alert('Paint Style을 먼저 선택해주세요.');
             return false;
         }
-        const color = normalizeHexColorInput(ui.rowColorHexInput.value) || resolveDefaultColorForTarget(activeColorTarget);
-        parent.postMessage({ pluginMessage: { type: 'update_paint_style_color', id: styleId, colorHex: color } }, '*');
-        const applied = applyColorHex(activeColorTarget, color, true);
+        setColorModeForTarget(activeColorTarget, 'paint_style');
+        setPaintStyleIdForTarget(activeColorTarget, styleId);
+        parent.postMessage({ pluginMessage: { type: 'update_paint_style_color', id: styleId, colorHex: draftColor } }, '*');
+        const applied = applyColorHex(activeColorTarget, draftColor, true);
         closeRowColorPopover();
         return applied;
     }
-    const fallback = activeColorTarget.type === 'row'
-        ? getRowColor(activeColorTarget.index)
-        : resolveDefaultColorForTarget(activeColorTarget);
-    const candidate = normalizeHexColorInput(ui.rowColorHexInput.value) || fallback;
-    const applied = applyColorHex(activeColorTarget, candidate, true);
+    setColorModeForTarget(activeColorTarget, 'hex');
+    setPaintStyleIdForTarget(activeColorTarget, null);
+    if (activeColorTarget.type === 'col' && rowColorDraftColReset) {
+        const totalCols = getGridColsForChart(state.chartType, state.cols);
+        ensureColHeaderColorsLength(totalCols);
+        ensureColHeaderColorEnabledLength(totalCols);
+        ensureColHeaderColorModesLength(totalCols);
+        ensureColHeaderPaintStyleIdsLength(totalCols);
+        state.colHeaderColorEnabled[activeColorTarget.index] = false;
+        state.colHeaderColors[activeColorTarget.index] = getRowColor(0);
+        state.colHeaderColorModes[activeColorTarget.index] = 'hex';
+        state.colHeaderPaintStyleIds[activeColorTarget.index] = null;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());
+            setLocalStyleOverrideField('colColorModes', ensureColHeaderColorModesLength(totalCols).slice());
+            setLocalStyleOverrideField('colPaintStyleIds', ensureColHeaderPaintStyleIdsLength(totalCols).slice());
+            setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
+            recomputeEffectiveStyleSnapshot();
+        }
+        updateColColorSwatchDom(activeColorTarget.index);
+        renderGrid();
+        renderPreview();
+        refreshExportPreview();
+        closeRowColorPopover();
+        return true;
+    }
+    const applied = applyColorHex(activeColorTarget, draftColor, true);
     closeRowColorPopover();
     return applied;
 }
@@ -543,12 +626,13 @@ function normalizeMarkRatioInput(value: unknown): number {
 
 function normalizeAssistLineEnabledInput(value: any) {
     if (!value || typeof value !== 'object') {
-        return { min: false, max: false, avg: false };
+        return { min: false, max: false, avg: false, ctr: false };
     }
     return {
         min: Boolean(value.min),
         max: Boolean(value.max),
-        avg: Boolean(value.avg)
+        avg: Boolean(value.avg),
+        ctr: Boolean(value.ctr)
     };
 }
 
@@ -578,6 +662,7 @@ function updateAssistLineToggleUi() {
     ui.assistLineMinCheck.checked = state.assistLineEnabled.min;
     ui.assistLineMaxCheck.checked = state.assistLineEnabled.max;
     ui.assistLineAvgCheck.checked = state.assistLineEnabled.avg;
+    ui.assistLineCtrCheck.checked = state.assistLineEnabled.ctr;
 }
 
 function handlePluginMessage(msg: any) {
@@ -603,7 +688,7 @@ function handlePluginMessage(msg: any) {
             state.colHeaderColorEnabled = [false, false, false];
             state.markColorSource = 'row';
             state.assistLineVisible = false;
-            state.assistLineEnabled = { min: false, max: false, avg: false };
+            state.assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
             ui.settingMarkRatioInput.value = '0.8';
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
@@ -835,9 +920,9 @@ function handlePluginMessage(msg: any) {
         const createdId = typeof msg.style.id === 'string' ? msg.style.id : '';
         const createdHex = normalizeHexColorInput(msg.style.colorHex) || resolveDefaultColorForTarget(activeColorTarget);
         if (!createdId) return;
-        setColorModeForTarget(activeColorTarget, 'paint_style');
-        setPaintStyleIdForTarget(activeColorTarget, createdId);
-        applyColorHex(activeColorTarget, createdHex, true);
+        rowColorDraftMode = 'paint_style';
+        rowColorDraftStyleId = createdId;
+        syncRowColorDraftUi(activeColorTarget, createdHex);
         updateColorPopoverUi(activeColorTarget, createdHex);
     }
     if (msg.type === 'paint_style_renamed') {
@@ -1071,6 +1156,14 @@ function bindUiEvents() {
         }
         checkCtaValidation();
     });
+    ui.assistLineCtrCheck.addEventListener('change', () => {
+        state.assistLineEnabled.ctr = ui.assistLineCtrCheck.checked;
+        if (state.isInstanceTarget) {
+            setLocalStyleOverrideField('assistLineEnabled', { ...state.assistLineEnabled });
+            recomputeEffectiveStyleSnapshot();
+        }
+        checkCtaValidation();
+    });
     ui.assistLinePopover.addEventListener('click', (e) => e.stopPropagation());
     ui.assistLineControl.addEventListener('click', (e) => e.stopPropagation());
     ui.rowColorPopover.addEventListener('click', (e) => e.stopPropagation());
@@ -1084,22 +1177,29 @@ function bindUiEvents() {
         if (!custom.detail || typeof custom.detail.col !== 'number') return;
         openColorPopover({ type: 'col', index: custom.detail.col }, custom.detail.anchorRect);
     }) as EventListener);
-    ui.rowColorModeSelect.addEventListener('change', () => {
+    const switchColorMode = (mode: ColorMode) => {
         if (!activeColorTarget) return;
-        const mode = ui.rowColorModeSelect.value === 'paint_style' ? 'paint_style' : 'hex';
-        setColorModeForTarget(activeColorTarget, mode);
+        rowColorDraftMode = mode;
         if (mode === 'hex') {
-            setPaintStyleIdForTarget(activeColorTarget, null);
+            rowColorDraftStyleId = null;
             ui.rowColorStyleMenu.classList.add('hidden');
         } else {
             requestPaintStyleList();
         }
-        updateColorPopoverUi(activeColorTarget, ui.rowColorHexInput.value);
+        updateColorPopoverUi(activeColorTarget, getDraftColor(activeColorTarget));
+    };
+    ui.rowColorModeTabHex.addEventListener('click', () => switchColorMode('hex'));
+    ui.rowColorModeTabStyle.addEventListener('click', () => switchColorMode('paint_style'));
+    ui.rowColorEditBtn.addEventListener('click', () => {
+        if (!activeColorTarget) return;
+        if (getDraftMode(activeColorTarget) !== 'paint_style') return;
+        rowColorStyleEditMode = !rowColorStyleEditMode;
+        updateColorPopoverUi(activeColorTarget, getDraftColor(activeColorTarget));
     });
     ui.rowColorStyleCaretBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!activeColorTarget) return;
-        if (getColorModeForTarget(activeColorTarget) !== 'paint_style') return;
+        if (getDraftMode(activeColorTarget) !== 'paint_style') return;
         renderPaintStyleMenu();
         const nextHidden = !ui.rowColorStyleMenu.classList.contains('hidden');
         ui.rowColorStyleMenu.classList.toggle('hidden', nextHidden);
@@ -1107,16 +1207,17 @@ function bindUiEvents() {
     ui.rowColorStyleChipClose.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!activeColorTarget) return;
-        setPaintStyleIdForTarget(activeColorTarget, null);
-        setColorModeForTarget(activeColorTarget, 'hex');
+        rowColorDraftStyleId = null;
+        rowColorDraftMode = 'hex';
         ui.rowColorStyleMenu.classList.add('hidden');
-        updateColorPopoverUi(activeColorTarget, ui.rowColorHexInput.value);
+        updateColorPopoverUi(activeColorTarget, getDraftColor(activeColorTarget));
     });
-    ui.rowColorStyleChipText.addEventListener('click', (e) => {
+    ui.rowColorStyleChip.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!activeColorTarget) return;
-        if (getColorModeForTarget(activeColorTarget) !== 'paint_style') return;
-        const styleId = getPaintStyleIdForTarget(activeColorTarget);
+        if (getDraftMode(activeColorTarget) !== 'paint_style') return;
+        if (!rowColorStyleEditMode) return;
+        const styleId = getDraftStyleId(activeColorTarget);
         if (!styleId) return;
         const current = localPaintStyles.find((item) => item.id === styleId);
         if (!current) return;
@@ -1132,9 +1233,8 @@ function bindUiEvents() {
     });
     ui.rowColorAddBtn.addEventListener('click', () => {
         if (!activeColorTarget) return;
-        if (getColorModeForTarget(activeColorTarget) !== 'hex') return;
-        const fallback = resolveDefaultColorForTarget(activeColorTarget);
-        const hex = normalizeHexColorInput(ui.rowColorHexInput.value) || fallback;
+        if (getDraftMode(activeColorTarget) !== 'hex') return;
+        const hex = getDraftColor(activeColorTarget);
         const name = buildDefaultPaintStyleName(activeColorTarget);
         parent.postMessage({ pluginMessage: { type: 'create_paint_style', name, colorHex: hex } }, '*');
     });
@@ -1145,17 +1245,26 @@ function bindUiEvents() {
             ui.rowColorHexInput.classList.add('row-color-hex-error');
             return;
         }
-        applyColorHex(activeColorTarget, normalized);
+        syncRowColorDraftUi(activeColorTarget, normalized);
+        updatePopoverModeUi(activeColorTarget);
+    });
+    ui.rowColorStyleEditHexInput.addEventListener('input', () => {
+        if (!activeColorTarget) return;
+        if (getDraftMode(activeColorTarget) !== 'paint_style') return;
+        if (!rowColorStyleEditMode) return;
+        const normalized = normalizeHexColorInput(ui.rowColorStyleEditHexInput.value);
+        if (!normalized) {
+            ui.rowColorStyleEditHexInput.classList.add('row-color-hex-error');
+            return;
+        }
+        ui.rowColorStyleEditHexInput.classList.remove('row-color-hex-error');
+        syncRowColorDraftUi(activeColorTarget, normalized);
+        updatePopoverModeUi(activeColorTarget);
     });
     ui.rowColorHexInput.addEventListener('blur', () => {
         if (!activeColorTarget) return;
         if (!normalizeHexColorInput(ui.rowColorHexInput.value)) {
-            const fallback = activeColorTarget.type === 'row'
-                ? getRowColor(activeColorTarget.index)
-                : (state.colHeaderColorEnabled[activeColorTarget.index]
-                    ? (normalizeHexColorInput(state.colHeaderColors[activeColorTarget.index]) || getRowColor(0))
-                    : getRowColor(0));
-            updateColorPopoverUi(activeColorTarget, fallback);
+            updateColorPopoverUi(activeColorTarget, getDraftColor(activeColorTarget));
         }
     });
     ui.rowColorSaveBtn.addEventListener('click', () => {
@@ -1165,29 +1274,11 @@ function bindUiEvents() {
         if (!activeColorTarget || activeColorTarget.type !== 'col') {
             return;
         }
-        const totalCols = getGridColsForChart(state.chartType, state.cols);
-        ensureColHeaderColorsLength(totalCols);
-        ensureColHeaderColorEnabledLength(totalCols);
-        state.colHeaderColorEnabled[activeColorTarget.index] = false;
-        state.colHeaderColors[activeColorTarget.index] = getRowColor(0);
-        ensureColHeaderColorModesLength(totalCols);
-        ensureColHeaderPaintStyleIdsLength(totalCols);
-        state.colHeaderColorModes[activeColorTarget.index] = 'hex';
-        state.colHeaderPaintStyleIds[activeColorTarget.index] = null;
-        if (state.isInstanceTarget) {
-            const totalCols = getGridColsForChart(state.chartType, state.cols);
-            setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());
-            setLocalStyleOverrideField('colColorModes', ensureColHeaderColorModesLength(totalCols).slice());
-            setLocalStyleOverrideField('colPaintStyleIds', ensureColHeaderPaintStyleIdsLength(totalCols).slice());
-            setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
-            recomputeEffectiveStyleSnapshot();
-        }
-        updateColColorSwatchDom(activeColorTarget.index);
-        const fallback = normalizeHexColorInput(state.colHeaderColors[activeColorTarget.index]) || getRowColor(0);
-        updateColorPopoverUi(activeColorTarget, fallback);
-        renderGrid();
-        renderPreview();
-        refreshExportPreview();
+        rowColorDraftMode = 'hex';
+        rowColorDraftStyleId = null;
+        rowColorDraftHex = getRowColor(0);
+        rowColorDraftColReset = true;
+        updateColorPopoverUi(activeColorTarget, getRowColor(0));
     });
     document.addEventListener('click', () => {
         if (assistLinePopoverOpen) closeAssistLinePopover();

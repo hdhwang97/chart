@@ -170,12 +170,13 @@ function collectLineStrokeWeights(layer: SceneNode): number[] {
     return weights;
 }
 
-function parseAssistMetricFromName(name: string): 'min' | 'max' | 'avg' | null {
+function parseAssistMetricFromName(name: string): 'min' | 'max' | 'avg' | 'ctr' | null {
     const lower = name.toLowerCase();
     if (!lower.includes('asst_line')) return null;
     if (lower.includes('min') || lower.includes('최소')) return 'min';
     if (lower.includes('max') || lower.includes('최대')) return 'max';
     if (lower.includes('avg') || lower.includes('average') || lower.includes('평균')) return 'avg';
+    if (lower.includes('ctr') || lower.includes('center') || lower.includes('mid') || lower.includes('중앙')) return 'ctr';
     return null;
 }
 

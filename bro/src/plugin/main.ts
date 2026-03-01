@@ -193,7 +193,8 @@ function normalizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
         next.assistLineEnabled = {
             min: Boolean(source.assistLineEnabled.min),
             max: Boolean(source.assistLineEnabled.max),
-            avg: Boolean(source.assistLineEnabled.avg)
+            avg: Boolean(source.assistLineEnabled.avg),
+            ctr: Boolean(source.assistLineEnabled.ctr)
         };
     }
     if (source.cellFillStyle && typeof source.cellFillStyle === 'object') next.cellFillStyle = source.cellFillStyle;
@@ -860,8 +861,8 @@ figma.ui.onmessage = async (msg) => {
                 ? Boolean(effectiveLocalOverrides.assistLineVisible)
                 : Boolean(assistLineVisible),
             assistLineEnabled: effectiveLocalMask.assistLineEnabled
-                ? (effectiveLocalOverrides.assistLineEnabled || { min: false, max: false, avg: false })
-                : (assistLineEnabled || { min: false, max: false, avg: false }),
+                ? (effectiveLocalOverrides.assistLineEnabled || { min: false, max: false, avg: false, ctr: false })
+                : (assistLineEnabled || { min: false, max: false, avg: false, ctr: false }),
             cornerRadius: cornerRadiusForUi,
             strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
             cellFillStyle: effectiveLocalMask.cellFillStyle
@@ -1034,14 +1035,15 @@ figma.ui.onmessage = async (msg) => {
             : (isInstanceTarget ? extractedMarkColorSource : (node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row'));
         const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
         const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
-        let assistLineEnabled = { min: false, max: false, avg: false };
+        let assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
         if (assistLineEnabledRaw) {
             try {
                 const parsed = JSON.parse(assistLineEnabledRaw);
                 assistLineEnabled = {
                     min: Boolean(parsed?.min),
                     max: Boolean(parsed?.max),
-                    avg: Boolean(parsed?.avg)
+                    avg: Boolean(parsed?.avg),
+                    ctr: Boolean(parsed?.ctr)
                 };
             } catch { }
         }

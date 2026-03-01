@@ -94,7 +94,7 @@ export type LocalStyleOverrides = {
     colColorEnabled?: boolean[];
     markColorSource?: 'row' | 'col';
     assistLineVisible?: boolean;
-    assistLineEnabled?: { min?: boolean; max?: boolean; avg?: boolean };
+    assistLineEnabled?: { min?: boolean; max?: boolean; avg?: boolean; ctr?: boolean };
     cellFillStyle?: CellFillInjectionStyle;
     cellTopStyle?: SideStrokeInjectionStyle;
     tabRightStyle?: SideStrokeInjectionStyle;

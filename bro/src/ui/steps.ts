@@ -253,7 +253,8 @@ export function submitData() {
         assistLineEnabled: {
             min: state.assistLineEnabled.min,
             max: state.assistLineEnabled.max,
-            avg: state.assistLineEnabled.avg
+            avg: state.assistLineEnabled.avg,
+            ctr: state.assistLineEnabled.ctr
         },
         rowStrokeStyles: state.rowStrokeStyles,
         colStrokeStyle: state.colStrokeStyle,

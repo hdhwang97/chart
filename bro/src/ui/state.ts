@@ -113,7 +113,7 @@ export const state = {
     colHeaderColorEnabled: [] as boolean[],
     markColorSource: 'row' as 'row' | 'col',
     assistLineVisible: false,
-    assistLineEnabled: { min: false, max: false, avg: false },
+    assistLineEnabled: { min: false, max: false, avg: false, ctr: false },
     colStrokeStyle: null as StrokeStyleSnapshot | null,
     cellStrokeStyles: [] as CellStrokeStyle[],
     rowStrokeStyles: [] as RowStrokeStyle[],
