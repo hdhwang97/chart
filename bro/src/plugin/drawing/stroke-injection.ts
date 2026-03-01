@@ -1,6 +1,7 @@
 import { MARK_NAME_PATTERNS } from '../constants';
 import type {
     CellFillInjectionStyle,
+    ColorMode,
     GridStrokeInjectionStyle,
     MarkInjectionStyle,
     RowStrokeStyle,
@@ -16,6 +17,7 @@ type SideName = 'top' | 'right' | 'bottom' | 'left';
 type StrokeInjectionRuntimePayload = StrokeInjectionPayload & {
     chartType?: string;
     rowColors?: string[];
+    rowColorModes?: ColorMode[];
     colColors?: string[];
     colColorEnabled?: boolean[];
     rowHeaderLabels?: string[];
@@ -466,7 +468,7 @@ function applyMarkStyleToNode(
 function applyMarkStyles(
     columns: ColRef[],
     styles: NormalizedMarkStyle[],
-    options?: { chartType?: string; colColorEnabled?: boolean[] }
+    options?: { chartType?: string; colColorEnabled?: boolean[]; rowColorModes?: ColorMode[] }
 ): ScopeResult {
     const result = createScopeResult();
     if (styles.length === 0) return result;
@@ -496,6 +498,10 @@ function applyMarkStyles(
             if (!isLineLikeNode(node) || !seriesIndex) return;
             const style = getMarkStyleBySeries(styles, seriesIndex);
             if (!style) return;
+            const skipStrokeColorForSeries =
+                options?.chartType === 'line'
+                && Array.isArray(options.rowColorModes)
+                && options.rowColorModes[seriesIndex - 1] === 'paint_style';
             if (node.type === 'INSTANCE' || 'children' in node) {
                 traverse(node, (child) => {
                     if (child.id === node.id || !child.visible) return;
@@ -505,7 +511,10 @@ function applyMarkStyles(
                     if (!isPointLike && !isVectorLike) return;
                     result.candidates += 1;
                     try {
-                        if (applyMarkStyleToNode(child, style, { skipFill: true })) result.applied += 1;
+                        if (applyMarkStyleToNode(child, style, {
+                            skipFill: true,
+                            skipStrokeColor: skipStrokeColorForSeries
+                        })) result.applied += 1;
                         else result.skipped += 1;
                     } catch {
                         result.errors += 1;
@@ -839,7 +848,8 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
             ? createScopeResult()
             : applyMarkStyles(columns, markStyles, {
                 chartType: payload.chartType,
-                colColorEnabled: payload.colColorEnabled
+                colColorEnabled: payload.colColorEnabled,
+                rowColorModes: payload.rowColorModes
             }),
         legend: legendSync.result,
         cellTop: cellTopStyle ? applyCellTopStroke(columns, cellTopStyle) : createScopeResult(),
