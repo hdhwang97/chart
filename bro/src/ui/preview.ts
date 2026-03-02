@@ -40,7 +40,7 @@ const DATA_CONTEXT_DIM_OPACITY = 0.15;
 const LINE_HIGHLIGHT_MULTIPLIER = 1.5;
 const LINE_STYLE_HIT_STROKE_WIDTH = 14;
 const LINE_STYLE_HIT_RADIUS = 9;
-const TAB_BACKGROUND_OPACITY = 0.2;
+const TAB_BACKGROUND_OPACITY = 1;
 
 type HighlightState = { type: string; index: number; row?: number; col?: number };
 let highlightState: HighlightState | null = null;
@@ -450,7 +450,7 @@ function computeClusterLayout(cellWidth: number, markRatio: number, markNum: num
 function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
-        .tickFormat((d: number) => Number.isInteger(d) ? String(d) : d.toFixed(1).replace(/\.0$/, ''))
+        .tickFormat((d: number) => String(Math.round(Number(d))))
         .tickPadding(6);
 
     g.append('g')
@@ -518,7 +518,7 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
                 .attr('y1', r * step)
                 .attr('y2', r * step);
             applyStroke(line, stroke || null, '#E5E7EB', 1);
-            line.attr('opacity', stroke ? 0.35 : 0.2);
+            line.attr('opacity', 1);
             markDataContextLine(line);
             markStyleTarget(line, 'cell-top', mode);
             addStyleHitLine(g, 0, w, r * step, r * step, 'cell-top', mode);

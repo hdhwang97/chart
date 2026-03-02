@@ -243,7 +243,7 @@ export function loadLocalStyleOverrides(node: SceneNode): {
 function normalizeThickness(value: unknown): number | undefined {
     const n = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(n) || n < 0) return undefined;
-    return Math.max(0, Math.min(20, Math.round(n)));
+    return Math.max(0, Math.min(20, Math.round(n * 100) / 100));
 }
 
 function normalizeSideStrokeStyle(value: unknown): SideStrokeInjectionStyle | null {

@@ -15,7 +15,7 @@ const MAX_STYLE_TEMPLATES = 20;
 function clampThickness(value: unknown): number | undefined {
     const n = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(n) || n < 0) return undefined;
-    return Math.max(0, Math.min(20, Math.round(n)));
+    return Math.max(0, Math.min(20, Math.round(n * 100) / 100));
 }
 
 function normalizeSideStyle(value: unknown): SideStrokeInjectionStyle | undefined {

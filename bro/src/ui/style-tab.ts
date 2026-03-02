@@ -121,8 +121,8 @@ function toHex6FromRgb(color: any): string | null {
 function clampThickness(value: unknown, fallback: number): number {
     const n = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(n)) return fallback;
-    const rounded = Math.round(n);
-    return Math.max(THICKNESS_MIN, Math.min(THICKNESS_MAX, rounded));
+    const normalized = Math.round(n * 100) / 100;
+    return Math.max(THICKNESS_MIN, Math.min(THICKNESS_MAX, normalized));
 }
 
 function cloneDraft(draft: StyleInjectionDraft): StyleInjectionDraft {
@@ -944,7 +944,7 @@ function openStyleItemPopoverInternal(
     if (!config) return false;
 
     if (styleItemPopoverOpen) {
-        closeStyleItemPopover({ commit: false });
+        closeStyleItemPopover({ commit: true });
     }
 
     styleItemPopoverTarget = target;
@@ -1028,7 +1028,7 @@ function normalizeFromDom(
     const color = normalizedColor || fallback.color;
 
     const thicknessRaw = Number(thicknessInput.value);
-    const thicknessValid = Number.isFinite(thicknessRaw) && Number.isInteger(thicknessRaw) && thicknessRaw >= THICKNESS_MIN && thicknessRaw <= THICKNESS_MAX;
+    const thicknessValid = Number.isFinite(thicknessRaw) && thicknessRaw >= THICKNESS_MIN && thicknessRaw <= THICKNESS_MAX;
     const thickness = thicknessValid ? thicknessRaw : clampThickness(thicknessRaw, fallback.thickness);
     const visible = Boolean(visibleInput.checked);
     const strokeStyle = strokeStyleInput.value === 'dash' ? 'dash' : 'solid';
@@ -1056,7 +1056,7 @@ function normalizeColorThicknessFromDom(
     const color = normalizedColor || fallback.color;
 
     const thicknessRaw = Number(thicknessInput.value);
-    const thicknessValid = Number.isFinite(thicknessRaw) && Number.isInteger(thicknessRaw) && thicknessRaw >= THICKNESS_MIN && thicknessRaw <= THICKNESS_MAX;
+    const thicknessValid = Number.isFinite(thicknessRaw) && thicknessRaw >= THICKNESS_MIN && thicknessRaw <= THICKNESS_MAX;
     const thickness = thicknessValid ? thicknessRaw : clampThickness(thicknessRaw, fallback.thickness);
     const strokeStyle = strokeStyleInput.value === 'dash' ? 'dash' : 'solid';
 
@@ -1309,7 +1309,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
         : Boolean(normalizeHexColorInput(ui.styleMarkFillColorInput.value));
     const markStrokeValid = Boolean(normalizeHexColorInput(ui.styleMarkStrokeColorInput.value));
     const markThicknessRaw = Number(ui.styleMarkThicknessInput.value);
-    const markThicknessValid = Number.isFinite(markThicknessRaw) && Number.isInteger(markThicknessRaw) && markThicknessRaw >= THICKNESS_MIN && markThicknessRaw <= THICKNESS_MAX;
+    const markThicknessValid = Number.isFinite(markThicknessRaw) && markThicknessRaw >= THICKNESS_MIN && markThicknessRaw <= THICKNESS_MAX;
     const cellTopNorm = normalizeFromDom(
         ui.styleCellTopColorInput,
         ui.styleCellTopStrokeStyleInput,

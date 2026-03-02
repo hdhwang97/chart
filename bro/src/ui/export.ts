@@ -261,13 +261,13 @@ function drawTabBackgroundLayer(g: any, w: number, h: number) {
         .attr('width', w)
         .attr('height', h)
         .attr('fill', state.styleInjectionDraft.cellFill.color)
-        .attr('fill-opacity', 0.2);
+        .attr('fill-opacity', 1);
 }
 
 function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
-        .tickFormat((d: number) => Number.isInteger(d) ? String(d) : d.toFixed(1).replace(/\.0$/, ''))
+        .tickFormat((d: number) => String(Math.round(Number(d))))
         .tickPadding(6);
 
     g.append('g')
@@ -302,7 +302,7 @@ function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: 
                     .attr('y1', 0)
                     .attr('y2', h);
                 applyStroke(line, tabRightStroke, '#E5E7EB', 1);
-                line.attr('opacity', 0.35);
+                line.attr('opacity', 1);
             });
         } else {
             const step = w / colCount;
@@ -313,7 +313,7 @@ function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: 
                     .attr('y1', 0)
                     .attr('y2', h);
                 applyStroke(line, tabRightStroke, '#E5E7EB', 1);
-                line.attr('opacity', 0.35);
+                line.attr('opacity', 1);
             }
         }
     }
@@ -328,7 +328,7 @@ function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: 
                 .attr('y1', r * step)
                 .attr('y2', r * step);
             applyStroke(line, stroke || null, '#E5E7EB', 1);
-            line.attr('opacity', stroke ? 0.35 : 0.2);
+            line.attr('opacity', 1);
         }
     }
 }

@@ -412,7 +412,7 @@ function normalizeMarkStyleItem(
     const fillColor = normalizeHexColorInput(input?.fillColor) || fallbackColor;
     const strokeColor = normalizeHexColorInput(input?.strokeColor) || fillColor;
     const rawThickness = Number(input?.thickness);
-    const thickness = Number.isFinite(rawThickness) ? Math.max(0, Math.round(rawThickness)) : 1;
+    const thickness = Number.isFinite(rawThickness) ? Math.max(0, Math.round(rawThickness * 100) / 100) : 1;
     const strokeStyle = input?.strokeStyle === 'dash' ? 'dash' : 'solid';
     return { fillColor, strokeColor, thickness, strokeStyle };
 }

@@ -324,15 +324,20 @@ export function groupBarFromFlatIndex(flatColIdx: number): { groupIndex: number;
 
 export function handleDimensionInput(e: Event) {
     const input = e.target as HTMLInputElement;
-    let val = parseInt(input.value) || 1;
-    val = Math.max(1, Math.min(MAX_SIZE, val));
-    input.value = String(val);
-
     if (input === ui.settingColInput) {
+        let val = parseInt(input.value) || 1;
+        val = Math.max(1, Math.min(MAX_SIZE, val));
+        input.value = String(val);
         updateGridSize(val, state.rows);
     } else if (input === ui.settingCellInput) {
+        let val = parseInt(input.value) || 1;
+        val = Math.max(1, Math.min(MAX_SIZE, val));
+        input.value = String(val);
         state.cellCount = val;
     } else if (input === ui.settingStrokeInput) {
+        const raw = Number.parseFloat(input.value);
+        const val = Number.isFinite(raw) ? Math.max(1, Math.min(20, Math.round(raw * 100) / 100)) : 1;
+        input.value = String(val);
         state.strokeWidth = val;
     }
     renderPreview();
