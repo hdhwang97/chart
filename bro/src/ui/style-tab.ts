@@ -405,7 +405,8 @@ function ensureMarkStrokeLinkStateCount(count: number) {
     const target = Math.max(1, Math.floor(count));
     const next: boolean[] = [];
     for (let i = 0; i < target; i++) {
-        next.push(Boolean(state.markStrokeLinkByIndex[i]));
+        const current = state.markStrokeLinkByIndex[i];
+        next.push(typeof current === 'boolean' ? current : true);
     }
     state.markStrokeLinkByIndex = next;
     return state.markStrokeLinkByIndex;
@@ -730,14 +731,15 @@ function syncMarkLinkUiState() {
     }
 
     const linked = isActiveMarkStrokeLinked();
-    ui.styleItemLinkToggle.checked = linked;
-    ui.styleItemLinkHint.classList.toggle('hidden', !linked);
-    ui.styleItemSecondaryColorRow.classList.toggle('hidden', linked);
-    if (linked && styleItemPopoverActiveColorField === 'secondary') {
+    const strokeEnabled = !linked;
+    ui.styleItemLinkToggle.checked = strokeEnabled;
+    ui.styleItemLinkHint.classList.toggle('hidden', strokeEnabled);
+    ui.styleItemSecondaryColorRow.classList.toggle('hidden', !strokeEnabled);
+    if (!strokeEnabled && styleItemPopoverActiveColorField === 'secondary') {
         styleItemPopoverActiveColorField = 'primary';
     }
-    ui.styleItemSecondaryColorInput.disabled = linked;
-    ui.styleItemSecondaryColorInput.classList.toggle('style-item-color-input-readonly', linked || styleItemPopoverMode !== 'hex');
+    ui.styleItemSecondaryColorInput.disabled = !strokeEnabled;
+    ui.styleItemSecondaryColorInput.classList.toggle('style-item-color-input-readonly', !strokeEnabled || styleItemPopoverMode !== 'hex');
 }
 
 function refreshStyleItemModeUi() {
@@ -1792,9 +1794,10 @@ export function bindStyleTabEvents() {
     ui.styleItemSwatchWhite.addEventListener('click', () => applyQuickSwatchColor('#FFFFFF'));
     ui.styleItemLinkToggle.addEventListener('change', () => {
         if (!styleItemPopoverOpen || styleItemPopoverTarget !== 'mark') return;
-        setActiveMarkStrokeLinked(ui.styleItemLinkToggle.checked);
+        const strokeEnabled = ui.styleItemLinkToggle.checked;
+        setActiveMarkStrokeLinked(!strokeEnabled);
         syncMarkLinkUiState();
-        if (ui.styleItemLinkToggle.checked) {
+        if (!strokeEnabled) {
             const linkedStroke = normalizeHexColorInput(ui.styleItemPrimaryColorInput.value) || DEFAULT_STYLE_INJECTION_DRAFT.mark.fillColor;
             ui.styleItemSecondaryColorInput.value = linkedStroke;
             applyStylePopoverHexInputValue(ui.styleItemSecondaryColorInput);
