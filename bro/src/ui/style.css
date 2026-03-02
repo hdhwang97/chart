@@ -30,6 +30,15 @@ input[type=number]::-webkit-outer-spin-button {
     background-color: #E0F2FE !important;
 }
 
+.col-header.style-grid-linked-col {
+    background-color: #EFF6FF !important;
+    box-shadow: inset 0 0 0 1px #93C5FD;
+}
+
+.col-color-swatch.style-grid-linked-col {
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.45);
+}
+
 /* Cell Hover -> Self Highlight (background only) */
 .grid-cell-self-hover {
     background-color: #E0F2FE !important;
@@ -262,6 +271,78 @@ input[type=number]::-webkit-outer-spin-button {
 .style-item-close-btn:hover {
     background: #F3F4F6;
     color: #111827;
+}
+
+.style-item-nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.style-item-segment-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.style-item-segment-btn {
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    background: #F8FAFC;
+    color: #64748B;
+    font-size: 10px;
+    line-height: 1.2;
+    font-weight: 600;
+    padding: 4px 6px;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+
+.style-item-segment-btn.is-active {
+    background: #EFF6FF;
+    border-color: #93C5FD;
+    color: #1D4ED8;
+    opacity: 1;
+}
+
+.style-item-segment-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.style-item-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.style-item-step-btn {
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    background: #FFFFFF;
+    color: #64748B;
+    font-size: 10px;
+    line-height: 1;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    cursor: pointer;
+}
+
+.style-item-step-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.style-item-nav-label {
+    min-width: 92px;
+    text-align: center;
+    font-size: 10px;
+    line-height: 1.2;
+    color: #374151;
+    white-space: nowrap;
 }
 
 .style-item-swatch {

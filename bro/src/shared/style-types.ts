@@ -75,6 +75,10 @@ export type GridStrokeInjectionStyle = {
 export type StrokeInjectionPayload = {
     // Legacy-compatible alias for mark colors. Runtime source is markStyles/markStyle.
     rowColors?: string[];
+    colColors?: string[];
+    colColorModes?: ColorMode[];
+    colPaintStyleIds?: Array<string | null>;
+    colColorEnabled?: boolean[];
     cellFillStyle?: CellFillInjectionStyle;
     cellTopStyle?: SideStrokeInjectionStyle;
     /** @deprecated legacy alias. Use `cellTopStyle`. */

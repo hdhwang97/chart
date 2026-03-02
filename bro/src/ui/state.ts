@@ -153,6 +153,7 @@ export const state = {
     }] as MarkStyleInjectionDraftItem[],
     markStrokeLinkByIndex: [true] as boolean[],
     activeMarkStyleIndex: 0,
+    stylePopoverLinkedColIndex: null as number | null,
     styleTemplateMode: 'read' as 'read' | 'edit',
     styleTemplates: [] as StyleTemplateItem[],
     selectedStyleTemplateId: null as string | null,
@@ -382,6 +383,19 @@ export function applyIncomingRowColors(
 
 export function getRowColor(index: number): string {
     return normalizeHexColorInput(state.rowColors[index]) || getDefaultRowColor(index);
+}
+
+export function resolveBarFillColor(seriesIndex: number, colIndex: number): string {
+    const safeCol = Math.max(0, Math.floor(colIndex));
+    if (state.colHeaderColorEnabled[safeCol]) {
+        const colColor = normalizeHexColorInput(state.colHeaderColors[safeCol]);
+        if (colColor) return colColor;
+    }
+
+    const safeSeries = Math.max(0, Math.floor(seriesIndex));
+    const fromMarkDraft = normalizeHexColorInput(state.markStylesDraft[safeSeries]?.fillColor);
+    if (fromMarkDraft) return fromMarkDraft;
+    return getRowColor(safeSeries);
 }
 
 export function getSeriesCountForChart(chartType: string, rowCount: number) {

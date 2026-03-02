@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols, getRowColor, getGridColsForChart, normalizeHexColorInput } from './state';
+import { state, getTotalStackedCols, getRowColor, getGridColsForChart, normalizeHexColorInput, resolveBarFillColor } from './state';
 import { ui } from './dom';
 import type { StrokeStyleSnapshot } from '../shared/style-types';
 import { getEffectiveYDomain } from './y-range';
@@ -9,9 +9,10 @@ import { getEffectiveYDomain } from './y-range';
 
 declare const d3: any; // loaded from CDN in index.html
 
-export type StylePreviewTarget = 'cell-fill' | 'cell-top' | 'tab-right' | 'grid' | 'mark' | 'assist-line';
+export type StylePreviewTarget = 'cell-fill' | 'cell-top' | 'tab-right' | 'grid' | 'mark' | 'assist-line' | 'column';
 export type StylePreviewTargetMeta = {
     seriesIndex?: number;
+    colIndex?: number;
 };
 
 type PreviewInteractionMode = 'data' | 'style';
@@ -221,6 +222,11 @@ function markStyleTargetSeries(node: any, seriesIndex: number, mode: PreviewInte
     node.attr('data-style-series-index', String(seriesIndex));
 }
 
+function markStyleTargetColumn(node: any, colIndex: number, mode: PreviewInteractionMode) {
+    if (mode !== 'style') return;
+    node.attr('data-style-col-index', String(colIndex));
+}
+
 function addStyleHitLine(
     g: any,
     x1: number,
@@ -288,12 +294,7 @@ function getSeriesColor(rowIndex: number, chartType: string) {
 }
 
 function getBarPreviewColor(rowIndex: number, colIndex: number): string {
-    const seriesColor = resolveSeriesStyleColor(rowIndex, 'bar', 'fill');
-    const isColOverride = state.chartType === 'bar' && Boolean(state.colHeaderColorEnabled[colIndex]);
-    if (isColOverride) {
-        return normalizeHexColorInput(state.colHeaderColors[colIndex]) || getRowColor(0);
-    }
-    return seriesColor;
+    return resolveBarFillColor(rowIndex, colIndex);
 }
 
 function resolveSeriesStyleColor(seriesIndex: number, chartType: string, role: 'fill' | 'stroke') {
@@ -591,6 +592,11 @@ function applyStyleTargetHover(container: HTMLElement, target: StylePreviewTarge
             node.setAttribute('fill', '#EF4444');
             node.setAttribute('fill-opacity', '0.35');
         }
+        if (target === 'column' && nodeTarget === 'column') {
+            node.setAttribute('fill', '#EF4444');
+            node.setAttribute('fill-opacity', '0.2');
+            node.style.opacity = '1';
+        }
 
         if (
             target === 'mark'
@@ -611,7 +617,11 @@ function applyStyleTargetHover(container: HTMLElement, target: StylePreviewTarge
 function bindStyleInteractions(
     container: HTMLElement,
     onTargetHover?: (target: StylePreviewTarget | null) => void,
-    onTargetClick?: (target: StylePreviewTarget, anchorPoint: { left: number; top: number; right: number; bottom: number }) => void
+    onTargetClick?: (
+        target: StylePreviewTarget,
+        anchorPoint: { left: number; top: number; right: number; bottom: number },
+        meta: StylePreviewTargetMeta
+    ) => void
 ) {
     const svg = container.querySelector('svg');
     if (!svg) return;
@@ -648,9 +658,14 @@ function bindStyleInteractions(
         const rect = elem.getBoundingClientRect();
         const rawSeriesIndex = elem.getAttribute('data-style-series-index');
         const parsed = rawSeriesIndex === null ? NaN : Number(rawSeriesIndex);
+        const rawColIndex = elem.getAttribute('data-style-col-index');
+        const parsedCol = rawColIndex === null ? NaN : Number(rawColIndex);
         const meta: StylePreviewTargetMeta = Number.isFinite(parsed)
             ? { seriesIndex: Math.max(0, Math.floor(parsed)) }
             : {};
+        if (Number.isFinite(parsedCol)) {
+            meta.colIndex = Math.max(0, Math.floor(parsedCol));
+        }
         onTargetClick(target, { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }, meta);
         event.stopPropagation();
     });
@@ -785,7 +800,7 @@ function renderBarPreview(
                 .attr('y', yScale(val))
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
-                .attr('fill', mode === 'style' ? getMarkDraftStyle(r).fillColor : getBarPreviewColor(r, c))
+                .attr('fill', getBarPreviewColor(r, c))
                 .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('rx', 2);
@@ -804,11 +819,13 @@ function renderBarPreview(
             } else {
                 markStyleTarget(rect, 'mark', mode);
                 markStyleTargetSeries(rect, r, mode);
+                markStyleTargetColumn(rect, c, mode);
             }
 
-            const resolvedColor = mode === 'style' ? getMarkDraftStyle(r).fillColor : getBarPreviewColor(r, c);
+            const resolvedColor = getBarPreviewColor(r, c);
             if (mode === 'style') {
-                applyStroke(rect, getMarkDraftStroke(r), resolvedColor, 1);
+                const draftStroke = getMarkDraftStroke(r);
+                applyStroke(rect, { ...draftStroke, color: resolvedColor }, resolvedColor, 1);
             } else {
                 const rowStroke = getRowStroke(r) || state.colStrokeStyle;
                 const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedColor } : { color: resolvedColor, weight: 1 };

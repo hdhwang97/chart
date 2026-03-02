@@ -1248,7 +1248,10 @@ function bindUiEvents() {
         const custom = event as CustomEvent<{ col: number; anchorRect: { left: number; top: number; right: number; bottom: number } }>;
         if (!custom.detail || typeof custom.detail.col !== 'number') return;
         if (state.chartType !== 'bar') return;
-        openColorPopover({ type: 'col', index: custom.detail.col }, custom.detail.anchorRect);
+        if (rowColorPopoverOpen) closeRowColorPopover();
+        if (assistLinePopoverOpen) closeAssistLinePopover();
+        if (styleAssistLinePopoverOpen) closeStyleAssistLinePopover();
+        openStyleItemPopoverWithMeta('column', custom.detail.anchorRect, { colIndex: custom.detail.col });
     }) as EventListener);
     const switchColorMode = (mode: ColorMode) => {
         if (!activeColorTarget) return;
@@ -1431,6 +1434,10 @@ function bindUiEvents() {
             const draft = readStyleTabDraft();
             const fromDraft = buildLocalStyleOverridesFromDraft(draft);
             if (fromDraft.mask.rowColors) setLocalStyleOverrideField('rowColors', fromDraft.overrides.rowColors);
+            if (fromDraft.mask.colColors) setLocalStyleOverrideField('colColors', fromDraft.overrides.colColors);
+            if (fromDraft.mask.colColorModes) setLocalStyleOverrideField('colColorModes', fromDraft.overrides.colColorModes);
+            if (fromDraft.mask.colPaintStyleIds) setLocalStyleOverrideField('colPaintStyleIds', fromDraft.overrides.colPaintStyleIds);
+            if (fromDraft.mask.colColorEnabled) setLocalStyleOverrideField('colColorEnabled', fromDraft.overrides.colColorEnabled);
             if (fromDraft.mask.cellFillStyle) setLocalStyleOverrideField('cellFillStyle', fromDraft.overrides.cellFillStyle);
             if (fromDraft.mask.cellTopStyle) setLocalStyleOverrideField('cellTopStyle', fromDraft.overrides.cellTopStyle);
             if (fromDraft.mask.tabRightStyle) setLocalStyleOverrideField('tabRightStyle', fromDraft.overrides.tabRightStyle);

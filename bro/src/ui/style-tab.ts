@@ -13,7 +13,9 @@ import {
     type StyleInjectionDraft,
     type StyleInjectionDraftItem,
     ensureColHeaderColorEnabledLength,
+    ensureColHeaderColorModesLength,
     ensureColHeaderColorsLength,
+    ensureColHeaderPaintStyleIdsLength,
     getGridColsForChart,
     getRowColor,
     getTotalStackedCols,
@@ -74,11 +76,13 @@ type StylePopoverConfig = {
     title: string;
     primaryLabel: string;
     primaryInput: HTMLInputElement;
+    primaryValue?: string;
     secondaryLabel?: string;
     secondaryInput?: HTMLInputElement;
     strokeStyleInput?: HTMLSelectElement;
     thicknessInput?: HTMLInputElement;
     visibleInput?: HTMLInputElement;
+    enableOverride?: boolean;
     sides?: {
         top: HTMLInputElement;
         right: HTMLInputElement;
@@ -93,18 +97,61 @@ type StyleFormSnapshot = {
     [key: string]: string | boolean;
 };
 
+type ColumnPopoverSnapshot = {
+    colIndex: number;
+    color: string;
+    enabled: boolean;
+    mode: ColorMode;
+    styleId: string | null;
+};
+
+type PopoverSegment = 'mark' | 'column' | 'background';
+type BackgroundPopoverTarget = 'cell-fill' | 'cell-top' | 'tab-right' | 'grid' | 'assist-line';
+
+type PopoverNavigatorState = {
+    segment: PopoverSegment;
+    index: number;
+};
+
+type PopoverSessionSnapshot = {
+    styleFormSnapshot: StyleFormSnapshot;
+    styleInjectionDraft: StyleInjectionDraft;
+    markStylesDraft: MarkStyleInjectionDraftItem[];
+    rowColors: string[];
+    colHeaderColors: string[];
+    colHeaderColorEnabled: boolean[];
+    colHeaderColorModes: ColorMode[];
+    colHeaderPaintStyleIds: Array<string | null>;
+    activeMarkStyleIndex: number;
+    markStrokeLinkByIndex: boolean[];
+};
+
 let styleColorPicker: any = null;
 let styleItemPopoverOpen = false;
 let styleItemPopoverMode: ColorMode = 'hex';
 let styleItemPopoverConfig: StylePopoverConfig | null = null;
 let styleItemPopoverTarget: StyleItemPopoverTarget | null = null;
 let styleItemPopoverSourceInput: HTMLInputElement | null = null;
-let styleItemPopoverSnapshot: StyleFormSnapshot | null = null;
 let styleItemPopoverSelectedStyleId: string | null = null;
 let styleItemPopoverActiveColorField: 'primary' | 'secondary' = 'primary';
 let styleItemPopoverAnchorRect: AnchorRectLike | null = null;
+let styleItemPopoverColumnIndex: number | null = null;
+let styleItemPopoverNavigator: PopoverNavigatorState | null = null;
+let styleItemPopoverSessionSnapshot: PopoverSessionSnapshot | null = null;
+const styleItemPopoverSegmentIndexCache: Record<PopoverSegment, number> = {
+    mark: 0,
+    column: 0,
+    background: 0
+};
 let isSyncingStyleColorPicker = false;
 let stylePopoverPaintStyles: PaintStyleSelection[] = [];
+
+const BACKGROUND_POPOVER_TARGETS: BackgroundPopoverTarget[] = [
+    'grid',
+    'cell-top',
+    'tab-right',
+    'cell-fill'
+];
 
 function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
@@ -599,6 +646,98 @@ function restoreStyleFormSnapshot(snapshot: StyleFormSnapshot) {
     });
 }
 
+function cloneMarkStylesDraft(source: MarkStyleInjectionDraftItem[]) {
+    return source.map((item) => ({ ...item }));
+}
+
+function cloneMarkStrokeLinks(source: boolean[]) {
+    return source.map((item) => Boolean(item));
+}
+
+function isBackgroundPopoverTarget(target: StyleItemPopoverTarget): target is BackgroundPopoverTarget {
+    return target === 'cell-fill'
+        || target === 'cell-top'
+        || target === 'tab-right'
+        || target === 'grid'
+        || target === 'assist-line';
+}
+
+function getBackgroundTargetLabel(target: BackgroundPopoverTarget): string {
+    if (target === 'cell-fill') return 'Background';
+    if (target === 'cell-top') return 'Y-axis line';
+    if (target === 'tab-right') return 'X-axis line';
+    if (target === 'grid') return 'Plot area';
+    return 'Assist line';
+}
+
+function getBackgroundTargetIndex(target: BackgroundPopoverTarget): number {
+    return Math.max(0, BACKGROUND_POPOVER_TARGETS.indexOf(target));
+}
+
+function applyLinkedColumnHighlightDom() {
+    document.querySelectorAll<HTMLElement>('.col-header.style-grid-linked-col, .col-color-swatch.style-grid-linked-col')
+        .forEach((node) => node.classList.remove('style-grid-linked-col'));
+    if (state.stylePopoverLinkedColIndex === null || state.stylePopoverLinkedColIndex < 0) return;
+    const selector = `[data-col="${state.stylePopoverLinkedColIndex}"]`;
+    const header = document.querySelector<HTMLElement>(`.col-header${selector}`);
+    const swatches = Array.from(document.querySelectorAll<HTMLElement>(`.col-color-swatch${selector}`));
+    if (header) {
+        header.classList.add('style-grid-linked-col');
+        header.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    swatches.forEach((swatch) => swatch.classList.add('style-grid-linked-col'));
+}
+
+function setStylePopoverLinkedColumn(index: number | null) {
+    const next = typeof index === 'number' && Number.isFinite(index)
+        ? Math.max(0, Math.floor(index))
+        : null;
+    state.stylePopoverLinkedColIndex = next;
+    applyLinkedColumnHighlightDom();
+}
+
+function getPopoverStepperCount(segment: PopoverSegment): number {
+    if (segment === 'mark') return Math.max(1, state.markStylesDraft.length);
+    if (segment === 'column') return Math.max(1, getColumnTargetCount());
+    return Math.max(1, BACKGROUND_POPOVER_TARGETS.length);
+}
+
+function normalizePopoverSegmentIndex(segment: PopoverSegment, index: number) {
+    const max = Math.max(0, getPopoverStepperCount(segment) - 1);
+    if (!Number.isFinite(index)) return 0;
+    return Math.max(0, Math.min(max, Math.floor(index)));
+}
+
+function buildPopoverSessionSnapshot(): PopoverSessionSnapshot {
+    return {
+        styleFormSnapshot: captureStyleFormSnapshot(),
+        styleInjectionDraft: cloneDraft(state.styleInjectionDraft),
+        markStylesDraft: cloneMarkStylesDraft(state.markStylesDraft),
+        rowColors: state.rowColors.slice(),
+        colHeaderColors: state.colHeaderColors.slice(),
+        colHeaderColorEnabled: state.colHeaderColorEnabled.slice(),
+        colHeaderColorModes: state.colHeaderColorModes.slice(),
+        colHeaderPaintStyleIds: state.colHeaderPaintStyleIds.slice(),
+        activeMarkStyleIndex: state.activeMarkStyleIndex,
+        markStrokeLinkByIndex: cloneMarkStrokeLinks(state.markStrokeLinkByIndex)
+    };
+}
+
+function restorePopoverSessionSnapshot(snapshot: PopoverSessionSnapshot) {
+    restoreStyleFormSnapshot(snapshot.styleFormSnapshot);
+    state.markStylesDraft = cloneMarkStylesDraft(snapshot.markStylesDraft);
+    state.markStrokeLinkByIndex = cloneMarkStrokeLinks(snapshot.markStrokeLinkByIndex);
+    state.activeMarkStyleIndex = Math.max(0, Math.min(snapshot.activeMarkStyleIndex, Math.max(0, state.markStylesDraft.length - 1)));
+    state.rowColors = snapshot.rowColors.slice();
+    state.colHeaderColors = snapshot.colHeaderColors.slice();
+    state.colHeaderColorEnabled = snapshot.colHeaderColorEnabled.slice();
+    state.colHeaderColorModes = snapshot.colHeaderColorModes.slice();
+    state.colHeaderPaintStyleIds = snapshot.colHeaderPaintStyleIds.slice();
+    setStyleInjectionDraft(cloneDraft(snapshot.styleInjectionDraft));
+    hydrateStyleTab(state.styleInjectionDraft);
+    emitStyleDraftUpdated();
+}
+
 function syncStyleDraftFromDomAndEmit() {
     markStyleInjectionDirty();
     const normalized = validateStyleTabDraft(readStyleTabDraft());
@@ -624,9 +763,70 @@ function syncRowColorsFromMarkStyles(options: { emitLocalOverride: boolean }) {
     }
 }
 
+function getColumnTargetCount() {
+    if (state.chartType !== 'bar') return 0;
+    return getGridColsForChart(state.chartType, state.cols);
+}
+
+function getColumnPopoverSnapshot(colIndex: number): ColumnPopoverSnapshot {
+    const totalCols = getColumnTargetCount();
+    ensureColHeaderColorsLength(totalCols);
+    ensureColHeaderColorEnabledLength(totalCols);
+    ensureColHeaderColorModesLength(totalCols);
+    ensureColHeaderPaintStyleIdsLength(totalCols);
+
+    const safeCol = Math.max(0, Math.min(totalCols - 1, Math.floor(colIndex)));
+    return {
+        colIndex: safeCol,
+        color: normalizeHexColorInput(state.colHeaderColors[safeCol]) || getRowColor(0),
+        enabled: Boolean(state.colHeaderColorEnabled[safeCol]),
+        mode: state.colHeaderColorModes[safeCol] === 'paint_style' ? 'paint_style' : 'hex',
+        styleId: state.colHeaderPaintStyleIds[safeCol]
+    };
+}
+
+function emitColumnStateUpdated() {
+    const totalCols = getColumnTargetCount();
+    if (totalCols <= 0) return;
+    if (state.isInstanceTarget) {
+        setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());
+        setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
+        setLocalStyleOverrideField('colColorModes', ensureColHeaderColorModesLength(totalCols).slice());
+        setLocalStyleOverrideField('colPaintStyleIds', ensureColHeaderPaintStyleIdsLength(totalCols).slice());
+        recomputeEffectiveStyleSnapshot();
+    }
+    markStyleInjectionDirty();
+    emitStyleDraftUpdated();
+}
+
+function syncColumnPopoverStateAndEmit() {
+    if (styleItemPopoverTarget !== 'column' || styleItemPopoverColumnIndex === null) return;
+    const totalCols = getColumnTargetCount();
+    if (totalCols <= 0) return;
+    ensureColHeaderColorsLength(totalCols);
+    ensureColHeaderColorEnabledLength(totalCols);
+    ensureColHeaderColorModesLength(totalCols);
+    ensureColHeaderPaintStyleIdsLength(totalCols);
+    const safeCol = Math.max(0, Math.min(totalCols - 1, Math.floor(styleItemPopoverColumnIndex)));
+    const color = normalizeHexColorInput(ui.styleItemPrimaryColorInput.value)
+        || normalizeHexColorInput(state.colHeaderColors[safeCol])
+        || getRowColor(0);
+    state.colHeaderColors[safeCol] = color;
+    state.colHeaderColorEnabled[safeCol] = ui.styleItemEnableInput.checked;
+    if (styleItemPopoverMode === 'paint_style' && styleItemPopoverSelectedStyleId) {
+        state.colHeaderColorModes[safeCol] = 'paint_style';
+        state.colHeaderPaintStyleIds[safeCol] = styleItemPopoverSelectedStyleId;
+    } else {
+        state.colHeaderColorModes[safeCol] = 'hex';
+        state.colHeaderPaintStyleIds[safeCol] = null;
+    }
+    emitColumnStateUpdated();
+}
+
 function getStylePopoverConfigForTarget(
     target: StyleItemPopoverTarget,
-    sourceInput?: HTMLInputElement | null
+    sourceInput?: HTMLInputElement | null,
+    colIndex?: number
 ): StylePopoverConfig | null {
     if (target === 'input-color') {
         if (!sourceInput) return null;
@@ -708,6 +908,19 @@ function getStylePopoverConfigForTarget(
             thicknessInput: ui.styleMarkThicknessInput
         };
     }
+    if (target === 'column') {
+        if (state.chartType !== 'bar') return null;
+        const totalCols = getColumnTargetCount();
+        if (totalCols <= 0 || !Number.isFinite(colIndex)) return null;
+        const snap = getColumnPopoverSnapshot(Number(colIndex));
+        return {
+            title: `Column ${snap.colIndex + 1}`,
+            primaryLabel: 'Color (HEX)',
+            primaryInput: ui.styleCellFillColorInput,
+            primaryValue: snap.color,
+            enableOverride: true
+        };
+    }
     return null;
 }
 
@@ -781,6 +994,13 @@ function applyStylePopoverHexInputValue(input: HTMLInputElement) {
         return;
     }
     input.classList.remove('style-color-hex-error');
+    if (styleItemPopoverTarget === 'column') {
+        ui.styleItemPrimaryColorInput.value = normalized;
+        ui.styleItemEnableInput.checked = true;
+        syncColumnPopoverStateAndEmit();
+        updateStyleItemPopoverPreview();
+        return;
+    }
     const targetInput = input === ui.styleItemSecondaryColorInput
         ? config.secondaryInput
         : config.primaryInput;
@@ -850,9 +1070,138 @@ function applyQuickSwatchColor(hex: string) {
     }
 }
 
+function resolveNavigationTarget(
+    segment: PopoverSegment,
+    index: number
+): { target: StyleItemPopoverTarget; seriesIndex?: number; colIndex?: number } {
+    const nextIndex = normalizePopoverSegmentIndex(segment, index);
+    if (segment === 'mark') {
+        return { target: 'mark', seriesIndex: nextIndex };
+    }
+    if (segment === 'column') {
+        return { target: 'column', colIndex: nextIndex };
+    }
+    const target = BACKGROUND_POPOVER_TARGETS[nextIndex] || 'cell-fill';
+    return { target };
+}
+
+function getPopoverTitleForTarget(target: StyleItemPopoverTarget): string {
+    if (target === 'mark') return `Mark ${state.activeMarkStyleIndex + 1}`;
+    if (target === 'column') {
+        const idx = styleItemPopoverColumnIndex ?? 0;
+        return `Column ${idx + 1}`;
+    }
+    if (isBackgroundPopoverTarget(target)) {
+        return `Background: ${getBackgroundTargetLabel(target)}`;
+    }
+    return styleItemPopoverConfig?.title || 'Style Color';
+}
+
+function syncPopoverNavigatorFromTarget(target: StyleItemPopoverTarget, seriesIndex?: number, colIndex?: number) {
+    if (target === 'input-color' || target === 'assist-line') {
+        styleItemPopoverNavigator = null;
+        ui.styleItemNavRow.classList.add('hidden');
+        setStylePopoverLinkedColumn(null);
+        return;
+    }
+    if (Number.isFinite(colIndex)) {
+        styleItemPopoverSegmentIndexCache.column = normalizePopoverSegmentIndex('column', Number(colIndex));
+    }
+    const segment: PopoverSegment = target === 'mark'
+        ? 'mark'
+        : (target === 'column' ? 'column' : 'background');
+    const rawIndex = segment === 'mark'
+        ? (Number.isFinite(seriesIndex) ? Number(seriesIndex) : state.activeMarkStyleIndex)
+        : (segment === 'column'
+            ? (Number.isFinite(colIndex) ? Number(colIndex) : (styleItemPopoverColumnIndex ?? styleItemPopoverSegmentIndexCache.column))
+            : (isBackgroundPopoverTarget(target)
+                ? (BACKGROUND_POPOVER_TARGETS.includes(target) ? getBackgroundTargetIndex(target) : (styleItemPopoverSegmentIndexCache.background ?? 0))
+                : 0));
+    const index = normalizePopoverSegmentIndex(segment, rawIndex);
+    styleItemPopoverNavigator = { segment, index };
+    styleItemPopoverSegmentIndexCache[segment] = index;
+}
+
+function syncPopoverNavigatorUi() {
+    if (!styleItemPopoverOpen || !styleItemPopoverNavigator) {
+        ui.styleItemNavRow.classList.add('hidden');
+        setStylePopoverLinkedColumn(null);
+        return;
+    }
+    ui.styleItemNavRow.classList.remove('hidden');
+    let segment = styleItemPopoverNavigator.segment;
+    const isBar = state.chartType === 'bar';
+    if (segment === 'column' && !isBar) {
+        segment = 'mark';
+        styleItemPopoverNavigator.segment = 'mark';
+        styleItemPopoverNavigator.index = normalizePopoverSegmentIndex('mark', state.activeMarkStyleIndex);
+    }
+
+    const isBackgroundSegment = segment === 'background';
+    ui.styleItemSegmentGroup.classList.toggle('hidden', isBackgroundSegment);
+    ui.styleItemSegmentColumnBtn.classList.toggle('hidden', !isBar);
+    ui.styleItemSegmentMarkBtn.classList.toggle('is-active', segment === 'mark');
+    ui.styleItemSegmentColumnBtn.classList.toggle('is-active', segment === 'column');
+
+    const count = getPopoverStepperCount(segment);
+    const index = normalizePopoverSegmentIndex(segment, styleItemPopoverNavigator.index);
+    styleItemPopoverNavigator.index = index;
+    styleItemPopoverSegmentIndexCache[segment] = index;
+    setStylePopoverLinkedColumn(state.chartType === 'bar' && segment === 'column' ? index : null);
+
+    if (count <= 1) {
+        ui.styleItemStepper.classList.add('hidden');
+        return;
+    }
+    ui.styleItemStepper.classList.remove('hidden');
+
+    if (segment === 'background') {
+        const target = BACKGROUND_POPOVER_TARGETS[index] || 'cell-fill';
+        ui.styleItemNavLabel.textContent = getBackgroundTargetLabel(target);
+    } else if (segment === 'column') {
+        ui.styleItemNavLabel.textContent = `Column ${index + 1}`;
+    } else {
+        ui.styleItemNavLabel.textContent = `Mark ${index + 1}`;
+    }
+    ui.styleItemNavPrevBtn.disabled = index <= 0;
+    ui.styleItemNavNextBtn.disabled = index >= count - 1;
+}
+
+function navigateStyleItemPopover(segment: PopoverSegment, index: number) {
+    if (!styleItemPopoverOpen) return;
+    const nextIndex = normalizePopoverSegmentIndex(segment, index);
+    const resolved = resolveNavigationTarget(segment, nextIndex);
+    openStyleItemPopoverInternal(
+        resolved.target,
+        styleItemPopoverAnchorRect || { left: 0, top: 0, right: 0, bottom: 0 },
+        null,
+        resolved.seriesIndex,
+        resolved.colIndex,
+        true
+    );
+}
+
+function stepStyleItemPopoverNavigator(direction: -1 | 1) {
+    if (!styleItemPopoverNavigator) return;
+    const next = styleItemPopoverNavigator.index + direction;
+    navigateStyleItemPopover(styleItemPopoverNavigator.segment, next);
+}
+
+function switchStyleItemPopoverSegment(segment: PopoverSegment) {
+    if (!styleItemPopoverOpen) return;
+    if (segment === 'background') return;
+    if (segment === 'column' && state.chartType !== 'bar') return;
+    const nextIndex = styleItemPopoverSegmentIndexCache[segment] ?? 0;
+    navigateStyleItemPopover(segment, nextIndex);
+}
+
 function syncStyleItemPopoverFromConfig(config: StylePopoverConfig) {
-    const primary = normalizeHexColorInput(config.primaryInput.value) || DEFAULT_STYLE_INJECTION_ITEM.color;
-    ui.styleItemPopoverTitle.textContent = config.title;
+    if (styleItemPopoverTarget === 'column' && state.chartType !== 'bar') {
+        navigateStyleItemPopover('mark', state.activeMarkStyleIndex);
+        return;
+    }
+    const primary = normalizeHexColorInput(config.primaryValue || config.primaryInput.value) || DEFAULT_STYLE_INJECTION_ITEM.color;
+    ui.styleItemPopoverTitle.textContent = getPopoverTitleForTarget(styleItemPopoverTarget || 'input-color');
     ui.styleItemPrimaryColorLabel.textContent = config.primaryLabel;
     ui.styleItemPrimaryColorInput.value = primary;
     ui.styleItemPrimaryColorPreview.style.backgroundColor = primary;
@@ -868,6 +1217,12 @@ function syncStyleItemPopoverFromConfig(config: StylePopoverConfig) {
         ui.styleItemSecondaryColorInput.classList.remove('style-color-hex-error');
     }
     ui.styleItemLinkRow.classList.toggle('hidden', !(styleItemPopoverTarget === 'mark' && hasSecondary));
+
+    const hasEnableOverride = Boolean(config.enableOverride);
+    ui.styleItemEnableRow.classList.toggle('hidden', !hasEnableOverride);
+    if (hasEnableOverride && styleItemPopoverColumnIndex !== null) {
+        ui.styleItemEnableInput.checked = Boolean(state.colHeaderColorEnabled[styleItemPopoverColumnIndex]);
+    }
 
     const hasStroke = Boolean(config.strokeStyleInput);
     ui.styleItemStrokeRow.classList.toggle('hidden', !hasStroke);
@@ -912,6 +1267,7 @@ function syncStyleItemPopoverFromConfig(config: StylePopoverConfig) {
         styleColorPicker.color.hexString = primary;
         isSyncingStyleColorPicker = false;
     }
+    syncPopoverNavigatorUi();
 }
 
 function applyMarkIndexFromPreview(seriesIndex: number) {
@@ -934,25 +1290,39 @@ function openStyleItemPopoverInternal(
     target: StyleItemPopoverTarget,
     anchorRect: AnchorRectLike,
     sourceInput?: HTMLInputElement | null,
-    seriesIndex?: number
+    seriesIndex?: number,
+    colIndex?: number,
+    preserveSession = false
 ) {
     initializeStyleColorPicker();
     if (target === 'mark' && Number.isFinite(seriesIndex)) {
         applyMarkIndexFromPreview(Number(seriesIndex));
     }
-    const config = getStylePopoverConfigForTarget(target, sourceInput || null);
+    const config = getStylePopoverConfigForTarget(target, sourceInput || null, colIndex);
     if (!config) return false;
 
-    if (styleItemPopoverOpen) {
-        closeStyleItemPopover({ commit: true });
+    const keepSession = styleItemPopoverOpen && preserveSession;
+    if (!keepSession && styleItemPopoverOpen) {
+        closeStyleItemPopover({ commit: false });
+    }
+    if (!styleItemPopoverSessionSnapshot) {
+        styleItemPopoverSessionSnapshot = buildPopoverSessionSnapshot();
     }
 
     styleItemPopoverTarget = target;
     styleItemPopoverConfig = config;
     styleItemPopoverSourceInput = sourceInput || null;
-    styleItemPopoverSnapshot = captureStyleFormSnapshot();
-    styleItemPopoverMode = 'hex';
-    styleItemPopoverSelectedStyleId = null;
+    styleItemPopoverColumnIndex = null;
+    if (target === 'column' && Number.isFinite(colIndex)) {
+        const snapshot = getColumnPopoverSnapshot(Number(colIndex));
+        styleItemPopoverColumnIndex = snapshot.colIndex;
+        styleItemPopoverMode = snapshot.mode;
+        styleItemPopoverSelectedStyleId = snapshot.styleId;
+    } else if (!keepSession) {
+        styleItemPopoverMode = 'hex';
+        styleItemPopoverSelectedStyleId = null;
+    }
+    syncPopoverNavigatorFromTarget(target, seriesIndex, colIndex);
     styleItemPopoverAnchorRect = anchorRect;
     styleItemPopoverOpen = true;
 
@@ -963,40 +1333,49 @@ function openStyleItemPopoverInternal(
 }
 
 function openStyleColorPopover(input: HTMLInputElement) {
-    openStyleItemPopoverInternal('input-color', input.getBoundingClientRect(), input);
+    openStyleItemPopoverInternal('input-color', input.getBoundingClientRect(), input, undefined, undefined, true);
 }
 
 export function openStyleItemPopover(target: StylePreviewTarget, anchorPoint: AnchorRectLike) {
-    openStyleItemPopoverInternal(target, anchorPoint, null);
+    openStyleItemPopoverInternal(target, anchorPoint, null, undefined, undefined, true);
 }
 
 export function openStyleItemPopoverWithMeta(
     target: StylePreviewTarget,
     anchorPoint: AnchorRectLike,
-    meta: { seriesIndex?: number }
+    meta: { seriesIndex?: number; colIndex?: number }
 ) {
-    openStyleItemPopoverInternal(target, anchorPoint, null, meta.seriesIndex);
+    openStyleItemPopoverInternal(target, anchorPoint, null, meta.seriesIndex, meta.colIndex, true);
 }
 
 export function closeStyleItemPopover(options: { commit: boolean }) {
     if (!styleItemPopoverOpen) return false;
-    if (!options.commit && styleItemPopoverSnapshot) {
-        restoreStyleFormSnapshot(styleItemPopoverSnapshot);
-        syncStyleDraftFromDomAndEmit();
-    } else if (options.commit) {
-        // Ensure the latest popover values are reflected on preview/export before closing.
-        syncStyleDraftFromDomAndEmit();
+    const closingTarget = styleItemPopoverTarget;
+    const sessionSnapshot = styleItemPopoverSessionSnapshot;
+    if (options.commit) {
+        if (closingTarget === 'column') {
+            syncColumnPopoverStateAndEmit();
+        } else {
+            syncStyleDraftFromDomAndEmit();
+        }
     }
     styleItemPopoverOpen = false;
     styleItemPopoverConfig = null;
     styleItemPopoverTarget = null;
     styleItemPopoverSourceInput = null;
-    styleItemPopoverSnapshot = null;
+    styleItemPopoverColumnIndex = null;
     styleItemPopoverSelectedStyleId = null;
     styleItemPopoverAnchorRect = null;
+    styleItemPopoverNavigator = null;
+    styleItemPopoverSessionSnapshot = null;
     ui.styleItemPopover.classList.add('hidden');
+    ui.styleItemNavRow.classList.add('hidden');
+    setStylePopoverLinkedColumn(null);
     ui.styleItemPrimaryColorInput.classList.remove('style-color-hex-error');
     ui.styleItemSecondaryColorInput.classList.remove('style-color-hex-error');
+    if (!options.commit && sessionSnapshot) {
+        restorePopoverSessionSnapshot(sessionSnapshot);
+    }
     return true;
 }
 
@@ -1399,6 +1778,8 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
         : getGridColsForChart(state.chartType, state.cols);
     const normalizedColColors = ensureColHeaderColorsLength(totalCols).slice(0, totalCols);
     const normalizedColEnabled = ensureColHeaderColorEnabledLength(totalCols).slice(0, totalCols);
+    const normalizedColModes = ensureColHeaderColorModesLength(totalCols).slice(0, totalCols);
+    const normalizedColPaintStyleIds = ensureColHeaderPaintStyleIdsLength(totalCols).slice(0, totalCols);
     return {
         cellFillStyle: {
             color: draft.cellFill.color
@@ -1452,7 +1833,9 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
             strokeStyle: draft.assistLine.strokeStyle
         },
         colColors: normalizedColColors,
-        colColorEnabled: normalizedColEnabled
+        colColorEnabled: normalizedColEnabled,
+        colColorModes: normalizedColModes,
+        colPaintStyleIds: normalizedColPaintStyleIds
     };
 }
 
@@ -1517,11 +1900,27 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
                 thickness: item.thickness,
                 strokeStyle: item.strokeStyle
             })),
+            colColors: ensureColHeaderColorsLength(state.chartType === 'stackedBar'
+                ? getTotalStackedCols()
+                : getGridColsForChart(state.chartType, state.cols)).slice(),
+            colColorModes: ensureColHeaderColorModesLength(state.chartType === 'stackedBar'
+                ? getTotalStackedCols()
+                : getGridColsForChart(state.chartType, state.cols)).slice(),
+            colPaintStyleIds: ensureColHeaderPaintStyleIdsLength(state.chartType === 'stackedBar'
+                ? getTotalStackedCols()
+                : getGridColsForChart(state.chartType, state.cols)).slice(),
+            colColorEnabled: ensureColHeaderColorEnabledLength(state.chartType === 'stackedBar'
+                ? getTotalStackedCols()
+                : getGridColsForChart(state.chartType, state.cols)).slice(),
             rowStrokeStyles: state.rowStrokeStyles,
             colStrokeStyle: state.colStrokeStyle || undefined
         },
         mask: {
             rowColors: true,
+            colColors: true,
+            colColorModes: true,
+            colPaintStyleIds: true,
+            colColorEnabled: true,
             cellFillStyle: true,
             cellTopStyle: true,
             tabRightStyle: true,
@@ -1556,6 +1955,18 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
             .slice(0, totalCols);
         ensureColHeaderColorEnabledLength(totalCols);
     }
+    if (Array.isArray(template.payload.colColorModes)) {
+        state.colHeaderColorModes = template.payload.colColorModes
+            .map((value) => value === 'paint_style' ? 'paint_style' : 'hex')
+            .slice(0, totalCols);
+        ensureColHeaderColorModesLength(totalCols);
+    }
+    if (Array.isArray(template.payload.colPaintStyleIds)) {
+        state.colHeaderPaintStyleIds = template.payload.colPaintStyleIds
+            .map((value) => (typeof value === 'string' && value.trim()) ? value : null)
+            .slice(0, totalCols);
+        ensureColHeaderPaintStyleIdsLength(totalCols);
+    }
     if (state.isInstanceTarget) {
         const draftOverrides = buildLocalStyleOverridesFromDraft(nextDraft);
         setLocalStyleOverrideField('rowColors', draftOverrides.overrides.rowColors);
@@ -1569,6 +1980,8 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
         setLocalStyleOverrideField('rowStrokeStyles', draftOverrides.overrides.rowStrokeStyles);
         setLocalStyleOverrideField('colStrokeStyle', draftOverrides.overrides.colStrokeStyle);
         setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());
+        setLocalStyleOverrideField('colColorModes', ensureColHeaderColorModesLength(totalCols).slice());
+        setLocalStyleOverrideField('colPaintStyleIds', ensureColHeaderPaintStyleIdsLength(totalCols).slice());
         setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
         recomputeEffectiveStyleSnapshot();
     }
@@ -1758,6 +2171,10 @@ export function bindStyleTabEvents() {
     ui.styleMarkIndexInput.addEventListener('change', () => {
         const idx = Number(ui.styleMarkIndexInput.value);
         state.activeMarkStyleIndex = Number.isFinite(idx) ? Math.max(0, idx) : 0;
+        styleItemPopoverSegmentIndexCache.mark = normalizePopoverSegmentIndex('mark', state.activeMarkStyleIndex);
+        if (styleItemPopoverNavigator?.segment === 'mark') {
+            styleItemPopoverNavigator.index = styleItemPopoverSegmentIndexCache.mark;
+        }
         const active = getActiveMarkDraft();
         ui.styleMarkFillColorInput.value = active.fillColor;
         ui.styleMarkStrokeColorInput.value = active.strokeColor;
@@ -1766,6 +2183,8 @@ export function bindStyleTabEvents() {
         syncAllHexPreviewsFromDom();
         if (styleItemPopoverOpen && styleItemPopoverTarget === 'mark' && styleItemPopoverConfig) {
             syncStyleItemPopoverFromConfig(styleItemPopoverConfig);
+        } else if (styleItemPopoverOpen) {
+            syncPopoverNavigatorUi();
         }
         syncStyleDraftFromDomAndEmit();
     });
@@ -1779,19 +2198,32 @@ export function bindStyleTabEvents() {
     ui.styleItemModeTabHex.addEventListener('click', () => {
         styleItemPopoverMode = 'hex';
         refreshStyleItemModeUi();
+        if (styleItemPopoverTarget === 'column') {
+            syncColumnPopoverStateAndEmit();
+        }
     });
     ui.styleItemModeTabStyle.addEventListener('click', () => {
         styleItemPopoverMode = 'paint_style';
         refreshStyleItemModeUi();
         document.dispatchEvent(new CustomEvent('request-paint-style-list'));
+        if (styleItemPopoverTarget === 'column') {
+            syncColumnPopoverStateAndEmit();
+        }
     });
     ui.styleItemStyleSelect.addEventListener('change', () => {
         styleItemPopoverSelectedStyleId = ui.styleItemStyleSelect.value || null;
         applySelectedPaintStyleColor();
+        if (styleItemPopoverTarget === 'column') {
+            syncColumnPopoverStateAndEmit();
+        }
     });
     ui.styleItemSwatchBlack.addEventListener('click', () => applyQuickSwatchColor('#000000'));
     ui.styleItemSwatchGray.addEventListener('click', () => applyQuickSwatchColor('#808080'));
     ui.styleItemSwatchWhite.addEventListener('click', () => applyQuickSwatchColor('#FFFFFF'));
+    ui.styleItemSegmentMarkBtn.addEventListener('click', () => switchStyleItemPopoverSegment('mark'));
+    ui.styleItemSegmentColumnBtn.addEventListener('click', () => switchStyleItemPopoverSegment('column'));
+    ui.styleItemNavPrevBtn.addEventListener('click', () => stepStyleItemPopoverNavigator(-1));
+    ui.styleItemNavNextBtn.addEventListener('click', () => stepStyleItemPopoverNavigator(1));
     ui.styleItemLinkToggle.addEventListener('change', () => {
         if (!styleItemPopoverOpen || styleItemPopoverTarget !== 'mark') return;
         const strokeEnabled = ui.styleItemLinkToggle.checked;
@@ -1835,6 +2267,10 @@ export function bindStyleTabEvents() {
         if (!styleItemPopoverConfig?.visibleInput) return;
         styleItemPopoverConfig.visibleInput.checked = ui.styleItemVisibleInput.checked;
         syncStyleDraftFromDomAndEmit();
+    });
+    ui.styleItemEnableInput.addEventListener('change', () => {
+        if (styleItemPopoverTarget !== 'column') return;
+        syncColumnPopoverStateAndEmit();
     });
     const syncSidesFromPopover = () => {
         if (!styleItemPopoverConfig?.sides) return;

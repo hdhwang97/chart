@@ -1,5 +1,5 @@
 import { ui } from './dom';
-import { state, getTotalStackedCols, getRowColor, normalizeHexColorInput, getGridColsForChart } from './state';
+import { state, getTotalStackedCols, getRowColor, normalizeHexColorInput, getGridColsForChart, resolveBarFillColor } from './state';
 import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 import { getEffectiveYDomain } from './y-range';
 import { closeStyleItemPopover } from './style-tab';
@@ -114,24 +114,8 @@ function resolveSeriesStyleColor(rowColors: string[], rowIndex: number, chartTyp
     return getSeriesColor(rowColors, rowIndex, chartType);
 }
 
-function resolveBarColorOverride(style: any, colIndex: number) {
-    const styleColColors = Array.isArray(style?.colColors) ? style.colColors : [];
-    const stateColColors = Array.isArray(state.colHeaderColors) ? state.colHeaderColors : [];
-    const colColors = styleColColors.length > 0 ? styleColColors : stateColColors;
-
-    const styleColEnabled = Array.isArray(style?.colColorEnabled) ? style.colColorEnabled : [];
-    const stateColEnabled = Array.isArray(state.colHeaderColorEnabled) ? state.colHeaderColorEnabled : [];
-    const colEnabled = styleColEnabled.length > 0 ? styleColEnabled : stateColEnabled;
-
-    const enabled = Boolean(colEnabled[colIndex]);
-    const color = normalizeHexColorInput(colColors[colIndex]);
-    return { enabled, color };
-}
-
-function getBarSeriesColor(style: any, rowColors: string[], rowIndex: number, colIndex: number) {
-    const override = resolveBarColorOverride(style, colIndex);
-    if (override.enabled && override.color) return override.color;
-    return resolveSeriesStyleColor(rowColors, rowIndex, 'bar', 'fill');
+function getBarSeriesColor(rowIndex: number, colIndex: number) {
+    return resolveBarFillColor(rowIndex, colIndex);
 }
 
 function buildXAxisLabels(totalCols: number): string[] {
@@ -490,9 +474,9 @@ function renderD3Preview(style: any) {
                     .attr('y', yScale(val))
                     .attr('width', clusterLayout.subBarW)
                     .attr('height', h - yScale(val))
-                    .attr('fill', getBarSeriesColor(style, rowColors, r, c))
+                    .attr('fill', getBarSeriesColor(r, c))
                     .attr('rx', cornerRadius);
-                const resolvedColor = getBarSeriesColor(style, rowColors, r, c);
+                const resolvedColor = getBarSeriesColor(r, c);
                 const rowStroke = getRowStroke(r, rowStrokeStyles) || colStrokeStyle;
                 const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedColor } : { color: resolvedColor, weight: 1 };
                 applyStroke(rect, syncedStroke, resolvedColor, 1);

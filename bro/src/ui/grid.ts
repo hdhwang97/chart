@@ -130,6 +130,10 @@ export function renderGrid() {
         for (let c = 0; c < totalCols; c++) {
             const hCell = document.createElement('div');
             hCell.className = 'w-16 h-6 flex items-center justify-center text-xxs font-bold text-text-sub border-r border-b border-border-strong bg-surface relative group col-header';
+            hCell.dataset.col = String(c);
+            if (state.stylePopoverLinkedColIndex === c) {
+                hCell.classList.add('style-grid-linked-col');
+            }
             const label = colHeaderLabels[c] || getDefaultColHeaderTitle(c, state.chartType);
             hCell.dataset.headerLabel = label;
             const labelSpan = document.createElement('span');
@@ -139,6 +143,9 @@ export function renderGrid() {
                 const swatch = document.createElement('button');
                 swatch.type = 'button';
                 swatch.className = 'col-color-swatch w-3.5 h-3.5 rounded-[2px] border border-border shrink-0 mr-1 cursor-pointer';
+                if (state.stylePopoverLinkedColIndex === c) {
+                    swatch.classList.add('style-grid-linked-col');
+                }
                 const colColor = state.colHeaderColorEnabled[c]
                     ? (state.colHeaderColors[c] || getRowColor(0))
                     : getRowColor(0);
