@@ -406,15 +406,38 @@ function ensureMarkDraftSeriesCount(source: MarkStyleInjectionDraftItem[]): Mark
     return next;
 }
 
+function ensureMarkStrokeLinkStateCount(count: number) {
+    const target = Math.max(1, Math.floor(count));
+    const next: boolean[] = [];
+    for (let i = 0; i < target; i++) {
+        next.push(Boolean(state.markStrokeLinkByIndex[i]));
+    }
+    state.markStrokeLinkByIndex = next;
+    return state.markStrokeLinkByIndex;
+}
+
 function getActiveMarkDraft(): MarkStyleInjectionDraftItem {
     const styles = state.markStylesDraft;
     const idx = Math.max(0, Math.min(state.activeMarkStyleIndex, styles.length - 1));
     return styles[idx] || { ...DEFAULT_STYLE_INJECTION_DRAFT.mark };
 }
 
+function isActiveMarkStrokeLinked() {
+    const links = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
+    const idx = Math.max(0, Math.min(state.activeMarkStyleIndex, links.length - 1));
+    return Boolean(links[idx]);
+}
+
+function setActiveMarkStrokeLinked(next: boolean) {
+    const links = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
+    const idx = Math.max(0, Math.min(state.activeMarkStyleIndex, links.length - 1));
+    links[idx] = Boolean(next);
+}
+
 function syncMarkIndexSelector() {
     const select = ui.styleMarkIndexInput;
     const count = Math.max(1, state.markStylesDraft.length);
+    ensureMarkStrokeLinkStateCount(count);
     const current = Math.max(0, Math.min(state.activeMarkStyleIndex, count - 1));
     select.innerHTML = Array.from({ length: count }, (_, i) => `<option value="${i}">Mark ${i + 1}</option>`).join('');
     select.value = String(current);
@@ -665,6 +688,25 @@ function updateStyleItemPopoverPreview() {
     ui.styleItemPopoverPreview.style.backgroundColor = color;
 }
 
+function syncMarkLinkUiState() {
+    const isMarkTarget = styleItemPopoverTarget === 'mark' && !!styleItemPopoverConfig?.secondaryInput;
+    ui.styleItemLinkRow.classList.toggle('hidden', !isMarkTarget);
+    if (!isMarkTarget) {
+        ui.styleItemLinkHint.classList.add('hidden');
+        ui.styleItemSecondaryColorRow.classList.toggle('hidden', !styleItemPopoverConfig?.secondaryInput);
+        ui.styleItemSecondaryColorInput.disabled = false;
+        ui.styleItemSecondaryColorInput.classList.remove('style-item-color-input-readonly');
+        return;
+    }
+
+    const linked = isActiveMarkStrokeLinked();
+    ui.styleItemLinkToggle.checked = linked;
+    ui.styleItemLinkHint.classList.toggle('hidden', !linked);
+    ui.styleItemSecondaryColorRow.classList.toggle('hidden', linked);
+    ui.styleItemSecondaryColorInput.disabled = linked;
+    ui.styleItemSecondaryColorInput.classList.toggle('style-item-color-input-readonly', linked || styleItemPopoverMode !== 'hex');
+}
+
 function refreshStyleItemModeUi() {
     const isHex = styleItemPopoverMode === 'hex';
     ui.styleItemModeTabHex.classList.toggle('is-active', isHex);
@@ -675,6 +717,7 @@ function refreshStyleItemModeUi() {
         input.readOnly = !isHex;
         input.classList.toggle('style-item-color-input-readonly', !isHex);
     });
+    syncMarkLinkUiState();
 }
 
 function setStyleItemPaintStyleOptions() {
@@ -709,9 +752,26 @@ function applyStylePopoverHexInputValue(input: HTMLInputElement) {
     if (!targetInput) return;
 
     targetInput.value = normalized;
+    if (
+        input === ui.styleItemPrimaryColorInput
+        && styleItemPopoverTarget === 'mark'
+        && config.secondaryInput
+        && isActiveMarkStrokeLinked()
+    ) {
+        const linkedStroke = normalized;
+        config.secondaryInput.value = linkedStroke;
+        ui.styleItemSecondaryColorInput.value = linkedStroke;
+        ui.styleItemSecondaryColorPreview.style.backgroundColor = linkedStroke;
+    }
     const swatch = getHexPreviewElement(targetInput);
     if (swatch) {
         updateHexPreview(targetInput, swatch, getHexPreviewFallback(targetInput));
+    }
+    if (config.secondaryInput) {
+        const secondarySwatch = getHexPreviewElement(config.secondaryInput);
+        if (secondarySwatch) {
+            updateHexPreview(config.secondaryInput, secondarySwatch, getHexPreviewFallback(config.secondaryInput));
+        }
     }
     syncStyleDraftFromDomAndEmit();
     updateStyleItemPopoverPreview();
@@ -751,6 +811,7 @@ function syncStyleItemPopoverFromConfig(config: StylePopoverConfig) {
         ui.styleItemSecondaryColorPreview.style.backgroundColor = secondary;
         ui.styleItemSecondaryColorInput.classList.remove('style-color-hex-error');
     }
+    ui.styleItemLinkRow.classList.toggle('hidden', !(styleItemPopoverTarget === 'mark' && hasSecondary));
 
     const hasStroke = Boolean(config.strokeStyleInput);
     ui.styleItemStrokeRow.classList.toggle('hidden', !hasStroke);
@@ -782,6 +843,12 @@ function syncStyleItemPopoverFromConfig(config: StylePopoverConfig) {
     setStyleItemPaintStyleOptions();
     refreshStyleItemModeUi();
     styleItemPopoverActiveColorField = 'primary';
+    if (styleItemPopoverTarget === 'mark' && hasSecondary && isActiveMarkStrokeLinked()) {
+        const linkedStroke = ui.styleItemPrimaryColorInput.value;
+        ui.styleItemSecondaryColorInput.value = linkedStroke;
+        if (config.secondaryInput) config.secondaryInput.value = linkedStroke;
+    }
+    syncMarkLinkUiState();
     updateStyleItemPopoverPreview();
 
     if (styleColorPicker) {
@@ -821,7 +888,7 @@ function openStyleItemPopoverInternal(
     if (!config) return false;
 
     if (styleItemPopoverOpen) {
-        closeStyleItemPopover({ commit: false });
+        closeStyleItemPopover({ commit: true });
     }
 
     styleItemPopoverTarget = target;
@@ -860,6 +927,9 @@ export function closeStyleItemPopover(options: { commit: boolean }) {
     if (!options.commit && styleItemPopoverSnapshot) {
         restoreStyleFormSnapshot(styleItemPopoverSnapshot);
         syncStyleDraftFromDomAndEmit();
+    } else if (options.commit) {
+        // Ensure the latest popover values are reflected on preview/export before closing.
+        syncStyleDraftFromDomAndEmit();
     }
     styleItemPopoverOpen = false;
     styleItemPopoverConfig = null;
@@ -875,7 +945,7 @@ export function closeStyleItemPopover(options: { commit: boolean }) {
 }
 
 export function forceCloseStyleColorPopover() {
-    closeStyleItemPopover({ commit: false });
+    closeStyleItemPopover({ commit: true });
 }
 
 export function commitStyleColorPopoverIfOpen() {
@@ -1036,6 +1106,7 @@ export function buildDraftFromPayload(
             : [draftItemFromMarkStyle(savedMark || extractedMark, DEFAULT_STYLE_INJECTION_DRAFT.mark)]
     );
     state.markStylesDraft = resolvedMarkStyles;
+    ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, resolvedMarkStyles.length - 1));
 
     return {
@@ -1510,6 +1581,7 @@ export function syncMarkStylesFromHeaderColors(emit = true) {
         strokeColor: item.strokeColor
     }));
     state.markStylesDraft = ensureMarkDraftSeriesCount(merged);
+    ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, state.markStylesDraft.length - 1));
 
     const nextDraft: StyleInjectionDraft = {
@@ -1598,6 +1670,9 @@ export function bindStyleTabEvents() {
         ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
         ui.styleMarkThicknessInput.value = String(active.thickness);
         syncAllHexPreviewsFromDom();
+        if (styleItemPopoverOpen && styleItemPopoverTarget === 'mark' && styleItemPopoverConfig) {
+            syncStyleItemPopoverFromConfig(styleItemPopoverConfig);
+        }
         syncStyleDraftFromDomAndEmit();
     });
 
@@ -1619,6 +1694,16 @@ export function bindStyleTabEvents() {
     ui.styleItemStyleSelect.addEventListener('change', () => {
         styleItemPopoverSelectedStyleId = ui.styleItemStyleSelect.value || null;
         applySelectedPaintStyleColor();
+    });
+    ui.styleItemLinkToggle.addEventListener('change', () => {
+        if (!styleItemPopoverOpen || styleItemPopoverTarget !== 'mark') return;
+        setActiveMarkStrokeLinked(ui.styleItemLinkToggle.checked);
+        syncMarkLinkUiState();
+        if (ui.styleItemLinkToggle.checked) {
+            const linkedStroke = normalizeHexColorInput(ui.styleItemPrimaryColorInput.value) || DEFAULT_STYLE_INJECTION_DRAFT.mark.fillColor;
+            ui.styleItemSecondaryColorInput.value = linkedStroke;
+            applyStylePopoverHexInputValue(ui.styleItemSecondaryColorInput);
+        }
     });
     ui.styleItemPrimaryColorInput.addEventListener('focus', () => {
         styleItemPopoverActiveColorField = 'primary';
@@ -1668,6 +1753,9 @@ export function bindStyleTabEvents() {
     ui.styleItemSaveBtn.addEventListener('click', () => {
         commitStyleColorPopoverIfOpen();
     });
+    ui.styleItemCloseBtn.addEventListener('click', () => {
+        closeStyleItemPopover({ commit: true });
+    });
 
     document.addEventListener('click', (e) => {
         if (!styleItemPopoverOpen) return;
@@ -1684,11 +1772,11 @@ export function bindStyleTabEvents() {
             ui.styleAssistLineColorInput
         ];
         if (colorInputs.some((input) => input === target || input.contains(target))) return;
-        closeStyleItemPopover({ commit: false });
+        closeStyleItemPopover({ commit: true });
     });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && styleItemPopoverOpen) {
-            closeStyleItemPopover({ commit: false });
+            closeStyleItemPopover({ commit: true });
         }
     });
     window.addEventListener('resize', () => {

@@ -150,6 +150,7 @@ export const state = {
         thickness: 1,
         strokeStyle: 'solid'
     }] as MarkStyleInjectionDraftItem[],
+    markStrokeLinkByIndex: [false] as boolean[],
     activeMarkStyleIndex: 0,
     styleTemplateMode: 'read' as 'read' | 'edit',
     styleTemplates: [] as StyleTemplateItem[],

@@ -311,7 +311,7 @@ export function setStyleTabRenderer(renderer: () => void) {
 }
 
 export function switchTab(tab: 'data' | 'style' | 'export') {
-    closeStyleItemPopover({ commit: false });
+    closeStyleItemPopover({ commit: true });
     const tabDataBtn = document.getElementById('tab-data')!;
     const tabStyleBtn = document.getElementById('tab-style')!;
     const tabExportBtn = document.getElementById('tab-export')!;

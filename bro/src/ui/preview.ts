@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols, getRowColor, getGridColsForChart } from './state';
+import { state, getTotalStackedCols, getRowColor, getGridColsForChart, normalizeHexColorInput } from './state';
 import { ui } from './dom';
 import type { StrokeStyleSnapshot } from '../shared/style-types';
 import { getEffectiveYDomain } from './y-range';
@@ -35,7 +35,7 @@ const PREVIEW_OPTS = {
 const GRID_MARK_HOVER_CLASS = 'grid-cell-mark-hover';
 const MARK_DIM_OPACITY = 0.2;
 const MARK_HOVER_OPACITY = 1;
-const STYLE_DIM_OPACITY = 0.15;
+const STYLE_DIM_OPACITY = 0.5;
 
 type HighlightState = { type: string; index: number; row?: number; col?: number };
 let highlightState: HighlightState | null = null;
@@ -232,6 +232,28 @@ function getBarPreviewColor(rowIndex: number, colIndex: number): string {
         return state.colHeaderColors[colIndex] || getRowColor(0);
     }
     return getSeriesColor(rowIndex, 'bar');
+}
+
+function getMarkDraftStyle(seriesIndex: number) {
+    const styles = Array.isArray(state.markStylesDraft) ? state.markStylesDraft : [];
+    const fallback = state.styleInjectionDraft.mark;
+    const idx = Math.max(0, Math.min(seriesIndex, Math.max(0, styles.length - 1)));
+    const source = styles[idx] || fallback;
+    return {
+        fillColor: normalizeHexColorInput(source.fillColor) || normalizeHexColorInput(fallback.fillColor) || '#3B82F6',
+        strokeColor: normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || '#3B82F6',
+        thickness: Number.isFinite(Number(source.thickness)) ? Math.max(0, Number(source.thickness)) : Math.max(0, Number(fallback.thickness) || 1),
+        strokeStyle: source.strokeStyle === 'dash' ? 'dash' : 'solid'
+    };
+}
+
+function getMarkDraftStroke(seriesIndex: number): StrokeStyleSnapshot {
+    const mark = getMarkDraftStyle(seriesIndex);
+    return {
+        color: mark.strokeColor,
+        weight: mark.thickness,
+        dashPattern: mark.strokeStyle === 'dash' ? [4, 2] : []
+    };
 }
 
 function buildYTickValues(yMin: number, yMax: number, cellCount: number): number[] {
@@ -618,7 +640,7 @@ function renderBarPreview(
                 .attr('y', yScale(val))
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
-                .attr('fill', getBarPreviewColor(r, c))
+                .attr('fill', mode === 'style' ? getMarkDraftStyle(r).fillColor : getBarPreviewColor(r, c))
                 .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('rx', 2);
@@ -637,10 +659,14 @@ function renderBarPreview(
                 markStyleTargetSeries(rect, r, mode);
             }
 
-            const resolvedColor = getBarPreviewColor(r, c);
-            const rowStroke = getRowStroke(r) || state.colStrokeStyle;
-            const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedColor } : { color: resolvedColor, weight: 1 };
-            applyStroke(rect, syncedStroke, resolvedColor, 1);
+            const resolvedColor = mode === 'style' ? getMarkDraftStyle(r).fillColor : getBarPreviewColor(r, c);
+            if (mode === 'style') {
+                applyStroke(rect, getMarkDraftStroke(r), resolvedColor, 1);
+            } else {
+                const rowStroke = getRowStroke(r) || state.colStrokeStyle;
+                const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedColor } : { color: resolvedColor, weight: 1 };
+                applyStroke(rect, syncedStroke, resolvedColor, 1);
+            }
         }
     }
 }
@@ -684,14 +710,17 @@ function renderLinePreview(
             .x((_: any, i: number) => xScale(i)!)
             .y((d: number) => yScale(d));
 
-        const rowStroke = getRowStroke(r) || state.colStrokeStyle;
-        const baseColor = getSeriesColor(r, 'line');
+        const styleMark = getMarkDraftStyle(r);
+        const rowStroke = mode === 'style' ? getMarkDraftStroke(r) : (getRowStroke(r) || state.colStrokeStyle);
+        const baseColor = mode === 'style' ? styleMark.fillColor : getSeriesColor(r, 'line');
+        const pathStrokeColor = mode === 'style' ? styleMark.strokeColor : baseColor;
+        const pathStrokeWidth = mode === 'style' ? Math.max(1, styleMark.thickness) : activePathStroke;
         const path = g.append('path')
             .attr('class', 'preview-mark')
             .datum(lineData)
             .attr('fill', 'none')
-            .attr('stroke', baseColor)
-            .attr('stroke-width', activePathStroke)
+            .attr('stroke', pathStrokeColor)
+            .attr('stroke-width', pathStrokeWidth)
             .attr('d', line)
             .attr('opacity', pathOpacity)
             .attr('data-base-opacity', pathOpacity);
@@ -725,7 +754,7 @@ function renderLinePreview(
                     ? (isCellHighlighted ? 1 : 0.2)
                     : (relatedRow || isColHighlighted ? 1 : 0.2))
                 : 1;
-            const dot = g.append('circle')
+                const dot = g.append('circle')
                 .attr('class', 'preview-mark')
                 .attr('cx', xScale(i)!)
                 .attr('cy', yScale(val))
@@ -808,7 +837,7 @@ function renderStackedPreview(
                     .attr('y', yOffset - barH)
                     .attr('width', clusterLayout.subBarW)
                     .attr('height', barH)
-                    .attr('fill', getSeriesColor(r - startRow, 'stackedBar'))
+                    .attr('fill', mode === 'style' ? getMarkDraftStyle(Math.max(0, r - startRow)).fillColor : getSeriesColor(r - startRow, 'stackedBar'))
                     .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
                     .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
                     .attr('rx', 1);
@@ -827,7 +856,12 @@ function renderStackedPreview(
                     markStyleTargetSeries(rect, Math.max(0, r - startRow), mode);
                 }
 
-                applyStroke(rect, getRowStroke(r) || state.colStrokeStyle, 'none', 0);
+                applyStroke(
+                    rect,
+                    mode === 'style' ? getMarkDraftStroke(Math.max(0, r - startRow)) : (getRowStroke(r) || state.colStrokeStyle),
+                    'none',
+                    0
+                );
                 yOffset -= barH;
             }
             flatIdx++;
