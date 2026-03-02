@@ -392,10 +392,49 @@ function applyCellTopStroke(columns: ColRef[], style: NormalizedSideStyle): Scop
     return result;
 }
 
-function applyCellFill(columns: ColRef[], style: { color?: string }): ScopeResult {
+function applyCellFill(columns: ColRef[], style: { color?: string }, chartType?: string): ScopeResult {
     const result = createScopeResult();
     if (!style.color) return result;
+
+    const isLineChart = chartType === 'line';
+
+    const setFillVisibility = (node: SceneNode, visible: boolean) => {
+        if (!('fills' in node)) return false;
+        try {
+            const target = node as SceneNode & GeometryMixin;
+            if (!Array.isArray(target.fills)) return false;
+            target.fills = target.fills.map((paint) => ({ ...paint, visible }));
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
     columns.forEach((col) => {
+        if (isLineChart) {
+            result.candidates += 1;
+            let tabNode: SceneNode | null = null;
+            if ('children' in col.node) {
+                tabNode = (col.node as SceneNode & ChildrenMixin).children.find((child) => child.name === 'tab') || null;
+            }
+            if (tabNode) {
+                try {
+                    if (tryApplyFill(tabNode, style.color!)) result.applied += 1;
+                    else result.skipped += 1;
+                } catch {
+                    result.errors += 1;
+                }
+            } else {
+                result.skipped += 1;
+            }
+
+            // In line charts, background is tab fill. Keep CEL strokes but disable CEL fill visibility.
+            traverse(col.node, (node) => {
+                if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
+                setFillVisibility(node, false);
+            });
+            return;
+        }
         traverse(col.node, (node) => {
             if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
             result.candidates += 1;
@@ -843,7 +882,7 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
     const skipMarkStyleApply = shouldSkipMarkStyleApply(payload, markStyles);
 
     return {
-        cellFill: cellFillStyle ? applyCellFill(columns, cellFillStyle) : createScopeResult(),
+        cellFill: cellFillStyle ? applyCellFill(columns, cellFillStyle, payload.chartType) : createScopeResult(),
         mark: skipMarkStyleApply
             ? createScopeResult()
             : applyMarkStyles(columns, markStyles, {

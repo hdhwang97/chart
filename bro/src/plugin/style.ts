@@ -233,8 +233,18 @@ export function extractCellStrokeStyles(graph: SceneNode, precomputedCols?: ColR
     return cellStyles;
 }
 
-export function extractCellFillStyle(graph: SceneNode, precomputedCols?: ColRef[]): CellFillInjectionStyle | null {
+export function extractCellFillStyle(graph: SceneNode, precomputedCols?: ColRef[], chartType?: string): CellFillInjectionStyle | null {
     const columns = resolveColumns(graph, precomputedCols);
+    if (chartType === 'line') {
+        for (const col of columns) {
+            if (!('children' in col.node)) continue;
+            const tab = (col.node as SceneNode & ChildrenMixin).children.find((node) => node.name === 'tab') || null;
+            if (!tab || !('fills' in tab) || !Array.isArray(tab.fills) || tab.fills.length === 0) continue;
+            const first = tab.fills[0];
+            if (first.type !== 'SOLID') continue;
+            return { color: rgbToHex(first.color.r, first.color.g, first.color.b) };
+        }
+    }
     for (const col of columns) {
         let fillColor: string | null = null;
         traverse(col.node, (node) => {
@@ -620,7 +630,7 @@ export function extractStyleFromNode(node: SceneNode, chartType: string, options
     }
 
     const colStrokeStyle = extractColStrokeStyle(node, cols);
-    const cellFillStyle = extractCellFillStyle(node, cols);
+    const cellFillStyle = extractCellFillStyle(node, cols, chartType);
     const markStyles = extractMarkStyles(node, cols);
     const markStyle = markStyles[0] || null;
     const chartContainerStrokeStyle = extractChartContainerStrokeStyle(node);
