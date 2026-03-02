@@ -102,6 +102,7 @@ export const state = {
     conversionMax: 100,
     strokeWidth: 2,
     markRatio: 0.8,
+    // Compatibility alias: derived from markStylesDraft for runtime sync/output.
     rowColors: DEFAULT_ROW_COLORS.slice(0, 3),
     rowColorModes: ['hex', 'hex', 'hex'] as ColorMode[],
     rowPaintStyleIds: [null, null, null] as Array<string | null>,
@@ -381,4 +382,100 @@ export function applyIncomingRowColors(
 
 export function getRowColor(index: number): string {
     return normalizeHexColorInput(state.rowColors[index]) || getDefaultRowColor(index);
+}
+
+export function getSeriesCountForChart(chartType: string, rowCount: number) {
+    if (chartType === 'stackedBar' || chartType === 'stacked') {
+        return Math.max(1, rowCount - 1);
+    }
+    return Math.max(1, rowCount);
+}
+
+export function getSeriesIndexForRow(chartType: string, rowIndex: number): number {
+    if (chartType === 'stackedBar' || chartType === 'stacked') {
+        return Math.max(0, rowIndex - 1);
+    }
+    return Math.max(0, rowIndex);
+}
+
+function resolveSeriesRowIndex(chartType: string, seriesIndex: number) {
+    if (chartType === 'stackedBar' || chartType === 'stacked') {
+        return Math.max(0, seriesIndex + 1);
+    }
+    return Math.max(0, seriesIndex);
+}
+
+function normalizeMarkStyleItem(
+    input: Partial<MarkStyleInjectionDraftItem> | null | undefined,
+    fallbackColor: string
+): MarkStyleInjectionDraftItem {
+    const fillColor = normalizeHexColorInput(input?.fillColor) || fallbackColor;
+    const strokeColor = normalizeHexColorInput(input?.strokeColor) || fillColor;
+    const rawThickness = Number(input?.thickness);
+    const thickness = Number.isFinite(rawThickness) ? Math.max(0, Math.round(rawThickness)) : 1;
+    const strokeStyle = input?.strokeStyle === 'dash' ? 'dash' : 'solid';
+    return { fillColor, strokeColor, thickness, strokeStyle };
+}
+
+export function deriveRowColorsFromMarkStyles(
+    chartType: string,
+    markStyles: Array<Partial<MarkStyleInjectionDraftItem> | null | undefined>,
+    rowCount: number,
+    fallback?: unknown
+) {
+    const fallbackSource = Array.isArray(fallback) ? fallback : state.rowColors;
+    const next: string[] = [];
+
+    for (let r = 0; r < rowCount; r++) {
+        if ((chartType === 'stackedBar' || chartType === 'stacked') && r === 0) {
+            next.push(
+                normalizeHexColorInput(fallbackSource[0])
+                || normalizeHexColorInput(state.rowColors[0])
+                || getDefaultRowColor(0)
+            );
+            continue;
+        }
+        const seriesIndex = getSeriesIndexForRow(chartType, r);
+        const style = markStyles[seriesIndex];
+        const role = chartType === 'line' ? style?.strokeColor : style?.fillColor;
+        const resolved = normalizeHexColorInput(role)
+            || normalizeHexColorInput(fallbackSource[r])
+            || normalizeHexColorInput(state.rowColors[r])
+            || getDefaultRowColor(r);
+        next.push(resolved);
+    }
+    return next;
+}
+
+export function seedMarkStylesFromRowColorsIfNeeded(
+    chartType: string,
+    rowCount: number,
+    existing: Array<Partial<MarkStyleInjectionDraftItem> | null | undefined>,
+    rowColorsSource?: unknown
+) {
+    if (Array.isArray(existing) && existing.length > 0) {
+        return existing.map((item, idx) => {
+            const rowIndex = resolveSeriesRowIndex(chartType, idx);
+            const fallbackColor = getRowColor(rowIndex);
+            return normalizeMarkStyleItem(item, fallbackColor);
+        });
+    }
+
+    const source = Array.isArray(rowColorsSource) ? rowColorsSource : state.rowColors;
+    const seriesCount = getSeriesCountForChart(chartType, rowCount);
+    const next: MarkStyleInjectionDraftItem[] = [];
+
+    for (let i = 0; i < seriesCount; i++) {
+        const rowIndex = resolveSeriesRowIndex(chartType, i);
+        const baseColor = normalizeHexColorInput(source[rowIndex])
+            || normalizeHexColorInput(state.rowColors[rowIndex])
+            || getDefaultRowColor(rowIndex);
+        next.push({
+            fillColor: baseColor,
+            strokeColor: baseColor,
+            thickness: 1,
+            strokeStyle: 'solid'
+        });
+    }
+    return next;
 }

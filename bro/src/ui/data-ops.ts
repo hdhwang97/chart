@@ -3,6 +3,7 @@ import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
 import { checkCtaValidation } from './mode';
+import { syncMarkStylesFromHeaderColors } from './style-tab';
 
 // ==========================================
 // DATA OPERATIONS
@@ -143,6 +144,7 @@ export function addRow() {
     ensureRowPaintStyleIdsLength(state.rows);
     ensureRowHeaderLabelsLength(state.rows, state.chartType);
     syncMarkCountFromRows();
+    syncMarkStylesFromHeaderColors(false);
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -197,6 +199,7 @@ export function deleteRow(rowIdx: number) {
     ensureRowPaintStyleIdsLength(state.rows);
     ensureRowHeaderLabelsLength(state.rows, state.chartType);
     syncMarkCountFromRows();
+    syncMarkStylesFromHeaderColors(false);
     renderGrid();
     renderPreview();
     checkCtaValidation();
@@ -372,6 +375,7 @@ export function updateGridSize(newCols: number, newRows: number) {
         state.chartType
     );
     syncMarkCountFromRows();
+    syncMarkStylesFromHeaderColors(false);
     renderGrid();
     checkCtaValidation();
 }

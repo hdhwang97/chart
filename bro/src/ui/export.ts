@@ -93,6 +93,27 @@ function getSeriesColor(rowColors: string[], rowIndex: number, chartType: string
     return rowColors[rowIndex] || getRowColor(rowIndex);
 }
 
+function getMarkDraftStyleFromState(seriesIndex: number) {
+    const styles = Array.isArray(state.markStylesDraft) ? state.markStylesDraft : [];
+    const idx = Math.max(0, Math.floor(seriesIndex));
+    const fallback = state.styleInjectionDraft.mark;
+    const source = styles[idx] || fallback;
+    const fill = normalizeHexColorInput(source.fillColor) || normalizeHexColorInput(fallback.fillColor) || '#3B82F6';
+    const stroke = normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || fill;
+    const thickness = Number.isFinite(Number(source.thickness))
+        ? Math.max(0, Number(source.thickness))
+        : Math.max(0, Number(fallback.thickness) || 1);
+    const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : 'solid';
+    return { fillColor: fill, strokeColor: stroke, thickness, strokeStyle };
+}
+
+function resolveSeriesStyleColor(rowColors: string[], rowIndex: number, chartType: string, role: 'fill' | 'stroke') {
+    const draft = getMarkDraftStyleFromState(rowIndex);
+    const fromDraft = role === 'stroke' ? draft.strokeColor : draft.fillColor;
+    if (fromDraft) return fromDraft;
+    return getSeriesColor(rowColors, rowIndex, chartType);
+}
+
 function resolveBarColorOverride(style: any, colIndex: number) {
     const styleColColors = Array.isArray(style?.colColors) ? style.colColors : [];
     const stateColColors = Array.isArray(state.colHeaderColors) ? state.colHeaderColors : [];
@@ -110,7 +131,7 @@ function resolveBarColorOverride(style: any, colIndex: number) {
 function getBarSeriesColor(style: any, rowColors: string[], rowIndex: number, colIndex: number) {
     const override = resolveBarColorOverride(style, colIndex);
     if (override.enabled && override.color) return override.color;
-    return getSeriesColor(rowColors, rowIndex, 'bar');
+    return resolveSeriesStyleColor(rowColors, rowIndex, 'bar', 'fill');
 }
 
 function buildXAxisLabels(totalCols: number): string[] {
@@ -233,6 +254,16 @@ function drawGridContainerBorder(g: any, w: number, h: number) {
     }
 }
 
+function drawTabBackgroundLayer(g: any, w: number, h: number) {
+    g.append('rect')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', w)
+        .attr('height', h)
+        .attr('fill', state.styleInjectionDraft.cellFill.color)
+        .attr('fill-opacity', 0.2);
+}
+
 function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
@@ -311,7 +342,7 @@ export function setStyleTabRenderer(renderer: () => void) {
 }
 
 export function switchTab(tab: 'data' | 'style' | 'export') {
-    closeStyleItemPopover({ commit: true });
+    closeStyleItemPopover({ commit: false });
     const tabDataBtn = document.getElementById('tab-data')!;
     const tabStyleBtn = document.getElementById('tab-style')!;
     const tabExportBtn = document.getElementById('tab-export')!;
@@ -435,6 +466,7 @@ function renderD3Preview(style: any) {
         : d3.scaleBand().domain(d3.range(axisCols)).range([0, w]).padding(0);
     const yTickValues = buildYTickValues(yDomain.yMin, yDomain.yMax, yCount);
 
+    drawTabBackgroundLayer(g, w, h);
     renderAxes(g, xAxisScale, yScale, yTickValues, h, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
@@ -476,15 +508,20 @@ function renderD3Preview(style: any) {
                 .x((_: any, i: number) => xScale(i)!)
                 .y((d: number) => yScale(d));
 
-            const rowStroke = getRowStroke(r, rowStrokeStyles) || colStrokeStyle;
-            const baseColor = getSeriesColor(rowColors, r, 'line');
+            const draftStyle = getMarkDraftStyleFromState(r);
+            const baseColor = resolveSeriesStyleColor(rowColors, r, 'line', 'fill');
+            const draftStroke: StrokeStyleSnapshot = {
+                color: resolveSeriesStyleColor(rowColors, r, 'line', 'stroke'),
+                weight: Math.max(1, draftStyle.thickness || strokeWidth),
+                dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
+            };
             const path = g.append('path')
                 .datum(lineData)
                 .attr('fill', 'none')
-                .attr('stroke', baseColor)
-                .attr('stroke-width', strokeWidth)
+                .attr('stroke', draftStroke.color || baseColor)
+                .attr('stroke-width', draftStroke.weight || strokeWidth)
                 .attr('d', line);
-            applyStrokeExtras(path, rowStroke);
+            applyStrokeExtras(path, draftStroke);
 
             lineData.forEach((val: number, i: number) => {
                 const dot = g.append('circle')
@@ -492,8 +529,8 @@ function renderD3Preview(style: any) {
                     .attr('cy', yScale(val))
                     .attr('r', 3)
                     .attr('fill', baseColor);
-                if (typeof rowStroke?.opacity === 'number') {
-                    dot.attr('opacity', rowStroke.opacity);
+                if (typeof draftStroke?.opacity === 'number') {
+                    dot.attr('opacity', draftStroke.opacity);
                 }
             });
         }
@@ -518,9 +555,15 @@ function renderD3Preview(style: any) {
                         .attr('y', yOffset - barH)
                         .attr('width', clusterLayout.subBarW)
                         .attr('height', barH)
-                        .attr('fill', getSeriesColor(rowColors, r - startRow, 'stackedBar'))
+                        .attr('fill', resolveSeriesStyleColor(rowColors, r - startRow, 'stackedBar', 'fill'))
                         .attr('rx', cornerRadius);
-                    applyStroke(rect, getRowStroke(r, rowStrokeStyles) || colStrokeStyle, 'none', 0);
+                    const draftStyle = getMarkDraftStyleFromState(Math.max(0, r - startRow));
+                    const draftStroke: StrokeStyleSnapshot = {
+                        color: resolveSeriesStyleColor(rowColors, r - startRow, 'stackedBar', 'stroke'),
+                        weight: Math.max(0, draftStyle.thickness),
+                        dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
+                    };
+                    applyStroke(rect, draftStroke, 'none', 0);
                     yOffset -= barH;
                 }
                 flatIdx++;

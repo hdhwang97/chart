@@ -73,6 +73,8 @@ export type GridStrokeInjectionStyle = {
 };
 
 export type StrokeInjectionPayload = {
+    // Legacy-compatible alias for mark colors. Runtime source is markStyles/markStyle.
+    rowColors?: string[];
     cellFillStyle?: CellFillInjectionStyle;
     cellTopStyle?: SideStrokeInjectionStyle;
     /** @deprecated legacy alias. Use `cellTopStyle`. */
@@ -85,6 +87,7 @@ export type StrokeInjectionPayload = {
 };
 
 export type LocalStyleOverrides = {
+    // Legacy-compatible alias for mark colors. Runtime source is markStyles/markStyle.
     rowColors?: string[];
     rowColorModes?: ColorMode[];
     rowPaintStyleIds?: Array<string | null>;

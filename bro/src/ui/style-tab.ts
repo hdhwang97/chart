@@ -3,8 +3,13 @@ import {
     type AssistLineStyleInjectionDraftItem,
     DEFAULT_STYLE_INJECTION_DRAFT,
     DEFAULT_STYLE_INJECTION_ITEM,
+    deriveRowColorsFromMarkStyles,
+    ensureRowColorModesLength,
+    ensureRowColorsLength,
+    ensureRowPaintStyleIdsLength,
     type GridStyleInjectionDraftItem,
     type MarkStyleInjectionDraftItem,
+    seedMarkStylesFromRowColorsIfNeeded,
     type StyleInjectionDraft,
     type StyleInjectionDraftItem,
     ensureColHeaderColorEnabledLength,
@@ -50,6 +55,7 @@ type SavedStylePayload = {
     savedAssistLineStyle?: unknown;
     savedMarkStyle?: unknown;
     savedMarkStyles?: unknown;
+    savedRowColors?: unknown;
 };
 
 type ExtractedStylePayload = {
@@ -376,24 +382,13 @@ function getDefaultSeriesCountFromState(): number {
     return Math.max(1, state.rows);
 }
 
-function getHeaderColorForSeries(seriesIndex: number): string {
-    const sourceIndex = state.chartType === 'stackedBar' ? seriesIndex + 1 : seriesIndex;
-    return normalizeHexColorInput(state.rowColors[sourceIndex]) || DEFAULT_STYLE_INJECTION_DRAFT.mark.fillColor;
-}
-
 function buildMarkStylesFromRowHeaders(): MarkStyleInjectionDraftItem[] {
-    const count = getDefaultSeriesCountFromState();
-    const next: MarkStyleInjectionDraftItem[] = [];
-    for (let i = 0; i < count; i++) {
-        const color = getHeaderColorForSeries(i);
-        next.push({
-            fillColor: color,
-            strokeColor: color,
-            thickness: DEFAULT_STYLE_INJECTION_DRAFT.mark.thickness,
-            strokeStyle: DEFAULT_STYLE_INJECTION_DRAFT.mark.strokeStyle
-        });
-    }
-    return next;
+    return seedMarkStylesFromRowColorsIfNeeded(
+        state.chartType,
+        state.rows,
+        [],
+        state.rowColors
+    );
 }
 
 function ensureMarkDraftSeriesCount(source: MarkStyleInjectionDraftItem[]): MarkStyleInjectionDraftItem[] {
@@ -607,8 +602,25 @@ function syncStyleDraftFromDomAndEmit() {
     markStyleInjectionDirty();
     const normalized = validateStyleTabDraft(readStyleTabDraft());
     setStyleInjectionDraft(normalized.draft);
+    syncRowColorsFromMarkStyles({ emitLocalOverride: true });
     syncAllHexPreviewsFromDom();
     emitStyleDraftUpdated();
+}
+
+function syncRowColorsFromMarkStyles(options: { emitLocalOverride: boolean }) {
+    state.rowColors = deriveRowColorsFromMarkStyles(
+        state.chartType,
+        state.markStylesDraft,
+        state.rows,
+        state.rowColors
+    );
+    ensureRowColorsLength(state.rows);
+    ensureRowColorModesLength(state.rows);
+    ensureRowPaintStyleIdsLength(state.rows);
+    if (options.emitLocalOverride && state.isInstanceTarget) {
+        setLocalStyleOverrideField('rowColors', state.rowColors.slice());
+        recomputeEffectiveStyleSnapshot();
+    }
 }
 
 function getStylePopoverConfigForTarget(
@@ -666,7 +678,25 @@ function getStylePopoverConfigForTarget(
             }
         };
     }
+    if (target === 'assist-line') {
+        return {
+            title: 'Assist line',
+            primaryLabel: 'Color (HEX)',
+            primaryInput: ui.styleAssistLineColorInput,
+            strokeStyleInput: ui.styleAssistLineStrokeStyleInput,
+            thicknessInput: ui.styleAssistLineThicknessInput
+        };
+    }
     if (target === 'mark') {
+        if (state.chartType === 'line') {
+            return {
+                title: `Mark ${state.activeMarkStyleIndex + 1}`,
+                primaryLabel: 'Stroke (HEX)',
+                primaryInput: ui.styleMarkStrokeColorInput,
+                strokeStyleInput: ui.styleMarkStrokeStyleInput,
+                thicknessInput: ui.styleMarkThicknessInput
+            };
+        }
         return {
             title: `Mark ${state.activeMarkStyleIndex + 1}`,
             primaryLabel: 'Fill (HEX)',
@@ -703,6 +733,9 @@ function syncMarkLinkUiState() {
     ui.styleItemLinkToggle.checked = linked;
     ui.styleItemLinkHint.classList.toggle('hidden', !linked);
     ui.styleItemSecondaryColorRow.classList.toggle('hidden', linked);
+    if (linked && styleItemPopoverActiveColorField === 'secondary') {
+        styleItemPopoverActiveColorField = 'primary';
+    }
     ui.styleItemSecondaryColorInput.disabled = linked;
     ui.styleItemSecondaryColorInput.classList.toggle('style-item-color-input-readonly', linked || styleItemPopoverMode !== 'hex');
 }
@@ -791,6 +824,27 @@ function applySelectedPaintStyleColor() {
     if (styleItemPopoverConfig.secondaryInput) {
         ui.styleItemSecondaryColorInput.value = color;
         applyStylePopoverHexInputValue(ui.styleItemSecondaryColorInput);
+    }
+}
+
+function applyQuickSwatchColor(hex: string) {
+    if (!styleItemPopoverOpen) return;
+    const normalized = normalizeHexColorInput(hex);
+    if (!normalized) return;
+    if (styleItemPopoverMode !== 'hex') {
+        styleItemPopoverMode = 'hex';
+        refreshStyleItemModeUi();
+    }
+    const canUseSecondary = styleItemPopoverActiveColorField === 'secondary'
+        && !ui.styleItemSecondaryColorRow.classList.contains('hidden')
+        && !ui.styleItemSecondaryColorInput.disabled;
+    const target = canUseSecondary ? ui.styleItemSecondaryColorInput : ui.styleItemPrimaryColorInput;
+    target.value = normalized;
+    applyStylePopoverHexInputValue(target);
+    if (styleColorPicker) {
+        isSyncingStyleColorPicker = true;
+        styleColorPicker.color.hexString = normalized;
+        isSyncingStyleColorPicker = false;
     }
 }
 
@@ -888,7 +942,7 @@ function openStyleItemPopoverInternal(
     if (!config) return false;
 
     if (styleItemPopoverOpen) {
-        closeStyleItemPopover({ commit: true });
+        closeStyleItemPopover({ commit: false });
     }
 
     styleItemPopoverTarget = target;
@@ -945,7 +999,7 @@ export function closeStyleItemPopover(options: { commit: boolean }) {
 }
 
 export function forceCloseStyleColorPopover() {
-    closeStyleItemPopover({ commit: true });
+    closeStyleItemPopover({ commit: false });
 }
 
 export function commitStyleColorPopoverIfOpen() {
@@ -1037,6 +1091,7 @@ function toSavedStylePayload(payload: StyleTemplatePayload): SavedStylePayload {
         savedCellFillStyle: payload.cellFillStyle,
         savedMarkStyle: payload.markStyle,
         savedMarkStyles: payload.markStyles,
+        savedRowColors: payload.rowColors,
         savedCellTopStyle: payload.cellTopStyle,
         savedTabRightStyle: payload.tabRightStyle,
         savedGridContainerStyle: payload.gridContainerStyle,
@@ -1097,15 +1152,31 @@ export function buildDraftFromPayload(
         thickness: item.thickness,
         strokeStyle: item.strokeStyle
     }));
+    const savedRowColors = Array.isArray(saved.savedRowColors)
+        ? saved.savedRowColors.map((color) => normalizeHexColorInput(color)).filter((color): color is string => Boolean(color))
+        : [];
+    const seededFromSavedRowColors = seedMarkStylesFromRowColorsIfNeeded(
+        state.chartType,
+        state.rows,
+        [],
+        savedRowColors.length > 0 ? savedRowColors : state.rowColors
+    );
     const resolvedMarkStylesRaw = savedMarks.length > 0
         ? savedMarks
-        : (extractedMarks.length > 0 ? extractedMarks : rowHeaderDerivedMarks);
+        : (extractedMarks.length > 0 ? extractedMarks : (savedRowColors.length > 0 ? seededFromSavedRowColors : rowHeaderDerivedMarks));
     const resolvedMarkStyles = ensureMarkDraftSeriesCount(
         resolvedMarkStylesRaw.length > 0
             ? resolvedMarkStylesRaw.map((item) => draftItemFromMarkStyle(item, DEFAULT_STYLE_INJECTION_DRAFT.mark))
             : [draftItemFromMarkStyle(savedMark || extractedMark, DEFAULT_STYLE_INJECTION_DRAFT.mark)]
     );
     state.markStylesDraft = resolvedMarkStyles;
+    state.rowColors = deriveRowColorsFromMarkStyles(
+        state.chartType,
+        state.markStylesDraft,
+        state.rows,
+        savedRowColors.length > 0 ? savedRowColors : state.rowColors
+    );
+    ensureRowColorsLength(state.rows);
     ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, resolvedMarkStyles.length - 1));
 
@@ -1203,6 +1274,9 @@ export function readStyleTabDraft(): StyleInjectionDraft {
             strokeStyle: markNormalized.strokeStyle === 'dash' ? 'dash' : 'solid'
         }
         : { ...state.styleInjectionDraft.mark };
+    if (state.chartType === 'line') {
+        mark.fillColor = mark.strokeColor;
+    }
 
     const styles = ensureMarkDraftSeriesCount(state.markStylesDraft);
     const idx = Math.max(0, Math.min(state.activeMarkStyleIndex, styles.length - 1));
@@ -1227,7 +1301,10 @@ export function readStyleTabDraft(): StyleInjectionDraft {
 
 export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: StyleInjectionDraft; isValid: boolean } {
     const cellFillValid = Boolean(normalizeHexColorInput(ui.styleCellFillColorInput.value));
-    const markFillValid = Boolean(normalizeHexColorInput(ui.styleMarkFillColorInput.value));
+    const lineStrokeOnly = state.chartType === 'line';
+    const markFillValid = lineStrokeOnly
+        ? Boolean(normalizeHexColorInput(ui.styleMarkStrokeColorInput.value))
+        : Boolean(normalizeHexColorInput(ui.styleMarkFillColorInput.value));
     const markStrokeValid = Boolean(normalizeHexColorInput(ui.styleMarkStrokeColorInput.value));
     const markThicknessRaw = Number(ui.styleMarkThicknessInput.value);
     const markThicknessValid = Number.isFinite(markThicknessRaw) && Number.isInteger(markThicknessRaw) && markThicknessRaw >= THICKNESS_MIN && markThicknessRaw <= THICKNESS_MAX;
@@ -1269,7 +1346,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     );
 
     setInputError(ui.styleCellFillColorInput, !cellFillValid);
-    setInputError(ui.styleMarkFillColorInput, !markFillValid);
+    setInputError(ui.styleMarkFillColorInput, !markFillValid && !lineStrokeOnly);
     setInputError(ui.styleMarkStrokeColorInput, !markStrokeValid);
     setInputError(ui.styleMarkThicknessInput, !markThicknessValid);
     setInputError(ui.styleCellTopColorInput, !cellTopNorm.colorValid);
@@ -1298,7 +1375,9 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
         draft: {
             cellFill: { color: normalizeHexColorInput(ui.styleCellFillColorInput.value) || draft.cellFill.color },
             mark: {
-                fillColor: normalizeHexColorInput(ui.styleMarkFillColorInput.value) || draft.mark.fillColor,
+                fillColor: lineStrokeOnly
+                    ? (normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor)
+                    : (normalizeHexColorInput(ui.styleMarkFillColorInput.value) || draft.mark.fillColor),
                 strokeColor: normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor,
                 thickness: markThicknessValid ? markThicknessRaw : clampThickness(markThicknessRaw, draft.mark.thickness),
                 strokeStyle: ui.styleMarkStrokeStyleInput.value === 'dash' ? 'dash' : 'solid'
@@ -1334,6 +1413,12 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
             thickness: item.thickness,
             strokeStyle: item.strokeStyle
         })),
+        rowColors: deriveRowColorsFromMarkStyles(
+            state.chartType,
+            state.markStylesDraft,
+            state.rows,
+            state.rowColors
+        ),
         cellTopStyle: {
             color: draft.cellTop.color,
             thickness: draft.cellTop.thickness,
@@ -1379,6 +1464,12 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
 } {
     return {
         overrides: {
+            rowColors: deriveRowColorsFromMarkStyles(
+                state.chartType,
+                state.markStylesDraft,
+                state.rows,
+                state.rowColors
+            ),
             cellFillStyle: {
                 color: draft.cellFill.color
             },
@@ -1428,6 +1519,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             colStrokeStyle: state.colStrokeStyle || undefined
         },
         mask: {
+            rowColors: true,
             cellFillStyle: true,
             cellTopStyle: true,
             tabRightStyle: true,
@@ -1464,6 +1556,7 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
     }
     if (state.isInstanceTarget) {
         const draftOverrides = buildLocalStyleOverridesFromDraft(nextDraft);
+        setLocalStyleOverrideField('rowColors', draftOverrides.overrides.rowColors);
         setLocalStyleOverrideField('cellFillStyle', draftOverrides.overrides.cellFillStyle);
         setLocalStyleOverrideField('cellTopStyle', draftOverrides.overrides.cellTopStyle);
         setLocalStyleOverrideField('tabRightStyle', draftOverrides.overrides.tabRightStyle);
@@ -1573,14 +1666,13 @@ export function setStyleInjectionDraft(draft: StyleInjectionDraft) {
 }
 
 export function syncMarkStylesFromHeaderColors(emit = true) {
-    const headerDerived = buildMarkStylesFromRowHeaders();
     const previous = ensureMarkDraftSeriesCount(state.markStylesDraft);
-    const merged = headerDerived.map((item, idx) => ({
-        ...(previous[idx] || DEFAULT_STYLE_INJECTION_DRAFT.mark),
-        fillColor: item.fillColor,
-        strokeColor: item.strokeColor
-    }));
-    state.markStylesDraft = ensureMarkDraftSeriesCount(merged);
+    if (previous.length === 0) {
+        state.markStylesDraft = ensureMarkDraftSeriesCount(buildMarkStylesFromRowHeaders());
+    } else {
+        state.markStylesDraft = ensureMarkDraftSeriesCount(previous);
+    }
+    syncRowColorsFromMarkStyles({ emitLocalOverride: emit });
     ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, state.markStylesDraft.length - 1));
 
@@ -1695,6 +1787,9 @@ export function bindStyleTabEvents() {
         styleItemPopoverSelectedStyleId = ui.styleItemStyleSelect.value || null;
         applySelectedPaintStyleColor();
     });
+    ui.styleItemSwatchBlack.addEventListener('click', () => applyQuickSwatchColor('#000000'));
+    ui.styleItemSwatchGray.addEventListener('click', () => applyQuickSwatchColor('#808080'));
+    ui.styleItemSwatchWhite.addEventListener('click', () => applyQuickSwatchColor('#FFFFFF'));
     ui.styleItemLinkToggle.addEventListener('change', () => {
         if (!styleItemPopoverOpen || styleItemPopoverTarget !== 'mark') return;
         setActiveMarkStrokeLinked(ui.styleItemLinkToggle.checked);
@@ -1754,7 +1849,7 @@ export function bindStyleTabEvents() {
         commitStyleColorPopoverIfOpen();
     });
     ui.styleItemCloseBtn.addEventListener('click', () => {
-        closeStyleItemPopover({ commit: true });
+        closeStyleItemPopover({ commit: false });
     });
 
     document.addEventListener('click', (e) => {
@@ -1772,11 +1867,11 @@ export function bindStyleTabEvents() {
             ui.styleAssistLineColorInput
         ];
         if (colorInputs.some((input) => input === target || input.contains(target))) return;
-        closeStyleItemPopover({ commit: true });
+        closeStyleItemPopover({ commit: false });
     });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && styleItemPopoverOpen) {
-            closeStyleItemPopover({ commit: true });
+            closeStyleItemPopover({ commit: false });
         }
     });
     window.addEventListener('resize', () => {

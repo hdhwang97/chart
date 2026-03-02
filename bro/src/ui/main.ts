@@ -16,6 +16,7 @@ import {
     ensureColHeaderColorEnabledLength,
     ensureColHeaderTitlesLength,
     getDefaultRowColor,
+    getSeriesIndexForRow,
     getRowColor,
     normalizeHexColorInput,
     recomputeEffectiveStyleSnapshot,
@@ -1236,11 +1237,17 @@ function bindUiEvents() {
     document.addEventListener('row-color-swatch-click', ((event: Event) => {
         const custom = event as CustomEvent<{ row: number; anchorRect: { left: number; top: number; right: number; bottom: number } }>;
         if (!custom.detail || typeof custom.detail.row !== 'number') return;
-        openColorPopover({ type: 'row', index: custom.detail.row }, custom.detail.anchorRect);
+        if (state.chartType === 'stackedBar' && custom.detail.row === 0) return;
+        if (rowColorPopoverOpen) closeRowColorPopover();
+        if (assistLinePopoverOpen) closeAssistLinePopover();
+        if (styleAssistLinePopoverOpen) closeStyleAssistLinePopover();
+        const seriesIndex = getSeriesIndexForRow(state.chartType, custom.detail.row);
+        openStyleItemPopoverWithMeta('mark', custom.detail.anchorRect, { seriesIndex });
     }) as EventListener);
     document.addEventListener('col-color-swatch-click', ((event: Event) => {
         const custom = event as CustomEvent<{ col: number; anchorRect: { left: number; top: number; right: number; bottom: number } }>;
         if (!custom.detail || typeof custom.detail.col !== 'number') return;
+        if (state.chartType !== 'bar') return;
         openColorPopover({ type: 'col', index: custom.detail.col }, custom.detail.anchorRect);
     }) as EventListener);
     const switchColorMode = (mode: ColorMode) => {
@@ -1423,6 +1430,7 @@ function bindUiEvents() {
         if (state.isInstanceTarget) {
             const draft = readStyleTabDraft();
             const fromDraft = buildLocalStyleOverridesFromDraft(draft);
+            if (fromDraft.mask.rowColors) setLocalStyleOverrideField('rowColors', fromDraft.overrides.rowColors);
             if (fromDraft.mask.cellFillStyle) setLocalStyleOverrideField('cellFillStyle', fromDraft.overrides.cellFillStyle);
             if (fromDraft.mask.cellTopStyle) setLocalStyleOverrideField('cellTopStyle', fromDraft.overrides.cellTopStyle);
             if (fromDraft.mask.tabRightStyle) setLocalStyleOverrideField('tabRightStyle', fromDraft.overrides.tabRightStyle);
