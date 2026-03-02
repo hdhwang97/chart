@@ -254,10 +254,9 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
         .tickFormat((d: number) => String(Math.round(Number(d))))
         .tickPadding(6);
 
-    g.append('g')
-        .call(yAxis)
-        .selectAll('text')
-        .attr('font-size', 9);
+    const yAxisGroup = g.append('g').call(yAxis);
+    yAxisGroup.selectAll('.tick line').remove();
+    yAxisGroup.selectAll('text').attr('font-size', 9);
 
     const xAxis = d3.axisBottom(xScale)
         .tickSizeOuter(0)
@@ -266,11 +265,11 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
         xAxis.tickValues(xTickValues);
     }
 
-    g.append('g')
+    const xAxisGroup = g.append('g')
         .attr('transform', `translate(0,${h})`)
-        .call(xAxis)
-        .selectAll('text')
-        .attr('font-size', 9);
+        .call(xAxis);
+    xAxisGroup.selectAll('.tick line').remove();
+    xAxisGroup.selectAll('text').attr('font-size', 9);
 }
 
 function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: number, colStroke: StrokeStyleSnapshot | null, rowStrokes: RowStrokeStyle[], xGuidePositions?: number[]) {
@@ -302,9 +301,9 @@ function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: 
         }
     }
 
-    if (yCellCount > 0) {
+    if (yCellCount > 1) {
         const step = h / yCellCount;
-        for (let r = 0; r <= yCellCount; r++) {
+        for (let r = 1; r < yCellCount; r++) {
             const stroke = cellTopStroke || getRowStroke(r, rowStrokes);
             const line = g.append('line')
                 .attr('x1', 0)
@@ -391,7 +390,8 @@ function renderD3Preview(style: any) {
 
     const svg = d3.select(container).append('svg')
         .attr('width', width)
-        .attr('height', height);
+        .attr('height', height)
+        .style('font-family', 'Inter, sans-serif');
 
     const margin = { top: 12, right: 14, bottom: 30, left: 44 };
     const w = width - margin.left - margin.right;

@@ -454,10 +454,9 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
         .tickFormat((d: number) => String(Math.round(Number(d))))
         .tickPadding(6);
 
-    g.append('g')
-        .call(yAxis)
-        .selectAll('text')
-        .attr('font-size', 9);
+    const yAxisGroup = g.append('g').call(yAxis);
+    yAxisGroup.selectAll('.tick line').remove();
+    yAxisGroup.selectAll('text').attr('font-size', 9);
 
     const xAxis = d3.axisBottom(xScale)
         .tickSizeOuter(0)
@@ -466,11 +465,11 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
         xAxis.tickValues(xTickValues);
     }
 
-    g.append('g')
+    const xAxisGroup = g.append('g')
         .attr('transform', `translate(0,${h})`)
-        .call(xAxis)
-        .selectAll('text')
-        .attr('font-size', 9);
+        .call(xAxis);
+    xAxisGroup.selectAll('.tick line').remove();
+    xAxisGroup.selectAll('text').attr('font-size', 9);
 }
 
 function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount: number, mode: PreviewInteractionMode, xGuidePositions?: number[]) {
@@ -509,9 +508,9 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
         }
     }
 
-    if (yCellCount > 0) {
+    if (yCellCount > 1) {
         const step = h / yCellCount;
-        for (let r = 0; r <= yCellCount; r++) {
+        for (let r = 1; r < yCellCount; r++) {
             const stroke = cellTopStroke || getRowStroke(r);
             const line = g.append('line')
                 .attr('x1', 0)
@@ -698,7 +697,8 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
 
     const svg = d3.select(container).append('svg')
         .attr('width', width)
-        .attr('height', height);
+        .attr('height', height)
+        .style('font-family', 'Inter, sans-serif');
 
     const { margin } = PREVIEW_OPTS;
     const w = width - margin.left - margin.right;
@@ -801,8 +801,8 @@ function renderBarPreview(
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
                 .attr('fill', getBarPreviewColor(r, c))
-                .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
-                .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
+                .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 1)
+                .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 1)
                 .attr('rx', 2);
 
             if (mode === 'data') {
@@ -1028,8 +1028,8 @@ function renderStackedPreview(
                     .attr('fill', mode === 'style'
                         ? getMarkDraftStyle(Math.max(0, r - startRow)).fillColor
                         : resolveSeriesStyleColor(Math.max(0, r - startRow), 'stackedBar', 'fill'))
-                    .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
-                    .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
+                    .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 1)
+                    .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 1)
                     .attr('rx', 1);
 
                 if (mode === 'data') {
