@@ -977,12 +977,19 @@ function setStyleItemPaintStyleOptions() {
         styleItemPopoverSelectedStyleId = null;
         return;
     }
+    const isColumnTarget = styleItemPopoverTarget === 'column';
+    const allowEmptySelection = isColumnTarget;
     select.disabled = false;
-    select.innerHTML = list.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+    const optionsHtml = list.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+    select.innerHTML = allowEmptySelection
+        ? `<option value="">Select Paint Style</option>${optionsHtml}`
+        : optionsHtml;
     const exists = styleItemPopoverSelectedStyleId && list.some((item) => item.id === styleItemPopoverSelectedStyleId);
-    const selected = exists ? styleItemPopoverSelectedStyleId : list[0].id;
+    const selected = exists
+        ? styleItemPopoverSelectedStyleId
+        : (allowEmptySelection ? null : list[0].id);
     styleItemPopoverSelectedStyleId = selected || null;
-    if (selected) select.value = selected;
+    select.value = selected || '';
 }
 
 function applyStylePopoverHexInputValue(input: HTMLInputElement) {
@@ -1315,6 +1322,9 @@ function openStyleItemPopoverInternal(
     styleItemPopoverColumnIndex = null;
     if (target === 'column' && Number.isFinite(colIndex)) {
         const snapshot = getColumnPopoverSnapshot(Number(colIndex));
+        if (snapshot.mode === 'paint_style' && !snapshot.styleId) {
+            snapshot.mode = 'hex';
+        }
         styleItemPopoverColumnIndex = snapshot.colIndex;
         styleItemPopoverMode = snapshot.mode;
         styleItemPopoverSelectedStyleId = snapshot.styleId;

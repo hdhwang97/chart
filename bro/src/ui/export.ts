@@ -476,10 +476,10 @@ function renderD3Preview(style: any) {
                     .attr('height', h - yScale(val))
                     .attr('fill', getBarSeriesColor(r, c))
                     .attr('rx', cornerRadius);
-                const resolvedColor = getBarSeriesColor(r, c);
+                const resolvedStrokeColor = resolveSeriesStyleColor(rowColors, r, 'bar', 'stroke');
                 const rowStroke = getRowStroke(r, rowStrokeStyles) || colStrokeStyle;
-                const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedColor } : { color: resolvedColor, weight: 1 };
-                applyStroke(rect, syncedStroke, resolvedColor, 1);
+                const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedStrokeColor } : { color: resolvedStrokeColor, weight: 1 };
+                applyStroke(rect, syncedStroke, resolvedStrokeColor, 1);
             }
         }
     } else if (chartType === 'line') {

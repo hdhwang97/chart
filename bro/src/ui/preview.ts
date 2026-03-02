@@ -822,14 +822,14 @@ function renderBarPreview(
                 markStyleTargetColumn(rect, c, mode);
             }
 
-            const resolvedColor = getBarPreviewColor(r, c);
+            const resolvedStrokeColor = resolveSeriesStyleColor(r, 'bar', 'stroke');
             if (mode === 'style') {
                 const draftStroke = getMarkDraftStroke(r);
-                applyStroke(rect, { ...draftStroke, color: resolvedColor }, resolvedColor, 1);
+                applyStroke(rect, { ...draftStroke, color: resolvedStrokeColor }, resolvedStrokeColor, 1);
             } else {
                 const rowStroke = getRowStroke(r) || state.colStrokeStyle;
-                const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedColor } : { color: resolvedColor, weight: 1 };
-                applyStroke(rect, syncedStroke, resolvedColor, 1);
+                const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedStrokeColor } : { color: resolvedStrokeColor, weight: 1 };
+                applyStroke(rect, syncedStroke, resolvedStrokeColor, 1);
             }
         }
     }
