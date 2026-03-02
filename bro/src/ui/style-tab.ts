@@ -20,10 +20,12 @@ import {
 import type {
     AssistLineInjectionStyle,
     CellFillInjectionStyle,
+    ColorMode,
     GridStrokeInjectionStyle,
     LocalStyleOverrideMask,
     LocalStyleOverrides,
     MarkInjectionStyle,
+    PaintStyleSelection,
     RowStrokeStyle,
     SideStrokeInjectionStyle,
     StyleTemplateItem,
@@ -31,6 +33,7 @@ import type {
     StrokeInjectionPayload,
     StrokeStyleSnapshot
 } from '../shared/style-types';
+import type { StylePreviewTarget } from './preview';
 
 declare const iro: any;
 
@@ -59,10 +62,43 @@ type ExtractedStylePayload = {
     assistLineStrokeStyle?: unknown;
 };
 
+type StyleItemPopoverTarget = StylePreviewTarget | 'input-color';
+
+type StylePopoverConfig = {
+    title: string;
+    primaryLabel: string;
+    primaryInput: HTMLInputElement;
+    secondaryLabel?: string;
+    secondaryInput?: HTMLInputElement;
+    strokeStyleInput?: HTMLSelectElement;
+    thicknessInput?: HTMLInputElement;
+    visibleInput?: HTMLInputElement;
+    sides?: {
+        top: HTMLInputElement;
+        right: HTMLInputElement;
+        bottom: HTMLInputElement;
+        left: HTMLInputElement;
+    };
+};
+
+type AnchorRectLike = { left: number; top: number; right: number; bottom: number };
+
+type StyleFormSnapshot = {
+    [key: string]: string | boolean;
+};
+
 let styleColorPicker: any = null;
-let styleColorPopoverOpen = false;
-let styleColorTargetInput: HTMLInputElement | null = null;
+let styleItemPopoverOpen = false;
+let styleItemPopoverMode: ColorMode = 'hex';
+let styleItemPopoverConfig: StylePopoverConfig | null = null;
+let styleItemPopoverTarget: StyleItemPopoverTarget | null = null;
+let styleItemPopoverSourceInput: HTMLInputElement | null = null;
+let styleItemPopoverSnapshot: StyleFormSnapshot | null = null;
+let styleItemPopoverSelectedStyleId: string | null = null;
+let styleItemPopoverActiveColorField: 'primary' | 'secondary' = 'primary';
+let styleItemPopoverAnchorRect: AnchorRectLike | null = null;
 let isSyncingStyleColorPicker = false;
+let stylePopoverPaintStyles: PaintStyleSelection[] = [];
 
 function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
@@ -391,12 +427,12 @@ function setInputError(input: HTMLInputElement, invalid: boolean) {
 }
 
 function resolveStyleColorLabel(input: HTMLInputElement): string {
-    if (input === ui.styleCellFillColorInput) return 'Cell Fill';
+    if (input === ui.styleCellFillColorInput) return 'Background';
     if (input === ui.styleMarkFillColorInput) return 'Mark Fill';
     if (input === ui.styleMarkStrokeColorInput) return 'Mark Stroke';
-    if (input === ui.styleCellTopColorInput) return 'Cell Top';
-    if (input === ui.styleTabRightColorInput) return 'Tab Right';
-    if (input === ui.styleGridColorInput) return 'Grid';
+    if (input === ui.styleCellTopColorInput) return 'Y-axis line';
+    if (input === ui.styleTabRightColorInput) return 'X-axis line';
+    if (input === ui.styleGridColorInput) return 'Plot area';
     if (input === ui.styleAssistLineColorInput) return 'Assist Line';
     return 'Style Color';
 }
@@ -448,7 +484,7 @@ export function syncAllHexPreviewsFromDom() {
 
 function initializeStyleColorPicker() {
     if (styleColorPicker || typeof iro === 'undefined') return;
-    styleColorPicker = new iro.ColorPicker(ui.styleColorWheel, {
+    styleColorPicker = new iro.ColorPicker(ui.styleItemColorWheel, {
         width: 220,
         color: '#E5E7EB',
         borderWidth: 1,
@@ -460,16 +496,21 @@ function initializeStyleColorPicker() {
     });
 
     styleColorPicker.on('color:change', (color: any) => {
-        if (!styleColorTargetInput) return;
+        if (!styleItemPopoverOpen) return;
+        if (styleItemPopoverMode !== 'hex') return;
         if (isSyncingStyleColorPicker) return;
         const hex = normalizeHexColorInput(color?.hexString || '') || toHex6FromRgb(color);
         if (!hex) return;
-        applyStyleColorToTarget(hex);
+        const input = styleItemPopoverActiveColorField === 'secondary'
+            ? ui.styleItemSecondaryColorInput
+            : ui.styleItemPrimaryColorInput;
+        input.value = hex;
+        applyStylePopoverHexInputValue(input);
     });
 }
 
-function positionStyleColorPopover(anchorRect: DOMRect) {
-    const pop = ui.styleColorPopover;
+function positionStyleItemPopover(anchorRect: AnchorRectLike) {
+    const pop = ui.styleItemPopover;
     const popW = pop.offsetWidth || 256;
     const popH = pop.offsetHeight || 320;
     let left = anchorRect.left;
@@ -486,69 +527,367 @@ function positionStyleColorPopover(anchorRect: DOMRect) {
     pop.style.top = `${Math.max(STYLE_COLOR_POPOVER_MARGIN, top)}px`;
 }
 
-function updateStyleColorPopoverUi(input: HTMLInputElement, colorHex: string) {
-    const color = normalizeHexColorInput(colorHex) || DEFAULT_STYLE_INJECTION_ITEM.color;
-    ui.styleColorPopoverTitle.textContent = resolveStyleColorLabel(input);
-    ui.styleColorPreview.style.backgroundColor = color;
-    ui.styleColorHexInput.value = color;
-    ui.styleColorHexInput.classList.remove('style-color-hex-error');
+function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSelectElement> {
+    return [
+        ui.styleCellFillColorInput,
+        ui.styleMarkFillColorInput,
+        ui.styleMarkStrokeColorInput,
+        ui.styleMarkStrokeStyleInput,
+        ui.styleMarkThicknessInput,
+        ui.styleCellTopColorInput,
+        ui.styleCellTopStrokeStyleInput,
+        ui.styleCellTopThicknessInput,
+        ui.styleCellTopVisibleInput,
+        ui.styleTabRightColorInput,
+        ui.styleTabRightStrokeStyleInput,
+        ui.styleTabRightThicknessInput,
+        ui.styleTabRightVisibleInput,
+        ui.styleGridColorInput,
+        ui.styleGridStrokeStyleInput,
+        ui.styleGridThicknessInput,
+        ui.styleGridVisibleInput,
+        ui.styleGridSideTopInput,
+        ui.styleGridSideRightInput,
+        ui.styleGridSideBottomInput,
+        ui.styleGridSideLeftInput,
+        ui.styleAssistLineColorInput,
+        ui.styleAssistLineStrokeStyleInput,
+        ui.styleAssistLineThicknessInput
+    ];
+}
+
+function captureStyleFormSnapshot(): StyleFormSnapshot {
+    const next: StyleFormSnapshot = {};
+    getStyleFormInputsForSnapshot().forEach((input) => {
+        if (input instanceof HTMLInputElement && input.type === 'checkbox') {
+            next[input.id] = input.checked;
+            return;
+        }
+        next[input.id] = input.value;
+    });
+    return next;
+}
+
+function restoreStyleFormSnapshot(snapshot: StyleFormSnapshot) {
+    getStyleFormInputsForSnapshot().forEach((input) => {
+        if (!(input.id in snapshot)) return;
+        if (input instanceof HTMLInputElement && input.type === 'checkbox') {
+            input.checked = Boolean(snapshot[input.id]);
+            return;
+        }
+        const value = snapshot[input.id];
+        input.value = typeof value === 'string' ? value : String(value);
+    });
+}
+
+function syncStyleDraftFromDomAndEmit() {
+    markStyleInjectionDirty();
+    const normalized = validateStyleTabDraft(readStyleTabDraft());
+    setStyleInjectionDraft(normalized.draft);
+    syncAllHexPreviewsFromDom();
+    emitStyleDraftUpdated();
+}
+
+function getStylePopoverConfigForTarget(
+    target: StyleItemPopoverTarget,
+    sourceInput?: HTMLInputElement | null
+): StylePopoverConfig | null {
+    if (target === 'input-color') {
+        if (!sourceInput) return null;
+        return {
+            title: resolveStyleColorLabel(sourceInput),
+            primaryLabel: 'Color (HEX)',
+            primaryInput: sourceInput
+        };
+    }
+    if (target === 'cell-fill') {
+        return {
+            title: 'Background',
+            primaryLabel: 'Background (HEX)',
+            primaryInput: ui.styleCellFillColorInput
+        };
+    }
+    if (target === 'cell-top') {
+        return {
+            title: 'Y-axis line',
+            primaryLabel: 'Color (HEX)',
+            primaryInput: ui.styleCellTopColorInput,
+            strokeStyleInput: ui.styleCellTopStrokeStyleInput,
+            thicknessInput: ui.styleCellTopThicknessInput,
+            visibleInput: ui.styleCellTopVisibleInput
+        };
+    }
+    if (target === 'tab-right') {
+        return {
+            title: 'X-axis line',
+            primaryLabel: 'Color (HEX)',
+            primaryInput: ui.styleTabRightColorInput,
+            strokeStyleInput: ui.styleTabRightStrokeStyleInput,
+            thicknessInput: ui.styleTabRightThicknessInput,
+            visibleInput: ui.styleTabRightVisibleInput
+        };
+    }
+    if (target === 'grid') {
+        return {
+            title: 'Plot area',
+            primaryLabel: 'Color (HEX)',
+            primaryInput: ui.styleGridColorInput,
+            strokeStyleInput: ui.styleGridStrokeStyleInput,
+            thicknessInput: ui.styleGridThicknessInput,
+            visibleInput: ui.styleGridVisibleInput,
+            sides: {
+                top: ui.styleGridSideTopInput,
+                right: ui.styleGridSideRightInput,
+                bottom: ui.styleGridSideBottomInput,
+                left: ui.styleGridSideLeftInput
+            }
+        };
+    }
+    if (target === 'mark') {
+        return {
+            title: `Mark ${state.activeMarkStyleIndex + 1}`,
+            primaryLabel: 'Fill (HEX)',
+            primaryInput: ui.styleMarkFillColorInput,
+            secondaryLabel: 'Stroke (HEX)',
+            secondaryInput: ui.styleMarkStrokeColorInput,
+            strokeStyleInput: ui.styleMarkStrokeStyleInput,
+            thicknessInput: ui.styleMarkThicknessInput
+        };
+    }
+    return null;
+}
+
+function updateStyleItemPopoverPreview() {
+    const input = styleItemPopoverActiveColorField === 'secondary'
+        ? ui.styleItemSecondaryColorInput
+        : ui.styleItemPrimaryColorInput;
+    const color = normalizeHexColorInput(input.value) || DEFAULT_STYLE_INJECTION_ITEM.color;
+    ui.styleItemPopoverPreview.style.backgroundColor = color;
+}
+
+function refreshStyleItemModeUi() {
+    const isHex = styleItemPopoverMode === 'hex';
+    ui.styleItemModeTabHex.classList.toggle('is-active', isHex);
+    ui.styleItemModeTabStyle.classList.toggle('is-active', !isHex);
+    ui.styleItemStyleRow.classList.toggle('hidden', isHex);
+
+    [ui.styleItemPrimaryColorInput, ui.styleItemSecondaryColorInput].forEach((input) => {
+        input.readOnly = !isHex;
+        input.classList.toggle('style-item-color-input-readonly', !isHex);
+    });
+}
+
+function setStyleItemPaintStyleOptions() {
+    const select = ui.styleItemStyleSelect;
+    const list = stylePopoverPaintStyles.filter((item) => item.isSolid !== false);
+    if (list.length === 0) {
+        select.innerHTML = '<option value="">No local paint styles</option>';
+        select.disabled = true;
+        styleItemPopoverSelectedStyleId = null;
+        return;
+    }
+    select.disabled = false;
+    select.innerHTML = list.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+    const exists = styleItemPopoverSelectedStyleId && list.some((item) => item.id === styleItemPopoverSelectedStyleId);
+    const selected = exists ? styleItemPopoverSelectedStyleId : list[0].id;
+    styleItemPopoverSelectedStyleId = selected || null;
+    if (selected) select.value = selected;
+}
+
+function applyStylePopoverHexInputValue(input: HTMLInputElement) {
+    const config = styleItemPopoverConfig;
+    if (!config) return;
+    const normalized = normalizeHexColorInput(input.value);
+    if (!normalized) {
+        input.classList.add('style-color-hex-error');
+        return;
+    }
+    input.classList.remove('style-color-hex-error');
+    const targetInput = input === ui.styleItemSecondaryColorInput
+        ? config.secondaryInput
+        : config.primaryInput;
+    if (!targetInput) return;
+
+    targetInput.value = normalized;
+    const swatch = getHexPreviewElement(targetInput);
+    if (swatch) {
+        updateHexPreview(targetInput, swatch, getHexPreviewFallback(targetInput));
+    }
+    syncStyleDraftFromDomAndEmit();
+    updateStyleItemPopoverPreview();
+}
+
+function applySelectedPaintStyleColor() {
+    if (!styleItemPopoverConfig) return;
+    const selectedId = styleItemPopoverSelectedStyleId;
+    if (!selectedId) return;
+    const item = stylePopoverPaintStyles.find((entry) => entry.id === selectedId);
+    if (!item) return;
+    const color = normalizeHexColorInput(item.colorHex);
+    if (!color) return;
+
+    ui.styleItemPrimaryColorInput.value = color;
+    applyStylePopoverHexInputValue(ui.styleItemPrimaryColorInput);
+    if (styleItemPopoverConfig.secondaryInput) {
+        ui.styleItemSecondaryColorInput.value = color;
+        applyStylePopoverHexInputValue(ui.styleItemSecondaryColorInput);
+    }
+}
+
+function syncStyleItemPopoverFromConfig(config: StylePopoverConfig) {
+    const primary = normalizeHexColorInput(config.primaryInput.value) || DEFAULT_STYLE_INJECTION_ITEM.color;
+    ui.styleItemPopoverTitle.textContent = config.title;
+    ui.styleItemPrimaryColorLabel.textContent = config.primaryLabel;
+    ui.styleItemPrimaryColorInput.value = primary;
+    ui.styleItemPrimaryColorPreview.style.backgroundColor = primary;
+    ui.styleItemPrimaryColorInput.classList.remove('style-color-hex-error');
+
+    const hasSecondary = Boolean(config.secondaryInput);
+    ui.styleItemSecondaryColorRow.classList.toggle('hidden', !hasSecondary);
+    if (hasSecondary && config.secondaryInput) {
+        const secondary = normalizeHexColorInput(config.secondaryInput.value) || DEFAULT_STYLE_INJECTION_ITEM.color;
+        ui.styleItemSecondaryColorLabel.textContent = config.secondaryLabel || 'Stroke (HEX)';
+        ui.styleItemSecondaryColorInput.value = secondary;
+        ui.styleItemSecondaryColorPreview.style.backgroundColor = secondary;
+        ui.styleItemSecondaryColorInput.classList.remove('style-color-hex-error');
+    }
+
+    const hasStroke = Boolean(config.strokeStyleInput);
+    ui.styleItemStrokeRow.classList.toggle('hidden', !hasStroke);
+    if (hasStroke && config.strokeStyleInput) {
+        ui.styleItemStrokeStyleInput.value = config.strokeStyleInput.value === 'dash' ? 'dash' : 'solid';
+    }
+
+    const hasThickness = Boolean(config.thicknessInput);
+    ui.styleItemThicknessRow.classList.toggle('hidden', !hasThickness);
+    if (hasThickness && config.thicknessInput) {
+        ui.styleItemThicknessInput.value = config.thicknessInput.value;
+    }
+
+    const hasVisible = Boolean(config.visibleInput);
+    ui.styleItemVisibleRow.classList.toggle('hidden', !hasVisible);
+    if (hasVisible && config.visibleInput) {
+        ui.styleItemVisibleInput.checked = config.visibleInput.checked;
+    }
+
+    const hasSides = Boolean(config.sides);
+    ui.styleItemSidesRow.classList.toggle('hidden', !hasSides);
+    if (hasSides && config.sides) {
+        ui.styleItemSideTop.checked = config.sides.top.checked;
+        ui.styleItemSideRight.checked = config.sides.right.checked;
+        ui.styleItemSideBottom.checked = config.sides.bottom.checked;
+        ui.styleItemSideLeft.checked = config.sides.left.checked;
+    }
+
+    setStyleItemPaintStyleOptions();
+    refreshStyleItemModeUi();
+    styleItemPopoverActiveColorField = 'primary';
+    updateStyleItemPopoverPreview();
 
     if (styleColorPicker) {
         isSyncingStyleColorPicker = true;
-        styleColorPicker.color.hexString = color;
+        styleColorPicker.color.hexString = primary;
         isSyncingStyleColorPicker = false;
     }
 }
 
-function closeStyleColorPopover() {
-    styleColorPopoverOpen = false;
-    styleColorTargetInput = null;
-    ui.styleColorPopover.classList.add('hidden');
-    ui.styleColorHexInput.classList.remove('style-color-hex-error');
+function applyMarkIndexFromPreview(seriesIndex: number) {
+    const count = Math.max(1, state.markStylesDraft.length);
+    const nextIndex = Math.max(0, Math.min(count - 1, Math.floor(seriesIndex)));
+    if (state.activeMarkStyleIndex === nextIndex) return;
+
+    state.activeMarkStyleIndex = nextIndex;
+    ui.styleMarkIndexInput.value = String(nextIndex);
+    const active = getActiveMarkDraft();
+    ui.styleMarkFillColorInput.value = active.fillColor;
+    ui.styleMarkStrokeColorInput.value = active.strokeColor;
+    ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
+    ui.styleMarkThicknessInput.value = String(active.thickness);
+    syncAllHexPreviewsFromDom();
+    syncStyleDraftFromDomAndEmit();
 }
 
-export function forceCloseStyleColorPopover() {
-    closeStyleColorPopover();
-}
-
-export function commitStyleColorPopoverIfOpen() {
-    if (!styleColorPopoverOpen || !styleColorTargetInput) return false;
-    const candidate = normalizeHexColorInput(ui.styleColorHexInput.value)
-        || normalizeHexColorInput(styleColorTargetInput.value);
-    if (!candidate) {
-        ui.styleColorHexInput.classList.add('style-color-hex-error');
-        return false;
+function openStyleItemPopoverInternal(
+    target: StyleItemPopoverTarget,
+    anchorRect: AnchorRectLike,
+    sourceInput?: HTMLInputElement | null,
+    seriesIndex?: number
+) {
+    initializeStyleColorPicker();
+    if (target === 'mark' && Number.isFinite(seriesIndex)) {
+        applyMarkIndexFromPreview(Number(seriesIndex));
     }
-    const applied = applyStyleColorToTarget(candidate);
-    closeStyleColorPopover();
-    return applied;
-}
+    const config = getStylePopoverConfigForTarget(target, sourceInput || null);
+    if (!config) return false;
 
-function applyStyleColorToTarget(hex: string) {
-    if (!styleColorTargetInput) return false;
-    const normalized = normalizeHexColorInput(hex);
-    if (!normalized) {
-        ui.styleColorHexInput.classList.add('style-color-hex-error');
-        return false;
+    if (styleItemPopoverOpen) {
+        closeStyleItemPopover({ commit: false });
     }
 
-    styleColorTargetInput.value = normalized;
-    ui.styleColorPreview.style.backgroundColor = normalized;
-    ui.styleColorHexInput.value = normalized;
-    ui.styleColorHexInput.classList.remove('style-color-hex-error');
-    const swatch = getHexPreviewElement(styleColorTargetInput);
-    if (swatch) updateHexPreview(styleColorTargetInput, swatch, getHexPreviewFallback(styleColorTargetInput));
-    styleColorTargetInput.dispatchEvent(new Event('input', { bubbles: true }));
+    styleItemPopoverTarget = target;
+    styleItemPopoverConfig = config;
+    styleItemPopoverSourceInput = sourceInput || null;
+    styleItemPopoverSnapshot = captureStyleFormSnapshot();
+    styleItemPopoverMode = 'hex';
+    styleItemPopoverSelectedStyleId = null;
+    styleItemPopoverAnchorRect = anchorRect;
+    styleItemPopoverOpen = true;
+
+    ui.styleItemPopover.classList.remove('hidden');
+    syncStyleItemPopoverFromConfig(config);
+    positionStyleItemPopover(anchorRect);
     return true;
 }
 
 function openStyleColorPopover(input: HTMLInputElement) {
-    initializeStyleColorPicker();
-    styleColorTargetInput = input;
-    styleColorPopoverOpen = true;
-    ui.styleColorPopover.classList.remove('hidden');
-    updateStyleColorPopoverUi(input, input.value);
-    positionStyleColorPopover(input.getBoundingClientRect());
+    openStyleItemPopoverInternal('input-color', input.getBoundingClientRect(), input);
+}
+
+export function openStyleItemPopover(target: StylePreviewTarget, anchorPoint: AnchorRectLike) {
+    openStyleItemPopoverInternal(target, anchorPoint, null);
+}
+
+export function openStyleItemPopoverWithMeta(
+    target: StylePreviewTarget,
+    anchorPoint: AnchorRectLike,
+    meta: { seriesIndex?: number }
+) {
+    openStyleItemPopoverInternal(target, anchorPoint, null, meta.seriesIndex);
+}
+
+export function closeStyleItemPopover(options: { commit: boolean }) {
+    if (!styleItemPopoverOpen) return false;
+    if (!options.commit && styleItemPopoverSnapshot) {
+        restoreStyleFormSnapshot(styleItemPopoverSnapshot);
+        syncStyleDraftFromDomAndEmit();
+    }
+    styleItemPopoverOpen = false;
+    styleItemPopoverConfig = null;
+    styleItemPopoverTarget = null;
+    styleItemPopoverSourceInput = null;
+    styleItemPopoverSnapshot = null;
+    styleItemPopoverSelectedStyleId = null;
+    styleItemPopoverAnchorRect = null;
+    ui.styleItemPopover.classList.add('hidden');
+    ui.styleItemPrimaryColorInput.classList.remove('style-color-hex-error');
+    ui.styleItemSecondaryColorInput.classList.remove('style-color-hex-error');
+    return true;
+}
+
+export function forceCloseStyleColorPopover() {
+    closeStyleItemPopover({ commit: false });
+}
+
+export function commitStyleColorPopoverIfOpen() {
+    if (!styleItemPopoverOpen) return false;
+    return closeStyleItemPopover({ commit: true });
+}
+
+export function setStylePopoverPaintStyles(list: PaintStyleSelection[]) {
+    stylePopoverPaintStyles = Array.isArray(list) ? list.slice() : [];
+    if (styleItemPopoverOpen) {
+        setStyleItemPaintStyleOptions();
+    }
 }
 
 function normalizeFromDom(
@@ -740,8 +1079,8 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleAssistLineStrokeStyleInput.value = draft.assistLine.strokeStyle;
     ui.styleAssistLineThicknessInput.value = String(draft.assistLine.thickness);
 
-    if (styleColorPopoverOpen && styleColorTargetInput) {
-        updateStyleColorPopoverUi(styleColorTargetInput, styleColorTargetInput.value);
+    if (styleItemPopoverOpen && styleItemPopoverConfig) {
+        syncStyleItemPopoverFromConfig(styleItemPopoverConfig);
     }
     syncAllHexPreviewsFromDom();
 }
@@ -1218,11 +1557,7 @@ export function syncStyleTabDraftFromExtracted(extracted: ExtractedStylePayload)
 
 export function bindStyleTabEvents() {
     const handleChange = () => {
-        markStyleInjectionDirty();
-        const normalized = validateStyleTabDraft(readStyleTabDraft());
-        setStyleInjectionDraft(normalized.draft);
-        syncAllHexPreviewsFromDom();
-        emitStyleDraftUpdated();
+        syncStyleDraftFromDomAndEmit();
     };
 
     [
@@ -1263,10 +1598,7 @@ export function bindStyleTabEvents() {
         ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
         ui.styleMarkThicknessInput.value = String(active.thickness);
         syncAllHexPreviewsFromDom();
-        markStyleInjectionDirty();
-        const normalized = validateStyleTabDraft(readStyleTabDraft());
-        setStyleInjectionDraft(normalized.draft);
-        emitStyleDraftUpdated();
+        syncStyleDraftFromDomAndEmit();
     });
 
     [ui.styleCellFillColorInput, ui.styleMarkFillColorInput, ui.styleMarkStrokeColorInput, ui.styleCellTopColorInput, ui.styleTabRightColorInput, ui.styleGridColorInput, ui.styleAssistLineColorInput].forEach((input) => {
@@ -1274,29 +1606,74 @@ export function bindStyleTabEvents() {
         input.addEventListener('click', () => openStyleColorPopover(input));
     });
 
-    ui.styleColorPopover.addEventListener('click', (e) => e.stopPropagation());
-    ui.styleColorHexInput.addEventListener('input', () => {
-        if (!styleColorTargetInput) return;
-        const normalized = normalizeHexColorInput(ui.styleColorHexInput.value);
-        if (!normalized) {
-            ui.styleColorHexInput.classList.add('style-color-hex-error');
-            return;
-        }
-        applyStyleColorToTarget(normalized);
+    ui.styleItemPopover.addEventListener('click', (e) => e.stopPropagation());
+    ui.styleItemModeTabHex.addEventListener('click', () => {
+        styleItemPopoverMode = 'hex';
+        refreshStyleItemModeUi();
     });
-    ui.styleColorHexInput.addEventListener('blur', () => {
-        if (!styleColorTargetInput) return;
-        updateStyleColorPopoverUi(styleColorTargetInput, styleColorTargetInput.value);
+    ui.styleItemModeTabStyle.addEventListener('click', () => {
+        styleItemPopoverMode = 'paint_style';
+        refreshStyleItemModeUi();
+        document.dispatchEvent(new CustomEvent('request-paint-style-list'));
     });
-    ui.styleColorSaveBtn.addEventListener('click', () => {
+    ui.styleItemStyleSelect.addEventListener('change', () => {
+        styleItemPopoverSelectedStyleId = ui.styleItemStyleSelect.value || null;
+        applySelectedPaintStyleColor();
+    });
+    ui.styleItemPrimaryColorInput.addEventListener('focus', () => {
+        styleItemPopoverActiveColorField = 'primary';
+        updateStyleItemPopoverPreview();
+    });
+    ui.styleItemSecondaryColorInput.addEventListener('focus', () => {
+        styleItemPopoverActiveColorField = 'secondary';
+        updateStyleItemPopoverPreview();
+    });
+    ui.styleItemPrimaryColorInput.addEventListener('input', () => {
+        if (!styleItemPopoverOpen || styleItemPopoverMode !== 'hex') return;
+        applyStylePopoverHexInputValue(ui.styleItemPrimaryColorInput);
+    });
+    ui.styleItemSecondaryColorInput.addEventListener('input', () => {
+        if (!styleItemPopoverOpen || styleItemPopoverMode !== 'hex') return;
+        applyStylePopoverHexInputValue(ui.styleItemSecondaryColorInput);
+    });
+    ui.styleItemStrokeStyleInput.addEventListener('change', () => {
+        if (!styleItemPopoverConfig?.strokeStyleInput) return;
+        styleItemPopoverConfig.strokeStyleInput.value = ui.styleItemStrokeStyleInput.value === 'dash' ? 'dash' : 'solid';
+        syncStyleDraftFromDomAndEmit();
+    });
+    const syncThicknessFromPopover = () => {
+        if (!styleItemPopoverConfig?.thicknessInput) return;
+        styleItemPopoverConfig.thicknessInput.value = ui.styleItemThicknessInput.value;
+        syncStyleDraftFromDomAndEmit();
+    };
+    ui.styleItemThicknessInput.addEventListener('input', syncThicknessFromPopover);
+    ui.styleItemThicknessInput.addEventListener('change', syncThicknessFromPopover);
+    ui.styleItemVisibleInput.addEventListener('change', () => {
+        if (!styleItemPopoverConfig?.visibleInput) return;
+        styleItemPopoverConfig.visibleInput.checked = ui.styleItemVisibleInput.checked;
+        syncStyleDraftFromDomAndEmit();
+    });
+    const syncSidesFromPopover = () => {
+        if (!styleItemPopoverConfig?.sides) return;
+        styleItemPopoverConfig.sides.top.checked = ui.styleItemSideTop.checked;
+        styleItemPopoverConfig.sides.right.checked = ui.styleItemSideRight.checked;
+        styleItemPopoverConfig.sides.bottom.checked = ui.styleItemSideBottom.checked;
+        styleItemPopoverConfig.sides.left.checked = ui.styleItemSideLeft.checked;
+        syncStyleDraftFromDomAndEmit();
+    };
+    ui.styleItemSideTop.addEventListener('change', syncSidesFromPopover);
+    ui.styleItemSideRight.addEventListener('change', syncSidesFromPopover);
+    ui.styleItemSideBottom.addEventListener('change', syncSidesFromPopover);
+    ui.styleItemSideLeft.addEventListener('change', syncSidesFromPopover);
+    ui.styleItemSaveBtn.addEventListener('click', () => {
         commitStyleColorPopoverIfOpen();
     });
 
     document.addEventListener('click', (e) => {
-        if (!styleColorPopoverOpen) return;
+        if (!styleItemPopoverOpen) return;
         const target = e.target as Node | null;
         if (!target) return;
-        if (ui.styleColorPopover.contains(target)) return;
+        if (ui.styleItemPopover.contains(target)) return;
         const colorInputs = [
             ui.styleCellFillColorInput,
             ui.styleMarkFillColorInput,
@@ -1307,13 +1684,21 @@ export function bindStyleTabEvents() {
             ui.styleAssistLineColorInput
         ];
         if (colorInputs.some((input) => input === target || input.contains(target))) return;
-        closeStyleColorPopover();
+        closeStyleItemPopover({ commit: false });
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && styleColorPopoverOpen) {
-            closeStyleColorPopover();
+        if (e.key === 'Escape' && styleItemPopoverOpen) {
+            closeStyleItemPopover({ commit: false });
         }
     });
+    window.addEventListener('resize', () => {
+        if (!styleItemPopoverOpen || !styleItemPopoverAnchorRect) return;
+        positionStyleItemPopover(styleItemPopoverAnchorRect);
+    });
+    ui.stepStyle.addEventListener('scroll', () => {
+        if (!styleItemPopoverOpen || !styleItemPopoverAnchorRect) return;
+        positionStyleItemPopover(styleItemPopoverAnchorRect);
+    }, { passive: true });
 
     ui.styleTemplateModeReadBtn.addEventListener('click', () => setStyleTemplateMode('read'));
     ui.styleTemplateModeEditBtn.addEventListener('click', () => setStyleTemplateMode('edit'));

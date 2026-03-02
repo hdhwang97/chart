@@ -2,6 +2,7 @@ import { ui } from './dom';
 import { state, getTotalStackedCols, getRowColor, normalizeHexColorInput, getGridColsForChart } from './state';
 import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 import { getEffectiveYDomain } from './y-range';
+import { closeStyleItemPopover } from './style-tab';
 
 // ==========================================
 // EXPORT TAB — D3 Preview & Code
@@ -11,6 +12,7 @@ declare const d3: any;
 
 let lastStylePayload: any = null;
 let dataTabRenderer: (() => void) | null = null;
+let styleTabRenderer: (() => void) | null = null;
 
 function buildPreviewStyleFromState() {
     return {
@@ -304,7 +306,12 @@ export function setDataTabRenderer(renderer: () => void) {
     dataTabRenderer = renderer;
 }
 
+export function setStyleTabRenderer(renderer: () => void) {
+    styleTabRenderer = renderer;
+}
+
 export function switchTab(tab: 'data' | 'style' | 'export') {
+    closeStyleItemPopover({ commit: false });
     const tabDataBtn = document.getElementById('tab-data')!;
     const tabStyleBtn = document.getElementById('tab-style')!;
     const tabExportBtn = document.getElementById('tab-export')!;
@@ -329,6 +336,7 @@ export function switchTab(tab: 'data' | 'style' | 'export') {
         step2.classList.remove('active');
         stepStyle.classList.add('active');
         stepExport.classList.remove('active');
+        if (styleTabRenderer) styleTabRenderer();
     } else {
         tabDataBtn.className = inactiveClass;
         tabStyleBtn.className = inactiveClass;

@@ -9,32 +9,51 @@ import { getEffectiveYDomain } from './y-range';
 
 declare const d3: any; // loaded from CDN in index.html
 
+export type StylePreviewTarget = 'cell-fill' | 'cell-top' | 'tab-right' | 'grid' | 'mark';
+export type StylePreviewTargetMeta = {
+    seriesIndex?: number;
+};
+
+type PreviewInteractionMode = 'data' | 'style';
+
+export type PreviewRenderOptions = {
+    containerId?: string;
+    interactionMode?: PreviewInteractionMode;
+    onTargetHover?: (target: StylePreviewTarget | null) => void;
+    onTargetClick?: (
+        target: StylePreviewTarget,
+        anchorPoint: { left: number; top: number; right: number; bottom: number },
+        meta: StylePreviewTargetMeta
+    ) => void;
+};
+
 const PREVIEW_OPTS = {
     margin: { top: 12, right: 14, bottom: 30, left: 44 },
-    barPadding: 0.2,
     lineStroke: 2,
     colors: ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#fb923c']
 };
 const GRID_MARK_HOVER_CLASS = 'grid-cell-mark-hover';
 const MARK_DIM_OPACITY = 0.2;
 const MARK_HOVER_OPACITY = 1;
+const STYLE_DIM_OPACITY = 0.15;
+
 type HighlightState = { type: string; index: number; row?: number; col?: number };
 let highlightState: HighlightState | null = null;
 
-function getPreviewMarkElements(): SVGElement[] {
-    return Array.from(document.querySelectorAll<SVGElement>('#chart-preview-container .preview-mark'));
+function getPreviewMarkElements(containerId = 'chart-preview-container'): SVGElement[] {
+    return Array.from(document.querySelectorAll<SVGElement>(`#${containerId} .preview-mark`));
 }
 
-function dimOtherMarks(hovered: SVGElement) {
-    const marks = getPreviewMarkElements();
+function dimOtherMarks(containerId: string, hovered: SVGElement) {
+    const marks = getPreviewMarkElements(containerId);
     marks.forEach((mark) => {
         mark.style.opacity = String(MARK_DIM_OPACITY);
     });
     hovered.style.opacity = String(MARK_HOVER_OPACITY);
 }
 
-function restoreMarkOpacityFromBase() {
-    const marks = getPreviewMarkElements();
+function restoreMarkOpacityFromBase(containerId: string) {
+    const marks = getPreviewMarkElements(containerId);
     marks.forEach((mark) => {
         const base = mark.getAttribute('data-base-opacity');
         if (base !== null) {
@@ -53,9 +72,7 @@ function clearGridHighlightFromMark() {
 function highlightGridCellFromMark(row: number, col: number) {
     clearGridHighlightFromMark();
     const target = document.querySelector<HTMLInputElement>(`#data-grid input[data-r="${row}"][data-c="${col}"]`);
-    if (target) {
-        target.classList.add(GRID_MARK_HOVER_CLASS);
-    }
+    if (target) target.classList.add(GRID_MARK_HOVER_CLASS);
 }
 
 function highlightGridRowFromMark(row: number) {
@@ -124,53 +141,82 @@ function getDraftLineStroke(target: 'cellTop' | 'tabRight'): StrokeStyleSnapshot
     };
 }
 
-function drawGridContainerBorder(g: any, w: number, h: number) {
+function markStyleTarget(node: any, target: StylePreviewTarget, mode: PreviewInteractionMode) {
+    if (mode !== 'style') return;
+    const rawOpacity = node.attr('opacity');
+    const baseOpacity = (rawOpacity === null || rawOpacity === undefined || rawOpacity === '')
+        ? '1'
+        : String(rawOpacity);
+    node
+        .attr('data-style-target', target)
+        .attr('data-style-base-opacity', baseOpacity)
+        .attr('data-style-base-stroke-width', () => {
+            const raw = node.attr('stroke-width');
+            if (raw === null || raw === undefined || raw === '') return '';
+            return String(raw);
+        })
+        .classed('preview-style-target', true);
+}
+
+function markStyleTargetSeries(node: any, seriesIndex: number, mode: PreviewInteractionMode) {
+    if (mode !== 'style') return;
+    node.attr('data-style-series-index', String(seriesIndex));
+}
+
+function addStyleHitLine(
+    g: any,
+    x1: number,
+    x2: number,
+    y1: number,
+    y2: number,
+    target: StylePreviewTarget,
+    mode: PreviewInteractionMode
+) {
+    if (mode !== 'style') return;
+    const hit = g.append('line')
+        .attr('x1', x1)
+        .attr('x2', x2)
+        .attr('y1', y1)
+        .attr('y2', y2)
+        .attr('stroke', 'transparent')
+        .attr('stroke-width', 10)
+        .attr('opacity', 0.01);
+    markStyleTarget(hit, target, mode);
+}
+
+function drawGridContainerBorder(g: any, w: number, h: number, mode: PreviewInteractionMode) {
     const grid = state.styleInjectionDraft.gridContainer;
     const thickness = grid.visible ? grid.thickness : 0;
     if (thickness <= 0) return;
 
     const color = grid.color;
     const dashPattern = grid.strokeStyle === 'dash' ? '4,2' : null;
-    if (grid.sides.top) {
+    const addEdge = (x1: number, x2: number, y1: number, y2: number) => {
         const line = g.append('line')
-            .attr('x1', 0)
-            .attr('x2', w)
-            .attr('y1', 0)
-            .attr('y2', 0)
+            .attr('x1', x1)
+            .attr('x2', x2)
+            .attr('y1', y1)
+            .attr('y2', y2)
             .attr('stroke', color)
             .attr('stroke-width', thickness);
         if (dashPattern) line.attr('stroke-dasharray', dashPattern);
-    }
-    if (grid.sides.right) {
-        const line = g.append('line')
-            .attr('x1', w)
-            .attr('x2', w)
-            .attr('y1', 0)
-            .attr('y2', h)
-            .attr('stroke', color)
-            .attr('stroke-width', thickness);
-        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
-    }
-    if (grid.sides.bottom) {
-        const line = g.append('line')
-            .attr('x1', 0)
-            .attr('x2', w)
-            .attr('y1', h)
-            .attr('y2', h)
-            .attr('stroke', color)
-            .attr('stroke-width', thickness);
-        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
-    }
-    if (grid.sides.left) {
-        const line = g.append('line')
-            .attr('x1', 0)
-            .attr('x2', 0)
-            .attr('y1', 0)
-            .attr('y2', h)
-            .attr('stroke', color)
-            .attr('stroke-width', thickness);
-        if (dashPattern) line.attr('stroke-dasharray', dashPattern);
-    }
+        markStyleTarget(line, 'grid', mode);
+        addStyleHitLine(g, x1, x2, y1, y2, 'grid', mode);
+    };
+
+    if (grid.sides.top) addEdge(0, w, 0, 0);
+    if (grid.sides.right) addEdge(w, w, 0, h);
+    if (grid.sides.bottom) addEdge(0, w, h, h);
+    if (grid.sides.left) addEdge(0, 0, 0, h);
+}
+
+function getAssistLineStyle() {
+    const draft = state.styleInjectionDraft.assistLine;
+    return {
+        color: draft.color || '#E5E7EB',
+        thickness: Math.max(1, Number(draft.thickness) || 1),
+        dash: draft.strokeStyle === 'dash'
+    };
 }
 
 function getSeriesColor(rowIndex: number, chartType: string) {
@@ -180,8 +226,7 @@ function getSeriesColor(rowIndex: number, chartType: string) {
     return getRowColor(rowIndex);
 }
 
-function getBarPreviewColor(rowIndex: number, _colIndex: number): string {
-    const colIndex = _colIndex;
+function getBarPreviewColor(rowIndex: number, colIndex: number): string {
     const isColOverride = state.chartType === 'bar' && Boolean(state.colHeaderColorEnabled[colIndex]);
     if (isColOverride) {
         return state.colHeaderColors[colIndex] || getRowColor(0);
@@ -193,6 +238,70 @@ function buildYTickValues(yMin: number, yMax: number, cellCount: number): number
     const n = Math.max(1, cellCount);
     const step = (yMax - yMin) / n;
     return Array.from({ length: n + 1 }, (_, i) => yMin + (step * i));
+}
+
+function collectAssistLineValues(chartType: string, numData: number[][], totalCols: number): number[] {
+    if (!Array.isArray(numData) || numData.length === 0) return [];
+    const values: number[] = [];
+    if (chartType === 'stackedBar') {
+        for (let r = 1; r < numData.length; r++) {
+            for (let c = 0; c < totalCols; c++) {
+                const v = Number(numData[r]?.[c]);
+                if (Number.isFinite(v)) values.push(v);
+            }
+        }
+    } else {
+        for (let r = 0; r < numData.length; r++) {
+            for (let c = 0; c < totalCols; c++) {
+                const v = Number(numData[r]?.[c]);
+                if (Number.isFinite(v)) values.push(v);
+            }
+        }
+    }
+    return values;
+}
+
+function drawAssistLines(
+    g: any,
+    yScale: any,
+    w: number,
+    yMin: number,
+    yMax: number,
+    chartType: string,
+    numData: number[][],
+    totalCols: number
+) {
+    if (!state.assistLineVisible) return;
+    const enabled = state.assistLineEnabled || { min: false, max: false, avg: false, ctr: false };
+    if (!enabled.min && !enabled.max && !enabled.avg && !enabled.ctr) return;
+
+    const values = collectAssistLineValues(chartType, numData, totalCols);
+    const hasValues = values.length > 0;
+    const min = hasValues ? Math.min(...values) : yMin;
+    const max = hasValues ? Math.max(...values) : yMax;
+    const avg = hasValues ? (values.reduce((acc, v) => acc + v, 0) / values.length) : ((yMin + yMax) / 2);
+    const ctr = (yMin + yMax) / 2;
+
+    const style = getAssistLineStyle();
+    const lines: number[] = [];
+    if (enabled.min) lines.push(min);
+    if (enabled.max) lines.push(max);
+    if (enabled.avg) lines.push(avg);
+    if (enabled.ctr) lines.push(ctr);
+
+    lines.forEach((value) => {
+        const y = yScale(value);
+        if (!Number.isFinite(y)) return;
+        const line = g.append('line')
+            .attr('x1', 0)
+            .attr('x2', w)
+            .attr('y1', y)
+            .attr('y2', y)
+            .attr('stroke', style.color)
+            .attr('stroke-width', style.thickness)
+            .attr('opacity', 0.9);
+        if (style.dash) line.attr('stroke-dasharray', '4,2');
+    });
 }
 
 function normalizeMarkRatio(markRatio?: number): number {
@@ -247,7 +356,7 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
         .attr('font-size', 9);
 }
 
-function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount: number, xGuidePositions?: number[]) {
+function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount: number, mode: PreviewInteractionMode, xGuidePositions?: number[]) {
     const tabRightStroke = getDraftLineStroke('tabRight') || state.colStrokeStyle;
     const cellTopStroke = getDraftLineStroke('cellTop');
 
@@ -261,6 +370,8 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
                     .attr('y2', h);
                 applyStroke(line, tabRightStroke, '#E5E7EB', 1);
                 line.attr('opacity', 0.35);
+                markStyleTarget(line, 'tab-right', mode);
+                addStyleHitLine(g, x, x, 0, h, 'tab-right', mode);
             });
         } else {
             const step = w / totalCols;
@@ -272,6 +383,8 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
                     .attr('y2', h);
                 applyStroke(line, tabRightStroke, '#E5E7EB', 1);
                 line.attr('opacity', 0.35);
+                markStyleTarget(line, 'tab-right', mode);
+                addStyleHitLine(g, c * step, c * step, 0, h, 'tab-right', mode);
             }
         }
     }
@@ -287,19 +400,106 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
                 .attr('y2', r * step);
             applyStroke(line, stroke || null, '#E5E7EB', 1);
             line.attr('opacity', stroke ? 0.35 : 0.2);
+            markStyleTarget(line, 'cell-top', mode);
+            addStyleHitLine(g, 0, w, r * step, r * step, 'cell-top', mode);
         }
     }
 }
 
-export function renderPreview() {
-    const container = document.getElementById('chart-preview-container')!;
-    clearGridHighlightFromMark();
-    restoreMarkOpacityFromBase();
-    container.innerHTML = '';
-    container.onmouseleave = () => {
-        clearGridHighlightFromMark();
-        restoreMarkOpacityFromBase();
+function applyStyleTargetHover(container: HTMLElement, target: StylePreviewTarget | null) {
+    const nodes = Array.from(container.querySelectorAll<SVGElement>('[data-style-target]'));
+    if (nodes.length === 0) return;
+    const accentTarget = target === 'grid' || target === 'tab-right' || target === 'cell-top';
+
+    nodes.forEach((node) => {
+        const nodeTarget = node.getAttribute('data-style-target') as StylePreviewTarget | null;
+        const base = Number(node.getAttribute('data-style-base-opacity') || '1');
+        const safeBase = Number.isFinite(base) ? base : 1;
+        if (!target || nodeTarget === target) {
+            node.style.opacity = String(safeBase);
+        } else {
+            node.style.opacity = String(Math.min(safeBase, STYLE_DIM_OPACITY));
+        }
+
+        const baseStrokeRaw = node.getAttribute('data-style-base-stroke-width');
+        const baseStroke = Number(baseStrokeRaw);
+        if (baseStrokeRaw && Number.isFinite(baseStroke) && baseStroke > 0) {
+            if (accentTarget && nodeTarget === target && node.getAttribute('stroke') !== 'transparent') {
+                const boosted = Math.max(baseStroke + 1, baseStroke * 1.9);
+                node.setAttribute('stroke-width', String(boosted));
+            } else {
+                node.setAttribute('stroke-width', String(baseStroke));
+            }
+        }
+    });
+}
+
+function bindStyleInteractions(
+    container: HTMLElement,
+    onTargetHover?: (target: StylePreviewTarget | null) => void,
+    onTargetClick?: (target: StylePreviewTarget, anchorPoint: { left: number; top: number; right: number; bottom: number }) => void
+) {
+    const svg = container.querySelector('svg');
+    if (!svg) return;
+
+    let hoverTarget: StylePreviewTarget | null = null;
+    const resolveTarget = (eventTarget: EventTarget | null): StylePreviewTarget | null => {
+        if (!(eventTarget instanceof Element)) return null;
+        const anchor = eventTarget.closest('[data-style-target]') as Element | null;
+        const raw = anchor?.getAttribute('data-style-target') as StylePreviewTarget | null;
+        if (!raw) return null;
+        return raw;
     };
+
+    const setHover = (next: StylePreviewTarget | null) => {
+        if (next === hoverTarget) return;
+        hoverTarget = next;
+        applyStyleTargetHover(container, next);
+        if (onTargetHover) onTargetHover(next);
+    };
+
+    svg.addEventListener('mousemove', (event) => {
+        setHover(resolveTarget(event.target));
+    });
+
+    svg.addEventListener('mouseleave', () => {
+        setHover(null);
+    });
+
+    svg.addEventListener('click', (event) => {
+        const target = resolveTarget(event.target);
+        if (!target || !onTargetClick) return;
+        const elem = (event.target as Element).closest('[data-style-target]') as Element | null;
+        if (!elem) return;
+        const rect = elem.getBoundingClientRect();
+        const rawSeriesIndex = elem.getAttribute('data-style-series-index');
+        const parsed = rawSeriesIndex === null ? NaN : Number(rawSeriesIndex);
+        const meta: StylePreviewTargetMeta = Number.isFinite(parsed)
+            ? { seriesIndex: Math.max(0, Math.floor(parsed)) }
+            : {};
+        onTargetClick(target, { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }, meta);
+        event.stopPropagation();
+    });
+}
+
+export function renderPreview(options: PreviewRenderOptions = {}) {
+    const containerId = options.containerId || 'chart-preview-container';
+    const mode: PreviewInteractionMode = options.interactionMode || 'data';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (mode === 'data') {
+        clearGridHighlightFromMark();
+        restoreMarkOpacityFromBase(containerId);
+    }
+
+    container.innerHTML = '';
+    container.onmouseleave = mode === 'data'
+        ? () => {
+            clearGridHighlightFromMark();
+            restoreMarkOpacityFromBase(containerId);
+        }
+        : null;
 
     const width = container.clientWidth;
     const height = container.clientHeight;
@@ -319,7 +519,6 @@ export function renderPreview() {
     const totalCols = isStacked ? getTotalStackedCols() : getGridColsForChart(chartType, state.cols);
     const axisCols = isStacked ? state.groupStructure.length : totalCols;
 
-    // Get numeric values
     const numData: number[][] = [];
     for (let r = 0; r < state.rows; r++) {
         const row: number[] = [];
@@ -349,24 +548,51 @@ export function renderPreview() {
         : d3.scaleBand().domain(d3.range(axisCols)).range([0, w]).padding(0);
     const yTickValues = buildYTickValues(yMin, yMax, state.cellCount);
 
+    if (mode === 'style') {
+        const hit = g.append('rect')
+            .attr('x', 0)
+            .attr('y', 0)
+            .attr('width', w)
+            .attr('height', h)
+            .attr('fill', state.styleInjectionDraft.cellFill.color)
+            .attr('fill-opacity', 0.2);
+        markStyleTarget(hit, 'cell-fill', mode);
+    }
+
     renderAxes(g, xAxisScale, yScale, yTickValues, h, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;
-    drawGuides(g, w, h, axisCols, state.cellCount, lineGuidePositions);
+    drawGuides(g, w, h, axisCols, state.cellCount, mode, lineGuidePositions);
 
+    const activeHighlight = mode === 'style' ? null : highlightState;
     if (chartType === 'bar') {
-        renderBarPreview(g, numData, w, h, yScale);
+        renderBarPreview(g, numData, w, h, yScale, activeHighlight, mode, containerId);
     } else if (chartType === 'line') {
-        renderLinePreview(g, numData, yScale, xAxisScale);
+        renderLinePreview(g, numData, yScale, xAxisScale, activeHighlight, mode, containerId);
     } else if (isStacked) {
-        renderStackedPreview(g, numData, w, h, yMin, yMax);
+        renderStackedPreview(g, numData, w, h, yMin, yMax, activeHighlight, mode, containerId);
     }
 
-    drawGridContainerBorder(g, w, h);
+    drawGridContainerBorder(g, w, h, mode);
+    drawAssistLines(g, yScale, w, yMin, yMax, chartType, numData, totalCols);
+
+    if (mode === 'style') {
+        bindStyleInteractions(container, options.onTargetHover, options.onTargetClick);
+        applyStyleTargetHover(container, null);
+    }
 }
 
-function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale: any) {
+function renderBarPreview(
+    g: any,
+    data: number[][],
+    w: number,
+    h: number,
+    yScale: any,
+    activeHighlight: HighlightState | null,
+    mode: PreviewInteractionMode,
+    containerId: string
+) {
     const cols = state.cols;
     const rows = state.rows;
     const xScale = d3.scaleBand().domain(d3.range(cols)).range([0, w]).padding(0);
@@ -376,10 +602,10 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
         for (let c = 0; c < cols; c++) {
             const val = data[r][c];
             const barH = Math.max(0, h - yScale(val));
-            const isHighlighted = highlightState
-                ? (highlightState.type === 'col' && highlightState.index === c) ||
-                (highlightState.type === 'row' && highlightState.index === r)
-                    || (highlightState.type === 'cell' && highlightState.row === r && highlightState.col === c)
+            const isHighlighted = activeHighlight
+                ? (activeHighlight.type === 'col' && activeHighlight.index === c)
+                    || (activeHighlight.type === 'row' && activeHighlight.index === r)
+                    || (activeHighlight.type === 'cell' && activeHighlight.row === r && activeHighlight.col === c)
                 : false;
 
             const colX = xScale(c)!;
@@ -393,17 +619,23 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
                 .attr('fill', getBarPreviewColor(r, c))
-                .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
-                .attr('data-base-opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
+                .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
+                .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
                 .attr('rx', 2);
-            rect.on('mouseenter', function () {
-                highlightGridCellFromMark(r, c);
-                dimOtherMarks(this as SVGElement);
-            });
-            rect.on('mouseleave', () => {
-                clearGridHighlightFromMark();
-                restoreMarkOpacityFromBase();
-            });
+
+            if (mode === 'data') {
+                rect.on('mouseenter', function () {
+                    highlightGridCellFromMark(r, c);
+                    dimOtherMarks(containerId, this as SVGElement);
+                });
+                rect.on('mouseleave', () => {
+                    clearGridHighlightFromMark();
+                    restoreMarkOpacityFromBase(containerId);
+                });
+            } else {
+                markStyleTarget(rect, 'mark', mode);
+                markStyleTargetSeries(rect, r, mode);
+            }
 
             const resolvedColor = getBarPreviewColor(r, c);
             const rowStroke = getRowStroke(r) || state.colStrokeStyle;
@@ -413,7 +645,15 @@ function renderBarPreview(g: any, data: number[][], w: number, h: number, yScale
     }
 }
 
-function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
+function renderLinePreview(
+    g: any,
+    data: number[][],
+    yScale: any,
+    xScale: any,
+    activeHighlight: HighlightState | null,
+    mode: PreviewInteractionMode,
+    containerId: string
+) {
     const cols = getGridColsForChart('line', state.cols);
     const baseStroke = getLineBaseStrokeWidth();
     const strongStroke = getLineHighlightStrokeWidth(baseStroke, 1.6);
@@ -422,23 +662,23 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
     const rowLayers: Array<{ row: number; path: any; dots: any[] }> = [];
 
     const isRowRelated = (row: number) => {
-        if (!highlightState) return true;
-        if (highlightState.type === 'row') return highlightState.index === row;
-        if (highlightState.type === 'cell') return highlightState.row === row;
-        if (highlightState.type === 'col') return true;
+        if (!activeHighlight) return true;
+        if (activeHighlight.type === 'row') return activeHighlight.index === row;
+        if (activeHighlight.type === 'cell') return activeHighlight.row === row;
+        if (activeHighlight.type === 'col') return true;
         return false;
     };
 
     for (let r = 0; r < state.rows; r++) {
         const lineData = data[r].slice(0, cols);
-        const isRowHighlighted = highlightState?.type === 'row' && highlightState.index === r;
-        const isCellOnRow = highlightState?.type === 'cell' && highlightState.row === r;
-        const isColMode = highlightState?.type === 'col';
+        const isRowHighlighted = activeHighlight?.type === 'row' && activeHighlight.index === r;
+        const isCellOnRow = activeHighlight?.type === 'cell' && activeHighlight.row === r;
+        const isColMode = activeHighlight?.type === 'col';
         const relatedRow = isRowRelated(r);
         const activePathStroke = isRowHighlighted || isCellOnRow
             ? strongStroke
             : (isColMode ? softStroke : baseStroke);
-        const pathOpacity = highlightState ? (relatedRow ? 1 : 0.2) : 1;
+        const pathOpacity = activeHighlight ? (relatedRow ? 1 : 0.2) : 1;
 
         const line = d3.line()
             .x((_: any, i: number) => xScale(i)!)
@@ -455,27 +695,33 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
             .attr('d', line)
             .attr('opacity', pathOpacity)
             .attr('data-base-opacity', pathOpacity);
+
         if (isRowHighlighted || isCellOnRow) {
             highlightedRows.add(r);
         }
-        path.on('mouseenter', function () {
-            highlightGridRowFromMark(r);
-            dimOtherMarks(this as SVGElement);
-        });
-        path.on('mouseleave', () => {
-            clearGridHighlightFromMark();
-            restoreMarkOpacityFromBase();
-        });
+
+        if (mode === 'data') {
+            path.on('mouseenter', function () {
+                highlightGridRowFromMark(r);
+                dimOtherMarks(containerId, this as SVGElement);
+            });
+            path.on('mouseleave', () => {
+                clearGridHighlightFromMark();
+                restoreMarkOpacityFromBase(containerId);
+            });
+        } else {
+            markStyleTarget(path, 'mark', mode);
+            markStyleTargetSeries(path, r, mode);
+        }
 
         applyStrokeExtras(path, rowStroke);
 
-        // Dots
         const rowDots: any[] = [];
         lineData.forEach((val: number, i: number) => {
-            const isColHighlighted = highlightState?.type === 'col' && highlightState.index === i;
-            const isCellHighlighted = highlightState?.type === 'cell' && highlightState.row === r && highlightState.col === i;
-            const dotOpacity = highlightState
-                ? (highlightState.type === 'cell'
+            const isColHighlighted = activeHighlight?.type === 'col' && activeHighlight.index === i;
+            const isCellHighlighted = activeHighlight?.type === 'cell' && activeHighlight.row === r && activeHighlight.col === i;
+            const dotOpacity = activeHighlight
+                ? (activeHighlight.type === 'cell'
                     ? (isCellHighlighted ? 1 : 0.2)
                     : (relatedRow || isColHighlighted ? 1 : 0.2))
                 : 1;
@@ -487,14 +733,21 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
                 .attr('fill', baseColor)
                 .attr('opacity', dotOpacity)
                 .attr('data-base-opacity', dotOpacity);
-            dot.on('mouseenter', function () {
-                highlightGridCellFromMark(r, i);
-                dimOtherMarks(this as SVGElement);
-            });
-            dot.on('mouseleave', () => {
-                clearGridHighlightFromMark();
-                restoreMarkOpacityFromBase();
-            });
+
+            if (mode === 'data') {
+                dot.on('mouseenter', function () {
+                    highlightGridCellFromMark(r, i);
+                    dimOtherMarks(containerId, this as SVGElement);
+                });
+                dot.on('mouseleave', () => {
+                    clearGridHighlightFromMark();
+                    restoreMarkOpacityFromBase(containerId);
+                });
+            } else {
+                markStyleTarget(dot, 'mark', mode);
+                markStyleTargetSeries(dot, r, mode);
+            }
+
             applyStroke(dot, rowStroke, 'none', 0);
             rowDots.push(dot);
         });
@@ -510,7 +763,17 @@ function renderLinePreview(g: any, data: number[][], yScale: any, xScale: any) {
     }
 }
 
-function renderStackedPreview(g: any, data: number[][], w: number, h: number, yMin: number, yMax: number) {
+function renderStackedPreview(
+    g: any,
+    data: number[][],
+    w: number,
+    h: number,
+    yMin: number,
+    yMax: number,
+    activeHighlight: HighlightState | null,
+    mode: PreviewInteractionMode,
+    containerId: string
+) {
     const groups = state.groupStructure;
     const ratio = normalizeMarkRatio(state.markRatio);
     const xScale = d3.scaleBand().domain(d3.range(groups.length)).range([0, w]).padding(0);
@@ -532,11 +795,11 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
                 const val = data[r][flatIdx] || 0;
                 const barH = Math.max(0, h - innerYScale(val));
 
-                const isHighlighted = highlightState
-                    ? (highlightState.type === 'group' && highlightState.index === gIdx) ||
-                    (highlightState.type === 'col' && highlightState.index === flatIdx) ||
-                    (highlightState.type === 'row' && highlightState.index === r) ||
-                    (highlightState.type === 'cell' && highlightState.row === r && highlightState.col === flatIdx)
+                const isHighlighted = activeHighlight
+                    ? (activeHighlight.type === 'group' && activeHighlight.index === gIdx)
+                        || (activeHighlight.type === 'col' && activeHighlight.index === flatIdx)
+                        || (activeHighlight.type === 'row' && activeHighlight.index === r)
+                        || (activeHighlight.type === 'cell' && activeHighlight.row === r && activeHighlight.col === flatIdx)
                     : false;
 
                 const rect = g.append('rect')
@@ -546,17 +809,23 @@ function renderStackedPreview(g: any, data: number[][], w: number, h: number, yM
                     .attr('width', clusterLayout.subBarW)
                     .attr('height', barH)
                     .attr('fill', getSeriesColor(r - startRow, 'stackedBar'))
-                    .attr('opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
-                    .attr('data-base-opacity', highlightState ? (isHighlighted ? 1 : 0.2) : 0.8)
+                    .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
+                    .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 0.8)
                     .attr('rx', 1);
-                rect.on('mouseenter', function () {
-                    highlightGridCellFromMark(r, flatIdx);
-                    dimOtherMarks(this as SVGElement);
-                });
-                rect.on('mouseleave', () => {
-                    clearGridHighlightFromMark();
-                    restoreMarkOpacityFromBase();
-                });
+
+                if (mode === 'data') {
+                    rect.on('mouseenter', function () {
+                        highlightGridCellFromMark(r, flatIdx);
+                        dimOtherMarks(containerId, this as SVGElement);
+                    });
+                    rect.on('mouseleave', () => {
+                        clearGridHighlightFromMark();
+                        restoreMarkOpacityFromBase(containerId);
+                    });
+                } else {
+                    markStyleTarget(rect, 'mark', mode);
+                    markStyleTargetSeries(rect, Math.max(0, r - startRow), mode);
+                }
 
                 applyStroke(rect, getRowStroke(r) || state.colStrokeStyle, 'none', 0);
                 yOffset -= barH;

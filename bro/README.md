@@ -1,174 +1,167 @@
-# Dynamic Chart Figma Plugin (bro)
+# Dynamic Chart Figma Plugin (`bro`)
 
-이 문서는 **AI/개발자가 코드베이스를 빠르게 파악하고 수정 지점을 정확히 찾기 위한 구조 중심 가이드**입니다.
+Figma 차트 컴포넌트(`bar`, `line`, `stackedBar`)를 데이터/스타일 기반으로 생성·수정하는 플러그인입니다.  
+구성은 UI 런타임(`src/ui`) + Plugin 런타임(`src/plugin`)이며 `postMessage`로 통신합니다.
 
-## 1. 플러그인 한 줄 설명
-- Figma 인스턴스형 차트 컴포넌트(`bar`, `line`, `stackedBar`)에 대해
-- UI에서 데이터/스타일을 입력하고
-- Plugin 코드가 레이어/variant/pluginData를 갱신하여 차트를 생성/수정합니다.
+## 1) 빠른 실행
 
-## 2. 런타임 아키텍처
-
-### 2.1 프로세스 분리
-- `src/ui/*`: 브라우저 런타임(플러그인 UI 패널)
-- `src/plugin/*`: Figma Plugin API 런타임(문서 노드 수정)
-
-### 2.2 통신 방향
-- UI -> Plugin
-  - `generate`: 새 차트 인스턴스 생성 후 적용
-  - `apply`: 선택된 차트 인스턴스 업데이트
-  - `extract_style`: 현재 선택 차트 스타일 추출
-  - `resize`: UI 크기 변경
-- Plugin -> UI
-  - `init`: 선택 노드 기준 UI 초기 데이터 전달
-  - `style_extracted`: 추출된 스타일/컬러/선 스타일 전달
-
-### 2.3 핵심 이벤트 흐름
-1. 플러그인 시작 시 `figma.showUI(__html__)` 호출 (`src/plugin/main.ts`).
-2. 선택 변경(`selectionchange`) 시 차트 노드 인식 -> `initPluginUI()`로 UI 동기화.
-3. UI에서 `submitData()` 호출 시 payload 전송 (`src/ui/steps.ts`).
-4. Plugin에서 차트 타입별 드로잉 함수 실행:
-   - bar: `applyBar()`
-   - line: `applyLine()`
-   - stacked: `applyStackedBar()`
-   - assist line: `applyAssistLines()`
-5. 적용 후 `saveChartData()`로 pluginData 저장, `style_extracted` 재전송.
-6. Auto-resize loop가 선택 노드 크기 변화를 감지하면 자동 재적용.
-
-## 3. 디렉터리 구조
-
-```text
-.
-├─ manifest.json                # Figma manifest (main/ui entry, allowedDomains)
-├─ package.json                 # build/lint 스크립트
-├─ vite.config.ui.ts            # UI 번들 설정 (single file + figma script compat)
-├─ vite.config.code.ts          # plugin code 번들 설정
-├─ src
-│  ├─ plugin
-│  │  ├─ main.ts                # plugin entry, 메시지 핸들러, selection/auto-resize
-│  │  ├─ init.ts                # 컴포넌트 탐색/가져오기, UI 초기화, 구조 추론
-│  │  ├─ data-layer.ts          # pluginData 저장/로드
-│  │  ├─ style.ts               # Figma 노드 스타일 추출(색/두께/스트로크)
-│  │  ├─ constants.ts           # variant 키, pluginData 키, 레이어 패턴 정규식
-│  │  ├─ utils.ts               # 공통 유틸(트래버스, 색상 변환, fill/stroke 적용)
-│  │  └─ drawing
-│  │     ├─ shared.ts           # 컬럼 수집, visibility, Y축 라벨 공통 처리
-│  │     ├─ bar.ts              # Bar 렌더링
-│  │     ├─ line.ts             # Line 렌더링
-│  │     ├─ stacked.ts          # Stacked Bar 렌더링
-│  │     ├─ assist-line.ts      # 최소/최대/평균 보조선 렌더링
-│  │     └─ y-range.ts          # 실제 Y 범위 계산(raw/percent)
-│  ├─ ui
-│  │  ├─ main.ts                # UI entry, 이벤트 바인딩, 메시지 처리
-│  │  ├─ index.html             # UI 마크업, CDN(tailwind/d3/iro)
-│  │  ├─ style.css              # UI 스타일
-│  │  ├─ assets
-│  │  │  └─ tooltips/*.svg      # Graph Setting 툴팁 카드 이미지 에셋
-│  │  ├─ components
-│  │  │  └─ graph-setting-tooltip.ts # Graph Setting 라벨 툴팁 컴포넌트
-│  │  ├─ state.ts               # 전역 상태 및 색상 유틸
-│  │  ├─ dom.ts                 # DOM accessor
-│  │  ├─ grid.ts                # 데이터 그리드 렌더
-│  │  ├─ preview.ts             # 미리보기 렌더
-│  │  ├─ mode.ts                # raw/percent 모드 및 유효성
-│  │  ├─ data-ops.ts            # 행/열/그룹 구조 편집
-│  │  ├─ steps.ts               # 단계 전환, submit payload 생성
-│  │  ├─ export.ts              # Export 탭, D3 preview/code 생성
-│  │  ├─ csv.ts                 # CSV 업로드/파싱/다운로드
-│  │  └─ y-range.ts             # UI 기준 Y 범위 계산
-│  └─ shared
-│     └─ style-types.ts         # UI/Plugin 공용 스타일 타입
-└─ dist                         # 빌드 산출물(code.js, index.html)
+```bash
+npm install
+npm run build
+npm run lint
 ```
 
-## 4. 파일별 책임 (빠른 참조)
-
-### 4.1 Plugin 영역
-- `src/plugin/main.ts`
-  - 메시지 라우팅의 중심.
-  - 차트 대상 노드 해석(`resolveChartTargetFromSelection`)과 차트 인식.
-  - 타입별 렌더 함수 호출, 스타일 추출, 저장, UI 응답.
-- `src/plugin/init.ts`
-  - 마스터 컴포넌트 탐색/가져오기(`getOrImportComponent`).
-  - 선택 노드에서 UI 초기값 로딩(`initPluginUI`).
-  - 기존 레이어 구조를 데이터로 역추론(`inferStructureFromGraph`).
-- `src/plugin/data-layer.ts`
-  - pluginData 스키마에 맞춰 저장/복원.
-  - 저장값이 없으면 구조 추론 fallback.
-- `src/plugin/style.ts`
-  - 색상, 선 두께, 셀/행 스트로크 스타일 등 추출.
-- `src/plugin/drawing/*`
-  - 차트 실제 도형/가시성/variant 조작 담당.
-
-### 4.2 UI 영역
-- `src/ui/main.ts`
-  - UI 초기화와 전체 이벤트 wiring.
-  - Plugin 메시지(`init`, `style_extracted`) 수신 후 상태 동기화.
-- `src/ui/components/graph-setting-tooltip.ts`
-  - Graph Setting 라벨(`Graph Col`, `Cell Count`, `Mark Count/Segments`, `Column Width Ratio`, `Y Min`, `Y Max`, `Thickness`)의 툴팁 전담.
-  - 단일 tooltip 인스턴스 + `img/title/body` 콘텐츠 매핑 + 위치 자동 보정(우측 기본, 경계 시 좌/하).
-  - 트리거/종료: `hover + focus`, `mouseleave/focusout`, `Escape`, 외부 클릭.
-- `src/ui/steps.ts`
-  - 생성/수정 submit payload 생성의 단일 진입점(`submitData`).
-- `src/ui/state.ts`
-  - 데이터/모드/행열/색상 상태 소스 오브 트루스.
-- `src/ui/export.ts`
-  - Export 탭 렌더 및 D3 코드 문자열 생성.
-- `src/ui/mode.ts`, `src/ui/y-range.ts`
-  - Y축 관련 유효성/자동 최대값 처리.
-- `src/ui/style.css`
-  - 전역 UI 스타일 단일 관리 파일.
-  - Graph Setting 툴팁 스타일은 `gs-tooltip-*` 네이밍으로 같은 파일에서 중앙 관리.
-
-## 5. PluginData 저장 키
-정의 위치: `src/plugin/constants.ts` -> `PLUGIN_DATA_KEYS`
-
-핵심 키:
-- `chartType`
-- `lastAppliedValues` (UI 원본)
-- `lastDrawingValues` (렌더링용)
-- `lastAppliedMode`
-- `lastCellCount`
-- `lastMarkNum`
-- `lastYMin`, `lastYMax`
-- `lastBarPadding`
-- `lastRowColors`
-- `lastCornerRadius`
-- `lastStrokeWidth`
-- `lastAssistLineEnabled`, `lastAssistLineVisible`
-
-## 6. 레이어/컴포넌트 의존 규칙
-정의 위치: `src/plugin/constants.ts` -> `MARK_NAME_PATTERNS`
-
-플러그인은 Figma 내부 레이어 이름 패턴을 전제로 동작합니다. 대표 예시:
-- 컬럼: `col-1`, `col-2`...
-- 셀: `cel1`, `cel2`... (정규식 매칭)
-- 라인: `line-1`...
-- 보조선: 이름에 `asst_line` + `min/max/avg` 포함
-- Y축 컨테이너: `y-axis`
-
-이 규칙이 깨지면 추론/적용 일부가 실패할 수 있습니다.
-
-## 7. 빌드/실행
-
-### 7.1 스크립트
 - `npm run build:ui` -> `dist/index.html`
 - `npm run build:code` -> `dist/code.js`
-- `npm run build` -> UI + code 순차 빌드
-- `npm run lint`
 
-### 7.2 번들 특이사항
-- UI는 `vite-plugin-singlefile`로 단일 HTML 번들 (`vite.config.ui.ts`).
-- Figma UI sandbox 호환을 위해 `type="module"` 제거 후처리.
-- Plugin code는 IIFE(`code.js`)로 출력 (`vite.config.code.ts`).
+---
 
-## 8. 수정 시 우선 진입점
-- 차트 적용 로직 수정: `src/plugin/main.ts`, `src/plugin/drawing/*`
-- 초기값/선택 동기화 문제: `src/plugin/init.ts`
-- 저장 데이터 스키마 변경: `src/plugin/constants.ts`, `src/plugin/data-layer.ts`
-- UI 입력/검증/전송 변경: `src/ui/steps.ts`, `src/ui/mode.ts`, `src/ui/main.ts`
-- Graph Setting 툴팁 동작/콘텐츠 변경: `src/ui/components/graph-setting-tooltip.ts`, `src/ui/index.html`, `src/ui/style.css`, `src/ui/assets/tooltips/*`
-- Export 코드 생성 변경: `src/ui/export.ts`
+## 2) 상세 프로젝트 구조 (트리 + 역할)
 
-## 9. 참고 메모
-- `config.ts`, `config.js`, `vite.config.ts`, `vite.config.js`는 현재 주 실행 경로(`src/plugin/main.ts`, `src/ui/index.html`) 기준으로는 사용되지 않는 레거시/보조 설정 파일일 수 있으니, 수정 전 참조 여부를 먼저 확인하세요.
+```text
+bro/
+├─ manifest.json                         # Figma 플러그인 메타(이름/엔트리/allowedDomains)
+├─ package.json                          # build/lint 스크립트, 의존성
+├─ package-lock.json                     # npm lock 파일
+├─ tsconfig.json                         # TypeScript 설정
+├─ vite.config.ui.ts                     # UI 번들 설정(dist/index.html)
+├─ vite.config.code.ts                   # Plugin 번들 설정(dist/code.js)
+├─ vite.config.ts                        # 레거시/보조 설정
+├─ vite.config.js                        # 레거시/보조 설정
+├─ config.ts                             # 레거시/보조 설정
+├─ config.js                             # 레거시/보조 설정
+├─ dist/
+│  ├─ index.html                         # 빌드된 UI
+│  └─ code.js                            # 빌드된 Plugin 코드
+└─ src/
+   ├─ plugin/
+   │  ├─ main.ts                         # 메시지 라우팅, selectionchange, apply/generate
+   │  ├─ init.ts                         # init payload 구성, 컴포넌트 탐색/구조 추론
+   │  ├─ data-layer.ts                   # pluginData + local override 저장/복원
+   │  ├─ constants.ts                    # 패턴/키/상수 정의
+   │  ├─ style.ts                        # 현재 차트 스타일 추출
+   │  ├─ utils.ts                        # 색상/노드/스타일링 유틸
+   │  ├─ template-store.ts               # 스타일 템플릿 저장소
+   │  ├─ perf.ts                         # 성능 측정 로그 유틸
+   │  └─ drawing/
+   │     ├─ shared.ts                    # 차트 공통 접근/유틸
+   │     ├─ y-range.ts                   # Y 범위 계산(raw/percent)
+   │     ├─ bar.ts                       # Bar 적용 로직
+   │     ├─ stacked.ts                   # Stacked Bar 적용 로직
+   │     ├─ line.ts                      # Line 적용 로직
+   │     ├─ assist-line.ts               # min/max/avg/ctr 보조선
+   │     └─ stroke-injection.ts          # fill/stroke 인젝션 동기화
+   ├─ ui/
+   │  ├─ index.html                      # UI 마크업 엔트리
+   │  ├─ style.css                       # UI 스타일
+   │  ├─ main.ts                         # UI 이벤트 + plugin 메시지 처리
+   │  ├─ state.ts                        # 전역 상태
+   │  ├─ dom.ts                          # DOM accessor
+   │  ├─ steps.ts                        # generate/apply payload 생성
+   │  ├─ style-tab.ts                    # 스타일 탭 로직
+   │  ├─ grid.ts                         # 데이터 그리드 렌더/편집
+   │  ├─ preview.ts                      # 프리뷰 렌더
+   │  ├─ mode.ts                         # raw/percent 유효성
+   │  ├─ y-range.ts                      # UI Y 범위 계산
+   │  ├─ data-ops.ts                     # row/col/group 조작
+   │  ├─ csv.ts                          # CSV import/export
+   │  ├─ export.ts                       # Export 탭 로직
+   │  ├─ components/
+   │  │  └─ graph-setting-tooltip.ts     # 그래프 설정 툴팁 컴포넌트
+   │  └─ assets/
+   │     └─ tooltips/
+   │        ├─ cell-count.svg            # Cell Count 툴팁 이미지
+   │        ├─ column-width-ratio.svg    # Column Width Ratio 툴팁 이미지
+   │        ├─ graph-col.svg             # Graph Col 툴팁 이미지
+   │        ├─ mark-count.svg            # Mark Count 툴팁 이미지
+   │        ├─ segments.svg              # Segments 툴팁 이미지
+   │        ├─ thickness.svg             # Thickness 툴팁 이미지
+   │        ├─ y-max.svg                 # Y Max 툴팁 이미지
+   │        └─ y-min.svg                 # Y Min 툴팁 이미지
+   ├─ shared/
+   │  └─ style-types.ts                  # UI/Plugin 공유 타입
+   └─ logic/
+      └─ .DS_Store                       # macOS 시스템 파일(무시 대상)
+```
+
+---
+
+## 3) 메시지 계약 요약
+
+### UI -> Plugin
+
+- `generate` # 새 인스턴스 생성 후 데이터/스타일 적용
+- `apply` # 선택된 차트 대상 업데이트
+- `extract_style` # 현재 선택 대상 스타일 추출
+- `resize` # UI 사이즈 변경
+- `list_paint_styles` # 로컬 PaintStyle 조회
+- `create_paint_style` # PaintStyle 생성
+- `rename_paint_style` # PaintStyle 이름 변경
+- `update_paint_style_color` # PaintStyle 색상 업데이트
+- `load_style_templates` # 스타일 템플릿 목록
+- `save_style_template` # 스타일 템플릿 저장
+- `rename_style_template` # 스타일 템플릿 이름 변경
+- `delete_style_template` # 스타일 템플릿 삭제
+
+### Plugin -> UI
+
+- `init` # selection 기준 편집 초기값 전달
+- `style_extracted` # 추출된 스타일 payload 전달
+- `paint_styles_loaded` # PaintStyle 목록 전달
+- `paint_style_created` # PaintStyle 생성 결과
+- `paint_style_renamed` # PaintStyle 이름 변경 결과
+- `paint_style_updated` # PaintStyle 색상 변경 결과
+- `paint_style_error` # PaintStyle 관련 에러
+- `style_templates_loaded` # 스타일 템플릿 목록 전달
+- `style_template_saved` # 템플릿 저장 결과
+- `style_template_renamed` # 템플릿 이름 변경 결과
+- `style_template_deleted` # 템플릿 삭제 결과
+- `style_template_error` # 템플릿 처리 에러
+
+---
+
+## 4) A/B/C/D 구조별 동작표
+
+정의:
+
+- A 타입 # 원본 Chart 컴포넌트(parent)
+- B 타입 # A의 instance(child)
+- C 타입 # B를 감싼 master component(child)
+- D 타입 # C의 instance(grand child)
+
+| 구분 | 노드 타입(일반) | 선택 시 타겟 해석 | 데이터 저장(pluginData) | 로컬 오버라이드 | 스타일/컬러 적용 우선순위 | 비고 |
+|---|---|---|---|---|---|---|
+| A | `COMPONENT` | A 자체 또는 하위 chart 인식 시 A | 저장 가능 | 없음 | pluginData 기반 | 구조 기준점 |
+| B | `INSTANCE` | B 자체 우선 | 저장 가능 | 가능 | local override > pluginData > 추출값 | 인스턴스 독립 커스터마이즈 |
+| C | `COMPONENT` | C 선택 시 하위 chart(B 계열) resolve | C/resolve 대상 기준 저장 | 없음(컴포넌트 자체) | pluginData/추출값 | `isCType` 조건 시 resize 보정 실행 |
+| D | `INSTANCE` | D 선택 시 하위/내부 chart resolve | 저장 가능 | 가능 | local override > pluginData > 추출값 | C에서 설정한 내용이 기본값으로 전달될 수 있음 |
+
+### C 타입 추가 동작(현재 구현)
+
+- C 타입 판별 조건 # `selectedNode.type === COMPONENT` + resolve된 chart target이 C 하위 `INSTANCE`
+- 판별 후 resize 보정 # 지정 레이어만 수정
+  - C root -> `FIXED/FIXED`
+  - first child -> `FILL/FILL`
+  - `chart` -> `FILL/FILL`
+  - `chart_main` -> `FILL/FILL` (하위 유지)
+  - `chart_legend`(또는 `chart_legned`) -> width `FILL`
+
+---
+
+## 5) 색상/스타일 정책 요약
+
+- `ColorMode` # `hex` 또는 `paint_style`
+- row/col 별 상태 # `rowColorModes`, `rowPaintStyleIds`, `colColorModes`, `colPaintStyleIds`
+- Bar/Stacked # paint style 사용 시 fill + stroke 동시 주입
+- Line # vector는 stroke만 style link 적용, 실패 시 hex fallback
+- Save(Paint style mode) # 선택 PaintStyle 색상 갱신 + 현재 대상 즉시 반영
+
+---
+
+## 6) 현재 운영 메모
+
+- manifest 이름: `Test 1.0.2`
+- allowedDomains:
+  - `https://cdn.jsdelivr.net`
+  - `https://cdn.tailwindcss.com`
+  - `https://d3js.org`
