@@ -1359,10 +1359,26 @@ function openStyleItemPopoverInternal(
     preserveSession = false
 ) {
     initializeStyleColorPicker();
-    if (target === 'mark' && Number.isFinite(seriesIndex)) {
+    let resolvedTarget = target;
+    let resolvedColIndex = colIndex;
+
+    // In bar charts, a clicked mark should open its column popover only when that exact column has override enabled.
+    if (target === 'mark' && state.chartType === 'bar') {
+        const clickedCol = Number.isFinite(colIndex) ? Math.max(0, Math.floor(Number(colIndex))) : null;
+        if (clickedCol !== null) {
+            const totalCols = getColumnTargetCount();
+            ensureColHeaderColorEnabledLength(totalCols);
+            if (state.colHeaderColorEnabled[clickedCol]) {
+                resolvedTarget = 'column';
+                resolvedColIndex = clickedCol;
+            }
+        }
+    }
+
+    if (resolvedTarget === 'mark' && Number.isFinite(seriesIndex)) {
         applyMarkIndexFromPreview(Number(seriesIndex));
     }
-    const config = getStylePopoverConfigForTarget(target, sourceInput || null, colIndex);
+    const config = getStylePopoverConfigForTarget(resolvedTarget, sourceInput || null, resolvedColIndex);
     if (!config) return false;
 
     const keepSession = styleItemPopoverOpen && preserveSession;
@@ -1373,12 +1389,12 @@ function openStyleItemPopoverInternal(
         styleItemPopoverSessionSnapshot = buildPopoverSessionSnapshot();
     }
 
-    styleItemPopoverTarget = target;
+    styleItemPopoverTarget = resolvedTarget;
     styleItemPopoverConfig = config;
     styleItemPopoverSourceInput = sourceInput || null;
     styleItemPopoverColumnIndex = null;
-    if (target === 'column' && Number.isFinite(colIndex)) {
-        const snapshot = getColumnPopoverSnapshot(Number(colIndex));
+    if (resolvedTarget === 'column' && Number.isFinite(resolvedColIndex)) {
+        const snapshot = getColumnPopoverSnapshot(Number(resolvedColIndex));
         if (snapshot.mode === 'paint_style' && !snapshot.styleId) {
             snapshot.mode = 'hex';
         }
@@ -1389,7 +1405,7 @@ function openStyleItemPopoverInternal(
         styleItemPopoverMode = 'hex';
         styleItemPopoverSelectedStyleId = null;
     }
-    syncPopoverNavigatorFromTarget(target, seriesIndex, colIndex);
+    syncPopoverNavigatorFromTarget(resolvedTarget, seriesIndex, resolvedColIndex);
     styleItemPopoverAnchorRect = anchorRect;
     styleItemPopoverOpen = true;
 
