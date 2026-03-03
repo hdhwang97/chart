@@ -420,7 +420,9 @@ export async function initPluginUI(
         const runtimeColColors = localOverrideState.mask.colColors ? localOverrideState.overrides.colColors : undefined;
         const runtimeColColorModes = localOverrideState.mask.colColorModes ? localOverrideState.overrides.colColorModes : undefined;
         const runtimeColPaintStyleIds = localOverrideState.mask.colPaintStyleIds ? localOverrideState.overrides.colPaintStyleIds : undefined;
-        const runtimeColEnabled = localOverrideState.mask.colColorEnabled ? localOverrideState.overrides.colColorEnabled : undefined;
+        const runtimeColEnabled = localOverrideState.mask.colColorEnabled
+            ? localOverrideState.overrides.colColorEnabled
+            : undefined;
         const runtimeMarkColorSource = localOverrideState.mask.markColorSource ? localOverrideState.overrides.markColorSource : undefined;
         const runtimeAssistLineStyle = localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined;
         const rowCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
@@ -450,7 +452,8 @@ export async function initPluginUI(
             colColors: runtimeColColors ?? resolveColColorsFromNode(node, Math.max(1, colCount)),
             colColorModes: runtimeColColorModes ?? resolveColColorModesFromNode(node, Math.max(1, colCount)),
             colPaintStyleIds: runtimeColPaintStyleIds ?? resolveColPaintStyleIdsFromNode(node, Math.max(1, colCount)),
-            colColorEnabled: runtimeColEnabled,
+            colColorEnabled: runtimeColEnabled
+                ?? resolveColColorEnabledFromNode(node, Math.max(1, colCount)),
             markColorSource: runtimeMarkColorSource,
             assistLineStyle: runtimeAssistLineStyle,
             reason: opts?.reason || 'auto-resize'

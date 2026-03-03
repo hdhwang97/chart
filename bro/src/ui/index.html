@@ -767,7 +767,7 @@
 
         <label id="style-item-enable-row" class="hidden flex items-center gap-2 mb-2 text-xxs text-text-sub select-none cursor-pointer">
             <input id="style-item-enable-input" type="checkbox" class="cursor-pointer" />
-            <span>Enable override</span>
+            <span>Use column style</span>
         </label>
 
         <label id="style-item-visible-row" class="hidden flex items-center gap-2 mb-2 text-xxs text-text-sub select-none cursor-pointer">
@@ -797,7 +797,9 @@
             </div>
         </div>
 
-        <div class="mt-2 flex justify-end">
+        <div class="mt-2 flex justify-end gap-1.5">
+            <button id="style-item-cancel-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-red-300 text-red-600 hover:bg-red-50 cursor-pointer">Cancel</button>
             <button id="style-item-save-btn" type="button"
                 class="px-2 py-1 text-xxs font-semibold rounded border border-border text-primary hover:bg-blue-50 cursor-pointer">Save</button>
         </div>

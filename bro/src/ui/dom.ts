@@ -165,6 +165,7 @@ export const ui = {
     get styleItemSideRight() { return byId<HTMLInputElement>('style-item-side-right'); },
     get styleItemSideBottom() { return byId<HTMLInputElement>('style-item-side-bottom'); },
     get styleItemSideLeft() { return byId<HTMLInputElement>('style-item-side-left'); },
+    get styleItemCancelBtn() { return byId<HTMLButtonElement>('style-item-cancel-btn'); },
     get styleItemSaveBtn() { return byId<HTMLButtonElement>('style-item-save-btn'); },
 
     get styleCellTopColorInput() { return byId<HTMLInputElement>('style-cell-top-color'); },
