@@ -779,9 +779,11 @@ function applyLegendMarkSync(
 
 function applyTabRightStroke(columns: ColRef[], style: NormalizedSideStyle): ScopeResult {
     const result = createScopeResult();
-    result.candidates = columns.length;
+    const visibleColumns = columns.filter((col) => col.node.visible);
+    const targetColumns = visibleColumns;
+    result.candidates = targetColumns.length;
 
-    columns.forEach((col) => {
+    targetColumns.forEach((col) => {
         if (!('children' in col.node)) {
             result.skipped += 1;
             return;

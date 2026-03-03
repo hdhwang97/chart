@@ -563,8 +563,7 @@ function initializeStyleColorPicker() {
     });
 
     styleColorPicker.on('color:change', (color: any) => {
-        if (!styleItemPopoverOpen) return;
-        if (styleItemPopoverMode !== 'hex') return;
+        if (!canApplyStylePopoverColorEdit()) return;
         if (isSyncingStyleColorPicker) return;
         const hex = normalizeHexColorInput(color?.hexString || '') || toHex6FromRgb(color);
         if (!hex) return;
@@ -987,20 +986,40 @@ function syncMarkLinkUiState() {
         styleItemPopoverActiveColorField = 'primary';
     }
     ui.styleItemSecondaryColorInput.disabled = !strokeEnabled;
-    ui.styleItemSecondaryColorInput.classList.toggle('style-item-color-input-readonly', !strokeEnabled || styleItemPopoverMode !== 'hex');
+    ui.styleItemSecondaryColorInput.classList.toggle('style-item-color-input-readonly', !strokeEnabled || !canApplyStylePopoverColorEdit());
 }
 
 function refreshStyleItemModeUi() {
     const isHex = styleItemPopoverMode === 'hex';
+    const canEditColors = isHex || (styleItemPopoverMode === 'paint_style' && Boolean(styleItemPopoverSelectedStyleId));
     ui.styleItemModeTabHex.classList.toggle('is-active', isHex);
     ui.styleItemModeTabStyle.classList.toggle('is-active', !isHex);
     ui.styleItemStyleRow.classList.toggle('hidden', isHex);
 
     [ui.styleItemPrimaryColorInput, ui.styleItemSecondaryColorInput].forEach((input) => {
-        input.readOnly = !isHex;
-        input.classList.toggle('style-item-color-input-readonly', !isHex);
+        input.readOnly = !canEditColors;
+        input.classList.toggle('style-item-color-input-readonly', !canEditColors);
     });
     syncMarkLinkUiState();
+}
+
+function canApplyStylePopoverColorEdit() {
+    if (!styleItemPopoverOpen) return false;
+    if (styleItemPopoverMode === 'hex') return true;
+    return styleItemPopoverMode === 'paint_style' && Boolean(styleItemPopoverSelectedStyleId);
+}
+
+function requestPaintStyleColorUpdateIfNeeded(colorHex: string) {
+    if (styleItemPopoverMode !== 'paint_style') return;
+    const styleId = styleItemPopoverSelectedStyleId;
+    if (!styleId) return;
+    const selected = stylePopoverPaintStyles.find((item) => item.id === styleId);
+    if (selected?.remote) return;
+    const next = normalizeHexColorInput(colorHex);
+    if (!next) return;
+    const current = normalizeHexColorInput(selected?.colorHex);
+    if (current && current === next) return;
+    parent.postMessage({ pluginMessage: { type: 'update_paint_style_color', id: styleId, colorHex: next } }, '*');
 }
 
 function setStyleItemPaintStyleOptions() {
@@ -1036,10 +1055,17 @@ function applyStylePopoverHexInputValue(input: HTMLInputElement) {
         return;
     }
     input.classList.remove('style-color-hex-error');
+    if (input === ui.styleItemPrimaryColorInput) {
+        ui.styleItemPrimaryColorPreview.style.backgroundColor = normalized;
+    } else if (input === ui.styleItemSecondaryColorInput) {
+        ui.styleItemSecondaryColorPreview.style.backgroundColor = normalized;
+    }
     if (styleItemPopoverTarget === 'column') {
         ui.styleItemPrimaryColorInput.value = normalized;
+        ui.styleItemPrimaryColorPreview.style.backgroundColor = normalized;
         ui.styleItemEnableInput.checked = true;
         syncColumnPopoverStateAndEmit();
+        requestPaintStyleColorUpdateIfNeeded(normalized);
         updateStyleItemPopoverPreview();
         return;
     }
@@ -1071,6 +1097,7 @@ function applyStylePopoverHexInputValue(input: HTMLInputElement) {
         }
     }
     syncStyleDraftFromDomAndEmit();
+    requestPaintStyleColorUpdateIfNeeded(normalized);
     updateStyleItemPopoverPreview();
 }
 
@@ -1475,6 +1502,7 @@ export function setStylePopoverPaintStyles(list: PaintStyleSelection[]) {
     stylePopoverPaintStyles = Array.isArray(list) ? list.slice() : [];
     if (styleItemPopoverOpen) {
         setStyleItemPaintStyleOptions();
+        refreshStyleItemModeUi();
     }
 }
 
@@ -2295,6 +2323,7 @@ export function bindStyleTabEvents() {
     });
     ui.styleItemStyleSelect.addEventListener('change', () => {
         styleItemPopoverSelectedStyleId = ui.styleItemStyleSelect.value || null;
+        refreshStyleItemModeUi();
         applySelectedPaintStyleColor();
         if (styleItemPopoverTarget === 'column') {
             syncColumnPopoverStateAndEmit();
@@ -2327,11 +2356,11 @@ export function bindStyleTabEvents() {
         updateStyleItemPopoverPreview();
     });
     ui.styleItemPrimaryColorInput.addEventListener('input', () => {
-        if (!styleItemPopoverOpen || styleItemPopoverMode !== 'hex') return;
+        if (!canApplyStylePopoverColorEdit()) return;
         applyStylePopoverHexInputValue(ui.styleItemPrimaryColorInput);
     });
     ui.styleItemSecondaryColorInput.addEventListener('input', () => {
-        if (!styleItemPopoverOpen || styleItemPopoverMode !== 'hex') return;
+        if (!canApplyStylePopoverColorEdit()) return;
         applyStylePopoverHexInputValue(ui.styleItemSecondaryColorInput);
     });
     ui.styleItemStrokeStyleInput.addEventListener('change', () => {

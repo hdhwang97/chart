@@ -479,7 +479,9 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
 
     if (tabRightStroke && totalCols > 0) {
         if (xGuidePositions && xGuidePositions.length > 0) {
-            xGuidePositions.forEach((x) => {
+            xGuidePositions
+                .filter((x) => x > 0 && x <= w)
+                .forEach((x) => {
                 const line = g.append('line')
                     .attr('x1', x)
                     .attr('x2', x)
@@ -493,7 +495,7 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
             });
         } else {
             const step = w / totalCols;
-            for (let c = 0; c <= totalCols; c++) {
+            for (let c = 1; c <= totalCols; c++) {
                 const line = g.append('line')
                     .attr('x1', c * step)
                     .attr('x2', c * step)
