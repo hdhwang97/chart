@@ -34,6 +34,7 @@ import { goToStep, selectType, resetData, updateSettingInputs, submitData } from
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
 import { bindStyleTabEvents, buildTemplatePayloadFromDraft, buildLocalStyleOverridesFromDraft, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection } from '../shared/style-types';
+import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
 
 // ==========================================
@@ -756,9 +757,11 @@ function handlePluginMessage(msg: any) {
             state.markColorSource = 'row';
             state.assistLineVisible = false;
             state.assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
+            state.yLabelFormat = 'integer';
             ui.settingMarkRatioInput.value = '80';
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
+            ui.settingYLabelFormat.value = state.yLabelFormat;
             closeAssistLinePopover();
             closeStyleAssistLinePopover();
             closeRowColorPopover();
@@ -889,8 +892,10 @@ function handlePluginMessage(msg: any) {
         // Apply saved settings
         if (msg.lastCellCount) state.cellCount = Number(msg.lastCellCount);
         if (msg.lastMode) state.dataMode = msg.lastMode as 'raw' | 'percent';
+        state.yLabelFormat = normalizeYLabelFormatMode(msg.lastYLabelFormat);
         ui.settingYMin.value = msg.lastYMin !== undefined ? String(msg.lastYMin) : '0';
         ui.settingYMax.value = msg.lastYMax !== undefined ? String(msg.lastYMax) : ((msg.lastMode || 'raw') === 'raw' ? '' : '100');
+        ui.settingYLabelFormat.value = state.yLabelFormat;
         if (msg.lastStrokeWidth !== undefined) {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
@@ -1406,6 +1411,12 @@ function bindUiEvents() {
         renderStylePreview();
         applyModeLocks();
         checkCtaValidation();
+    });
+    ui.settingYLabelFormat.addEventListener('change', () => {
+        state.yLabelFormat = normalizeYLabelFormatMode(ui.settingYLabelFormat.value);
+        renderPreview();
+        renderStylePreview();
+        refreshExportPreview();
     });
 
     // CSV

@@ -483,6 +483,7 @@ figma.ui.onmessage = async (msg) => {
             cellCount,
             yMin,
             yMax,
+            yLabelFormat,
             markNum,
             strokeWidth,
             markRatio,
@@ -645,7 +646,7 @@ figma.ui.onmessage = async (msg) => {
         await perf.step('basic-setup', () => {
             setLayerVisibility(targetNode, "col-", graphColCount, columns);
             applyCells(targetNode, cellCount);
-            applyYAxis(targetNode, cellCount, { yMin: effectiveY.yMin, yMax: effectiveY.yMax });
+            applyYAxis(targetNode, cellCount, { yMin: effectiveY.yMin, yMax: effectiveY.yMax, yLabelFormat });
         });
 
         // 4. Draw Chart

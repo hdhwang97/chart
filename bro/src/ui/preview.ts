@@ -1,6 +1,8 @@
 import { state, getTotalStackedCols, getRowColor, getGridColsForChart, normalizeHexColorInput, resolveBarFillColor } from './state';
 import { ui } from './dom';
 import type { StrokeStyleSnapshot } from '../shared/style-types';
+import type { YLabelFormatMode } from '../shared/y-label-format';
+import { formatYLabelValue } from '../shared/y-label-format';
 import { getEffectiveYDomain } from './y-range';
 
 // ==========================================
@@ -448,10 +450,18 @@ function computeClusterLayout(cellWidth: number, markRatio: number, markNum: num
     return { clusterW, clusterOffset, subBarW, gapPx };
 }
 
-function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
+function renderAxes(
+    g: any,
+    xScale: any,
+    yScale: any,
+    yTickValues: number[],
+    h: number,
+    yLabelFormat: YLabelFormatMode,
+    xTickValues?: number[]
+) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
-        .tickFormat((d: number) => String(Math.round(Number(d))))
+        .tickFormat((d: number) => formatYLabelValue(Number(d), yLabelFormat))
         .tickPadding(6);
 
     const yAxisGroup = g.append('g').call(yAxis);
@@ -747,7 +757,7 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
 
     drawTabBackgroundLayer(g, w, h, mode);
 
-    renderAxes(g, xAxisScale, yScale, yTickValues, h, lineTickValues);
+    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;

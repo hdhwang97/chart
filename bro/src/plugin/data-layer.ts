@@ -12,6 +12,7 @@ import type {
     SideStrokeInjectionStyle,
     StyleApplyMode
 } from '../shared/style-types';
+import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 
 // ==========================================
 // DATA LAYER (저장/로드 핵심 로직)
@@ -378,6 +379,7 @@ export function saveChartData(
         } else {
             node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX, String(msg.yMax));
         }
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_LABEL_FORMAT, normalizeYLabelFormatMode(msg.yLabelFormat));
     }
 
     node.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(msg.cellCount));

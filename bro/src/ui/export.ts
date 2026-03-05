@@ -1,6 +1,8 @@
 import { ui } from './dom';
 import { state, getRowColor, normalizeHexColorInput, getGridColsForChart, resolveBarFillColor } from './state';
 import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
+import type { YLabelFormatMode } from '../shared/y-label-format';
+import { formatYLabelValue } from '../shared/y-label-format';
 import { getEffectiveYDomain } from './y-range';
 import { closeStyleItemPopover } from './style-tab';
 
@@ -248,10 +250,18 @@ function drawTabBackgroundLayer(g: any, w: number, h: number) {
         .attr('fill-opacity', 1);
 }
 
-function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: number, xTickValues?: number[]) {
+function renderAxes(
+    g: any,
+    xScale: any,
+    yScale: any,
+    yTickValues: number[],
+    h: number,
+    yLabelFormat: YLabelFormatMode,
+    xTickValues?: number[]
+) {
     const yAxis = d3.axisLeft(yScale)
         .tickValues(yTickValues)
-        .tickFormat((d: number) => String(Math.round(Number(d))))
+        .tickFormat((d: number) => formatYLabelValue(Number(d), yLabelFormat))
         .tickPadding(6);
 
     const yAxisGroup = g.append('g').call(yAxis);
@@ -451,7 +461,7 @@ function renderD3Preview(style: any) {
     const yTickValues = buildYTickValues(yDomain.yMin, yDomain.yMax, yCount);
 
     drawTabBackgroundLayer(g, w, h);
-    renderAxes(g, xAxisScale, yScale, yTickValues, h, lineTickValues);
+    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;
@@ -507,16 +517,17 @@ function renderD3Preview(style: any) {
                 .attr('d', line);
             applyStrokeExtras(path, draftStroke);
 
-            lineData.forEach((val: number, i: number) => {
-                const dot = g.append('circle')
-                    .attr('cx', xScale(i)!)
-                    .attr('cy', yScale(val))
-                    .attr('r', 3)
-                    .attr('fill', baseColor);
-                if (typeof draftStroke?.opacity === 'number') {
-                    dot.attr('opacity', draftStroke.opacity);
-                }
-            });
+            // Preview pointer (line dots) disabled for export tab.
+            // lineData.forEach((val: number, i: number) => {
+            //     const dot = g.append('circle')
+            //         .attr('cx', xScale(i)!)
+            //         .attr('cy', yScale(val))
+            //         .attr('r', 3)
+            //         .attr('fill', baseColor);
+            //     if (typeof draftStroke?.opacity === 'number') {
+            //         dot.attr('opacity', draftStroke.opacity);
+            //     }
+            // });
         }
     } else if (chartType === 'stackedBar') {
         const ratio = normalizeMarkRatio(style.markRatio);

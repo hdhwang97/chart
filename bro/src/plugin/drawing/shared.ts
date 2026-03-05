@@ -1,5 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_CEL_TYPE, VARIANT_PROPERTY_Y_LABEL, VARIANT_PROPERTY_Y_END } from '../constants';
 import { traverse, findActualPropKey } from '../utils';
+import { formatYLabelValue, normalizeYLabelFormatMode } from '../../shared/y-label-format';
 
 // ==========================================
 // SHARED DRAWING HELPERS
@@ -106,7 +107,7 @@ export function applyYAxis(node: SceneNode, cellCount: number, payload: any) {
     if (!yAxis || !("children" in yAxis)) return;
 
     const step = (yMax - yMin) / cellCount;
-    const formatValue = (val: number) => Number.isInteger(val) ? String(val) : val.toFixed(1).replace('.0', '');
+    const yLabelFormat = normalizeYLabelFormatMode(payload?.yLabelFormat);
 
     (yAxis as any).children.forEach((child: SceneNode) => {
         const match = MARK_NAME_PATTERNS.Y_CEL_ITEM.exec(child.name);
@@ -120,8 +121,8 @@ export function applyYAxis(node: SceneNode, cellCount: number, payload: any) {
                         const currentProps = child.componentProperties;
                         const valLabel = yMin + (step * (idx - 1));
                         const valEnd = yMin + (step * idx);
-                        const textLabel = formatValue(valLabel);
-                        const textEnd = formatValue(valEnd);
+                        const textLabel = formatYLabelValue(valLabel, yLabelFormat);
+                        const textEnd = formatYLabelValue(valEnd, yLabelFormat);
 
                         const keyCelType = findActualPropKey(currentProps, VARIANT_PROPERTY_CEL_TYPE);
                         const keyLabel = findActualPropKey(currentProps, VARIANT_PROPERTY_Y_LABEL);

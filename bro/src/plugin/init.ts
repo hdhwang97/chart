@@ -24,6 +24,7 @@ import type {
     MarkInjectionStyle,
     SideStrokeInjectionStyle
 } from '../shared/style-types';
+import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 
 // ==========================================
 // COMPONENT DISCOVERY
@@ -493,6 +494,7 @@ export async function initPluginUI(
     const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
     const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
     const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
+    const lastYLabelFormat = normalizeYLabelFormatMode(node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_LABEL_FORMAT));
     const parsedLastYMin = lastYMin !== '' && Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : undefined;
     const parsedLastYMax = lastYMax !== '' && Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : undefined;
     const extractedColors = extractChartColors(node, chartType);
@@ -603,6 +605,7 @@ export async function initPluginUI(
         lastMode: lastMode,
         lastYMin: parsedLastYMin,
         lastYMax: parsedLastYMax,
+        lastYLabelFormat,
 
         markColors: extractedColors,
         rowColors,

@@ -112,6 +112,7 @@ export function applyModeLocks() {
         ui.settingMarkSelect,
         ui.settingYMin,
         ui.settingYMax,
+        ui.settingYLabelFormat,
         ui.settingMarkRatioInput,
         ui.settingStrokeInput,
         ui.modeRawBtn,

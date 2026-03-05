@@ -11,6 +11,7 @@ import type {
     StrokeStyleSnapshot,
     StyleTemplateItem
 } from '../shared/style-types';
+import type { YLabelFormatMode } from '../shared/y-label-format';
 
 export const MAX_SIZE = 25;
 export const DEFAULT_ROW_COLORS = [
@@ -95,6 +96,7 @@ export const state = {
     mode: 'edit' as 'edit' | 'read',
     chartType: 'bar' as string,
     dataMode: 'raw' as 'raw' | 'percent',
+    yLabelFormat: 'integer' as YLabelFormatMode,
     currentStep: 1,
     csvFileName: null as string | null,
     uiMode: 'create' as 'create' | 'edit',

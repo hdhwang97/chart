@@ -46,6 +46,7 @@ export const PLUGIN_DATA_KEYS = {
     LAST_X_AXIS_LABELS: "lastXAxisLabels",
     LAST_Y_MIN: "lastYMin",
     LAST_Y_MAX: "lastYMax",
+    LAST_Y_LABEL_FORMAT: "lastYLabelFormat",
 
     // 스타일 관련 키
     LAST_BAR_PADDING: "lastBarPadding",

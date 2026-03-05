@@ -150,6 +150,7 @@ export function updateSettingInputs() {
     ui.settingColInput.value = String(state.cols);
     ui.settingCellInput.value = String(state.cellCount);
     ui.settingStrokeInput.value = String(state.strokeWidth);
+    ui.settingYLabelFormat.value = state.yLabelFormat;
     state.markRatio = normalizeMarkRatio(state.markRatio);
     ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
     ui.containerMarkNormal.classList.remove('hidden');
@@ -238,6 +239,7 @@ export function submitData() {
         cellCount: state.cellCount,
         yMin: Number(ui.settingYMin.value) || 0,
         yMax: state.dataMode === 'raw' ? effectiveYMax : (parseOptionalNumber(ui.settingYMax.value) ?? 100),
+        yLabelFormat: state.yLabelFormat,
         rawYMaxAuto,
         markNum: markNum,
         strokeWidth: state.strokeWidth,
