@@ -1,5 +1,5 @@
 import { ui } from './dom';
-import { state, getTotalStackedCols, getRowColor, normalizeHexColorInput, getGridColsForChart, resolveBarFillColor } from './state';
+import { state, getRowColor, normalizeHexColorInput, getGridColsForChart, resolveBarFillColor } from './state';
 import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 import { getEffectiveYDomain } from './y-range';
 import { closeStyleItemPopover } from './style-tab';
@@ -157,7 +157,7 @@ function computeClusterLayout(cellWidth: number, markRatio: number, markNum: num
 
 function buildStateNumericData(chartType: string, totalCols: number): number[][] {
     const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
-    const cols = isStacked ? getTotalStackedCols() : totalCols;
+    const cols = isStacked ? state.groupStructure.reduce((a, b) => a + b, 0) : totalCols;
     const rows = Math.max(0, state.rows);
     const data: number[][] = [];
 

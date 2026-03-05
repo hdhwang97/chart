@@ -456,7 +456,9 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
 
     const yAxisGroup = g.append('g').call(yAxis);
     yAxisGroup.selectAll('.tick line').remove();
-    yAxisGroup.selectAll('text').attr('font-size', 9);
+    yAxisGroup.selectAll('text')
+        .attr('font-size', 9)
+        .attr('font-family', 'Inter, sans-serif');
 
     const xAxis = d3.axisBottom(xScale)
         .tickSizeOuter(0)
@@ -469,7 +471,9 @@ function renderAxes(g: any, xScale: any, yScale: any, yTickValues: number[], h: 
         .attr('transform', `translate(0,${h})`)
         .call(xAxis);
     xAxisGroup.selectAll('.tick line').remove();
-    xAxisGroup.selectAll('text').attr('font-size', 9);
+    xAxisGroup.selectAll('text')
+        .attr('font-size', 9)
+        .attr('font-family', 'Inter, sans-serif');
 }
 
 function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount: number, mode: PreviewInteractionMode, xGuidePositions?: number[]) {
@@ -874,9 +878,6 @@ function renderLinePreview(
 
         const styleMark = getMarkDraftStyle(r);
         const rowStroke = mode === 'style' ? getMarkDraftStroke(r) : (getRowStroke(r) || state.colStrokeStyle);
-        const baseColor = mode === 'style'
-            ? styleMark.fillColor
-            : resolveSeriesStyleColor(r, 'line', 'fill');
         const pathStrokeColor = mode === 'style'
             ? styleMark.strokeColor
             : resolveSeriesStyleColor(r, 'line', 'stroke');
@@ -925,6 +926,9 @@ function renderLinePreview(
         applyStrokeExtras(path, rowStroke);
 
         const rowDots: any[] = [];
+        // TODO: line preview pointer는 추후 업데이트 예정.
+        // pointer 재활성화 시 fill 색상은 line stroke 색상(pathStrokeColor)과 동일하게 유지.
+        /*
         lineData.forEach((val: number, i: number) => {
             const isColHighlighted = activeHighlight?.type === 'col' && activeHighlight.index === i;
             const isCellHighlighted = activeHighlight?.type === 'cell' && activeHighlight.row === r && activeHighlight.col === i;
@@ -939,7 +943,7 @@ function renderLinePreview(
                 .attr('cx', xScale(i)!)
                 .attr('cy', yScale(val))
                 .attr('r', dotRadius)
-                .attr('fill', baseColor)
+                .attr('fill', pathStrokeColor)
                 .attr('opacity', dotOpacity)
                 .attr('data-base-opacity', dotOpacity);
 
@@ -970,6 +974,7 @@ function renderLinePreview(
             applyStroke(dot, rowStroke, 'none', 0);
             rowDots.push(dot);
         });
+        */
         rowLayers.push({ row: r, path, dots: rowDots });
     }
 

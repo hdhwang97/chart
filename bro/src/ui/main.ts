@@ -623,10 +623,20 @@ function commitRowColorPopoverIfOpen() {
     return applied;
 }
 
-function normalizeMarkRatioInput(value: unknown): number {
+function normalizeMarkRatio(value: unknown): number {
     const ratio = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(ratio)) return 0.8;
     return Math.max(0.01, Math.min(1.0, ratio));
+}
+
+function parseMarkRatioPercentInput(value: unknown): number {
+    const percent = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(percent)) return 0.8;
+    return normalizeMarkRatio(percent / 100);
+}
+
+function formatMarkRatioPercentInput(value: unknown): string {
+    return String(Math.round(normalizeMarkRatio(value) * 100));
 }
 
 function normalizeAssistLineEnabledInput(value: any) {
@@ -746,7 +756,7 @@ function handlePluginMessage(msg: any) {
             state.markColorSource = 'row';
             state.assistLineVisible = false;
             state.assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
-            ui.settingMarkRatioInput.value = '0.8';
+            ui.settingMarkRatioInput.value = '80';
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
             closeAssistLinePopover();
@@ -885,10 +895,10 @@ function handlePluginMessage(msg: any) {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
         }
-        state.markRatio = normalizeMarkRatioInput(msg.markRatio);
+        state.markRatio = normalizeMarkRatio(msg.markRatio);
         state.assistLineVisible = normalizeAssistLineVisibleInput(msg.assistLineVisible);
         state.assistLineEnabled = normalizeAssistLineEnabledInput(msg.assistLineEnabled);
-        ui.settingMarkRatioInput.value = String(state.markRatio);
+        ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
         closeAssistLinePopover();
         updateAssistLineToggleUi();
         state.colStrokeStyle = msg.colStrokeStyle || null;
@@ -1061,7 +1071,7 @@ function handlePluginMessage(msg: any) {
             return;
         }
 
-        state.markRatio = normalizeMarkRatioInput(msg.payload?.markRatio);
+        state.markRatio = normalizeMarkRatio(msg.payload?.markRatio);
         if (msg.payload?.strokeWidth !== undefined && Number.isFinite(Number(msg.payload.strokeWidth))) {
             state.strokeWidth = Number(msg.payload.strokeWidth);
             ui.settingStrokeInput.value = String(state.strokeWidth);
@@ -1127,7 +1137,7 @@ function handlePluginMessage(msg: any) {
             state.assistLineEnabled = normalizeAssistLineEnabledInput(msg.payload.assistLineEnabled);
         }
         updateAssistLineToggleUi();
-        ui.settingMarkRatioInput.value = String(state.markRatio);
+        ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
         state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
@@ -1163,8 +1173,8 @@ function bindUiEvents() {
     ui.settingCellInput.addEventListener('change', handleDimensionInput);
     ui.settingStrokeInput.addEventListener('change', handleDimensionInput);
     ui.settingMarkRatioInput.addEventListener('change', () => {
-        state.markRatio = normalizeMarkRatioInput(ui.settingMarkRatioInput.value);
-        ui.settingMarkRatioInput.value = String(state.markRatio);
+        state.markRatio = parseMarkRatioPercentInput(ui.settingMarkRatioInput.value);
+        ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
         renderPreview();
         renderStylePreview();
     });

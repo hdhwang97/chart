@@ -40,7 +40,7 @@ const TOOLTIP_CONTENT_MAP: Record<string, TooltipContent> = {
     'column-width-ratio': {
         imageSrc: colWidthRatioImg,
         title: '컬럼 폭 비율',
-        body: '막대가 차지하는 가로 폭 비율입니다. 값이 클수록 막대가 넓어집니다.'
+        body: '막대가 차지하는 가로 폭 비율(%)입니다. 값이 클수록 막대가 넓어집니다.'
     },
     'y-min': {
         imageSrc: yMinImg,

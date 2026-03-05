@@ -41,7 +41,7 @@ export const ui = {
 
     get settingYMin() { return byId<HTMLInputElement>('setting-y-min'); },
     get settingYMax() { return byId<HTMLInputElement>('setting-y-max'); },
-    get settingMarkRatioInput() { return byId<HTMLInputElement>('setting-mark-ratio-input'); },
+    get settingMarkRatioInput() { return byId<HTMLSelectElement>('setting-mark-ratio-input'); },
 
     get settingStrokeInput() { return byId<HTMLInputElement>('setting-stroke-input'); },
     get containerMarkRatio() { return byId<HTMLElement>('container-mark-ratio'); },

@@ -19,6 +19,10 @@ function normalizeMarkRatio(value: unknown): number {
     return Math.max(0.01, Math.min(1.0, ratio));
 }
 
+function formatMarkRatioPercentInput(value: unknown): string {
+    return String(Math.round(normalizeMarkRatio(value) * 100));
+}
+
 function parseOptionalNumber(value: string): number | null {
     if (value.trim() === '') return null;
     const n = Number(value);
@@ -147,7 +151,7 @@ export function updateSettingInputs() {
     ui.settingCellInput.value = String(state.cellCount);
     ui.settingStrokeInput.value = String(state.strokeWidth);
     state.markRatio = normalizeMarkRatio(state.markRatio);
-    ui.settingMarkRatioInput.value = String(state.markRatio);
+    ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
     ui.containerMarkNormal.classList.remove('hidden');
 
     if (state.chartType === 'line') {
