@@ -8,7 +8,7 @@ import { loadChartData, loadLocalStyleOverrides } from './data-layer';
 import { extractChartColors, extractStyleFromNode } from './style';
 import { collectColumns } from './drawing/shared';
 import { applyBar } from './drawing/bar';
-import { applyLine } from './drawing/line';
+import { applyLine, isLineTestColumn } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
@@ -19,6 +19,7 @@ import type {
     CellFillInjectionStyle,
     ColorMode,
     GridStrokeInjectionStyle,
+    LineBackgroundInjectionStyle,
     LocalStyleOverrideMask,
     LocalStyleOverrides,
     MarkInjectionStyle,
@@ -112,6 +113,18 @@ function parseSavedCellFillStyleFromNode(node: SceneNode, key: string): CellFill
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object') return null;
         return parsed as CellFillInjectionStyle;
+    } catch {
+        return null;
+    }
+}
+
+function parseSavedLineBackgroundStyleFromNode(node: SceneNode, key: string): LineBackgroundInjectionStyle | null {
+    const raw = node.getPluginData(key);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed as LineBackgroundInjectionStyle;
     } catch {
         return null;
     }
@@ -478,6 +491,7 @@ export async function initPluginUI(
                 ...(localOverrideState.mask.colPaintStyleIds ? { colPaintStyleIds: localOverrideState.overrides.colPaintStyleIds } : {}),
                 ...(localOverrideState.mask.colColorEnabled ? { colColorEnabled: localOverrideState.overrides.colColorEnabled } : {}),
                 ...(localOverrideState.mask.cellFillStyle ? { cellFillStyle: localOverrideState.overrides.cellFillStyle } : {}),
+                ...(localOverrideState.mask.lineBackgroundStyle ? { lineBackgroundStyle: localOverrideState.overrides.lineBackgroundStyle } : {}),
                 ...(localOverrideState.mask.cellTopStyle ? { cellTopStyle: localOverrideState.overrides.cellTopStyle } : {}),
                 ...(localOverrideState.mask.tabRightStyle ? { tabRightStyle: localOverrideState.overrides.tabRightStyle } : {}),
                 ...(localOverrideState.mask.gridContainerStyle ? { gridContainerStyle: localOverrideState.overrides.gridContainerStyle } : {}),
@@ -510,6 +524,7 @@ export async function initPluginUI(
         parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE)
         || parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
     const savedCellFillStyle = parseSavedCellFillStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_FILL_STYLE);
+    const savedLineBackgroundStyle = parseSavedLineBackgroundStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_LINE_BACKGROUND_STYLE);
     const savedTabRightStyle = parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_TAB_RIGHT_STYLE);
     const savedGridContainerStyle = parseSavedGridStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_GRID_CONTAINER_STYLE);
     const savedAssistLineStyle = parseSavedAssistLineStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_STYLE);
@@ -554,6 +569,7 @@ export async function initPluginUI(
                 ? (node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row')
                 : 'row',
             cellFillStyle: styleInfo.cellFillStyle || undefined,
+            lineBackgroundStyle: styleInfo.lineBackgroundStyle || undefined,
             cellTopStyle: undefined,
             tabRightStyle: undefined,
             gridContainerStyle: undefined,
@@ -626,6 +642,9 @@ export async function initPluginUI(
         savedCellFillStyle: isInstanceTarget
             ? (localOverrideState.mask.cellFillStyle ? localOverrideState.overrides.cellFillStyle : undefined)
             : savedCellFillStyle,
+        savedLineBackgroundStyle: isInstanceTarget
+            ? (localOverrideState.mask.lineBackgroundStyle ? localOverrideState.overrides.lineBackgroundStyle : undefined)
+            : savedLineBackgroundStyle,
         savedTabRightStyle: isInstanceTarget
             ? (localOverrideState.mask.tabRightStyle ? localOverrideState.overrides.tabRightStyle : undefined)
             : savedTabRightStyle,
@@ -645,6 +664,7 @@ export async function initPluginUI(
         savedXAxisLabels,
 
         cellFillStyle: effectiveUiSnapshot.cellFillStyle || styleInfo.cellFillStyle || null,
+        lineBackgroundStyle: effectiveUiSnapshot.lineBackgroundStyle || styleInfo.lineBackgroundStyle || null,
         markStyle: effectiveUiSnapshot.markStyle || styleInfo.markStyle || null,
         markStyles: effectiveUiSnapshot.markStyles || styleInfo.markStyles || [],
         colStrokeStyle: effectiveUiSnapshot.colStrokeStyle || styleInfo.colStrokeStyle || null,
@@ -665,6 +685,7 @@ export async function initPluginUI(
             colColorEnabled: extractedColEnabled,
             markColorSource: 'row',
             cellFillStyle: styleInfo.cellFillStyle || null,
+            lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
             markStyle: styleInfo.markStyle || null,
             markStyles: styleInfo.markStyles || [],
             rowStrokeStyles: styleInfo.rowStrokeStyles || [],
@@ -766,6 +787,10 @@ export function inferChartType(node: SceneNode): string {
         const props = node.componentProperties;
         const typePropKey = findActualPropKey(props, VARIANT_PROPERTY_TYPE);
         if (typePropKey && props[typePropKey]) return props[typePropKey].value as string;
+    }
+    const visibleCols = collectColumns(node).filter((col) => col.node.visible);
+    if (visibleCols.some((col) => isLineTestColumn(col.node))) {
+        return 'line';
     }
     let found = 'bar';
     traverse(node, n => {

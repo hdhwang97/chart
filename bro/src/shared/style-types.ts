@@ -45,6 +45,11 @@ export type CellFillInjectionStyle = {
     color?: string;
 };
 
+export type LineBackgroundInjectionStyle = {
+    color?: string;
+    visible?: boolean;
+};
+
 export type AssistLineInjectionStyle = {
     color?: string;
     thickness?: number;
@@ -80,6 +85,7 @@ export type StrokeInjectionPayload = {
     colPaintStyleIds?: Array<string | null>;
     colColorEnabled?: boolean[];
     cellFillStyle?: CellFillInjectionStyle;
+    lineBackgroundStyle?: LineBackgroundInjectionStyle;
     cellTopStyle?: SideStrokeInjectionStyle;
     /** @deprecated legacy alias. Use `cellTopStyle`. */
     cellBottomStyle?: SideStrokeInjectionStyle;
@@ -103,6 +109,7 @@ export type LocalStyleOverrides = {
     assistLineVisible?: boolean;
     assistLineEnabled?: { min?: boolean; max?: boolean; avg?: boolean; ctr?: boolean };
     cellFillStyle?: CellFillInjectionStyle;
+    lineBackgroundStyle?: LineBackgroundInjectionStyle;
     cellTopStyle?: SideStrokeInjectionStyle;
     tabRightStyle?: SideStrokeInjectionStyle;
     gridContainerStyle?: GridStrokeInjectionStyle;
@@ -125,6 +132,7 @@ export type LocalStyleOverrideMask = {
     assistLineVisible?: boolean;
     assistLineEnabled?: boolean;
     cellFillStyle?: boolean;
+    lineBackgroundStyle?: boolean;
     cellTopStyle?: boolean;
     tabRightStyle?: boolean;
     gridContainerStyle?: boolean;

@@ -11,7 +11,7 @@ import { getEffectiveYDomain } from './y-range';
 
 declare const d3: any; // loaded from CDN in index.html
 
-export type StylePreviewTarget = 'cell-fill' | 'cell-top' | 'tab-right' | 'grid' | 'mark' | 'assist-line' | 'column';
+export type StylePreviewTarget = 'cell-fill' | 'line-background' | 'cell-top' | 'tab-right' | 'grid' | 'mark' | 'assist-line' | 'column';
 export type StylePreviewTargetMeta = {
     seriesIndex?: number;
     colIndex?: number;
@@ -607,6 +607,11 @@ function applyStyleTargetHover(container: HTMLElement, target: StylePreviewTarge
             node.setAttribute('fill', '#EF4444');
             node.setAttribute('fill-opacity', '0.35');
         }
+        if (target === 'line-background' && nodeTarget === 'line-background') {
+            node.setAttribute('fill', '#EF4444');
+            node.setAttribute('fill-opacity', '0.35');
+            node.style.opacity = '1';
+        }
         if (target === 'column' && nodeTarget === 'column') {
             node.setAttribute('fill', '#EF4444');
             node.setAttribute('fill-opacity', '0.2');
@@ -894,6 +899,31 @@ function renderLinePreview(
         const pathStrokeWidth = mode === 'style'
             ? Math.max(1, styleMark.thickness)
             : activePathStroke;
+        const lineBackground = state.styleInjectionDraft.lineBackground;
+        const areaColor = normalizeHexColorInput(lineBackground.color) || pathStrokeColor;
+        const areaVisible = Boolean(lineBackground.visible);
+        const yDomain = yScale.domain();
+        const yBase = Array.isArray(yDomain) && Number.isFinite(Number(yDomain[0])) ? Number(yDomain[0]) : 0;
+        const areaOpacity = activeHighlight ? (relatedRow ? 0.24 : 0.06) : 0.24;
+        if (areaVisible) {
+            const area = d3.area()
+                .x((_: any, i: number) => xScale(i)!)
+                .y0(() => yScale(yBase))
+                .y1((d: number) => yScale(d));
+            const areaPath = g.append('path')
+                .attr('class', 'preview-mark')
+                .datum(lineData)
+                .attr('fill', areaColor)
+                .attr('stroke', 'none')
+                .attr('d', area)
+                .attr('opacity', areaOpacity)
+                .attr('data-base-opacity', areaOpacity)
+                .style('pointer-events', mode === 'style' ? 'auto' : 'none');
+            if (mode === 'style') {
+                markStyleTarget(areaPath, 'line-background', mode);
+                markStyleTargetSeries(areaPath, r, mode);
+            }
+        }
         const path = g.append('path')
             .attr('class', 'preview-mark')
             .datum(lineData)

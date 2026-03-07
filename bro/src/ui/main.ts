@@ -123,7 +123,7 @@ function normalizeIncomingLocalMask(value: unknown): LocalStyleOverrideMask {
         'rowColors', 'rowColorModes', 'rowPaintStyleIds',
         'colColors', 'colColorModes', 'colPaintStyleIds', 'colColorEnabled', 'markColorSource',
         'assistLineVisible', 'assistLineEnabled',
-        'cellFillStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
+        'cellFillStyle', 'lineBackgroundStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
         'assistLineStyle', 'markStyle', 'markStyles', 'rowStrokeStyles', 'colStrokeStyle'
     ];
     const next: LocalStyleOverrideMask = {};
@@ -155,6 +155,7 @@ function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
         };
     }
     if (source.cellFillStyle) next.cellFillStyle = source.cellFillStyle;
+    if (source.lineBackgroundStyle) next.lineBackgroundStyle = source.lineBackgroundStyle;
     if (source.cellTopStyle) next.cellTopStyle = source.cellTopStyle;
     if (source.tabRightStyle) next.tabRightStyle = source.tabRightStyle;
     if (source.gridContainerStyle) next.gridContainerStyle = source.gridContainerStyle;
@@ -912,6 +913,7 @@ function handlePluginMessage(msg: any) {
         initializeStyleTabDraft(
             {
                 savedCellFillStyle: msg.savedCellFillStyle,
+                savedLineBackgroundStyle: msg.savedLineBackgroundStyle,
                 savedMarkStyle: msg.savedMarkStyle,
                 savedMarkStyles: msg.savedMarkStyles,
                 savedCellTopStyle: msg.savedCellTopStyle,
@@ -921,6 +923,7 @@ function handlePluginMessage(msg: any) {
             },
             {
                 cellFillStyle: msg.cellFillStyle,
+                lineBackgroundStyle: msg.lineBackgroundStyle,
                 markStyle: msg.markStyle,
                 markStyles: msg.markStyles,
                 rowStrokeStyles: msg.rowStrokeStyles,
@@ -1047,6 +1050,7 @@ function handlePluginMessage(msg: any) {
         }
         const extractedDraftPayload = {
             cellFillStyle: msg.payload?.cellFillStyle,
+            lineBackgroundStyle: msg.payload?.lineBackgroundStyle,
             markStyle: msg.payload?.markStyle,
             markStyles: msg.payload?.markStyles,
             rowStrokeStyles: msg.payload?.rowStrokeStyles,
@@ -1460,6 +1464,7 @@ function bindUiEvents() {
             if (fromDraft.mask.colPaintStyleIds) setLocalStyleOverrideField('colPaintStyleIds', fromDraft.overrides.colPaintStyleIds);
             if (fromDraft.mask.colColorEnabled) setLocalStyleOverrideField('colColorEnabled', fromDraft.overrides.colColorEnabled);
             if (fromDraft.mask.cellFillStyle) setLocalStyleOverrideField('cellFillStyle', fromDraft.overrides.cellFillStyle);
+            if (fromDraft.mask.lineBackgroundStyle) setLocalStyleOverrideField('lineBackgroundStyle', fromDraft.overrides.lineBackgroundStyle);
             if (fromDraft.mask.cellTopStyle) setLocalStyleOverrideField('cellTopStyle', fromDraft.overrides.cellTopStyle);
             if (fromDraft.mask.tabRightStyle) setLocalStyleOverrideField('tabRightStyle', fromDraft.overrides.tabRightStyle);
             if (fromDraft.mask.gridContainerStyle) setLocalStyleOverrideField('gridContainerStyle', fromDraft.overrides.gridContainerStyle);

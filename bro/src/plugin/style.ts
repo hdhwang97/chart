@@ -1,7 +1,8 @@
 import { MARK_NAME_PATTERNS } from './constants';
 import { rgbToHex, findAllLineLayers, traverse } from './utils';
+import { isLineTestColumn } from './drawing/line';
 import { collectColumns, type ColRef } from './drawing/shared';
-import type { CellFillInjectionStyle, CellStrokeStyle, MarkInjectionStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
+import type { CellFillInjectionStyle, CellStrokeStyle, LineBackgroundInjectionStyle, MarkInjectionStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 
 // ==========================================
 // STYLE EXTRACTION LOGIC
@@ -266,6 +267,72 @@ function getSolidFillColor(node: SceneNode): string | null {
     const first = node.fills[0];
     if (first.type !== 'SOLID') return null;
     return rgbToHex(first.color.r, first.color.g, first.color.b);
+}
+
+function parseLineTestSeriesIndex(name: string): number | null {
+    const match = /^line[-_]?0*(\d+)$/i.exec(name.trim());
+    if (!match) return null;
+    const idx = Number(match[1]);
+    return Number.isFinite(idx) && idx > 0 ? idx : null;
+}
+
+function findChildByExactName(parent: SceneNode, name: string): SceneNode | null {
+    if (!('children' in parent)) return null;
+    const children = (parent as SceneNode & ChildrenMixin).children;
+    const direct = children.find((child) => child.name === name);
+    if (direct) return direct;
+    for (const child of children) {
+        const nested = findChildByExactName(child, name);
+        if (nested) return nested;
+    }
+    return null;
+}
+
+function resolveLayerVisible(node: SceneNode | null): boolean | undefined {
+    if (!node) return undefined;
+    if (!node.visible) return false;
+    if (!('fills' in node) || !Array.isArray(node.fills) || node.fills.length === 0) return true;
+    const first = node.fills[0] as Paint & { visible?: boolean };
+    if (typeof first.visible === 'boolean') return Boolean(first.visible);
+    return true;
+}
+
+export function extractLineBackgroundStyle(graph: SceneNode, precomputedCols?: ColRef[]): LineBackgroundInjectionStyle | null {
+    const columns = resolveColumns(graph, precomputedCols);
+    for (const col of columns) {
+        if (!isLineTestColumn(col.node)) continue;
+
+        let color: string | null = null;
+        let visible: boolean | undefined;
+
+        traverse(col.node, (node) => {
+            if (color && visible !== undefined) return;
+            const seriesIndex = parseLineTestSeriesIndex(node.name);
+            if (!seriesIndex || !('children' in node)) return;
+            const fillNode = findChildByExactName(node, 'fill');
+            if (!fillNode) return;
+            const fillTop = findChildByExactName(fillNode, 'fill_top');
+            const triNode = fillTop ? findChildByExactName(fillTop, 'tri') : null;
+            const fillBot = findChildByExactName(fillNode, 'fill_bot');
+
+            if (!color) {
+                color = getSolidFillColor(triNode || fillBot || fillNode);
+            }
+            if (visible === undefined) {
+                visible = resolveLayerVisible(triNode);
+                if (visible === undefined) visible = resolveLayerVisible(fillBot);
+                if (visible === undefined) visible = resolveLayerVisible(fillNode);
+            }
+        });
+
+        if (color || visible !== undefined) {
+            return {
+                ...(color ? { color } : {}),
+                ...(visible !== undefined ? { visible } : {})
+            };
+        }
+    }
+    return null;
 }
 
 function getSolidStrokeColor(node: SceneNode): string | null {
@@ -619,6 +686,7 @@ export function extractStyleFromNode(node: SceneNode, chartType: string, options
             cornerRadius,
             strokeWidth,
             cellFillStyle: null,
+            lineBackgroundStyle: null,
             markStyle: null,
             markStyles: [],
             colStrokeStyle: null,
@@ -631,6 +699,7 @@ export function extractStyleFromNode(node: SceneNode, chartType: string, options
 
     const colStrokeStyle = extractColStrokeStyle(node, cols);
     const cellFillStyle = extractCellFillStyle(node, cols, chartType);
+    const lineBackgroundStyle = extractLineBackgroundStyle(node, cols);
     const markStyles = extractMarkStyles(node, cols);
     const markStyle = markStyles[0] || null;
     const chartContainerStrokeStyle = extractChartContainerStrokeStyle(node);
@@ -645,6 +714,7 @@ export function extractStyleFromNode(node: SceneNode, chartType: string, options
         cornerRadius,
         strokeWidth,
         cellFillStyle,
+        lineBackgroundStyle,
         markStyle,
         markStyles,
         colStrokeStyle,

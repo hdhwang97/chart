@@ -6,6 +6,7 @@ import type {
     CellFillInjectionStyle,
     ColorMode,
     GridStrokeInjectionStyle,
+    LineBackgroundInjectionStyle,
     LocalStyleOverrideMask,
     LocalStyleOverrides,
     MarkInjectionStyle,
@@ -142,6 +143,7 @@ function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask
         'assistLineVisible',
         'assistLineEnabled',
         'cellFillStyle',
+        'lineBackgroundStyle',
         'cellTopStyle',
         'tabRightStyle',
         'gridContainerStyle',
@@ -181,6 +183,8 @@ function sanitizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
     }
     const cellFillStyle = normalizeCellFillStyle(source.cellFillStyle);
     if (cellFillStyle) next.cellFillStyle = cellFillStyle;
+    const lineBackgroundStyle = normalizeLineBackgroundStyle(source.lineBackgroundStyle);
+    if (lineBackgroundStyle) next.lineBackgroundStyle = lineBackgroundStyle;
     const cellTopStyle = normalizeSideStrokeStyle(source.cellTopStyle);
     if (cellTopStyle) next.cellTopStyle = cellTopStyle;
     const tabRightStyle = normalizeSideStrokeStyle(source.tabRightStyle);
@@ -303,6 +307,18 @@ function normalizeCellFillStyle(value: unknown): CellFillInjectionStyle | null {
     const color = normalizeHexColor(source.color);
     if (!color) return null;
     return { color };
+}
+
+function normalizeLineBackgroundStyle(value: unknown): LineBackgroundInjectionStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as LineBackgroundInjectionStyle;
+    const color = normalizeHexColor(source.color);
+    const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+    if (!color && visible === undefined) return null;
+    return {
+        color: color || undefined,
+        visible
+    };
 }
 
 function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
@@ -477,6 +493,7 @@ export function saveChartData(
 
     if (shouldSaveStyleKeys) {
         const cellFillStyle = normalizeCellFillStyle(msg.cellFillStyle);
+        const lineBackgroundStyle = normalizeLineBackgroundStyle(msg.lineBackgroundStyle);
         const cellTopStyle = normalizeSideStrokeStyle(msg.cellTopStyle ?? msg.cellBottomStyle);
         const tabRightStyle = normalizeSideStrokeStyle(msg.tabRightStyle);
         const gridContainerStyle = normalizeGridStrokeStyle(msg.gridContainerStyle);
@@ -487,6 +504,10 @@ export function saveChartData(
         node.setPluginData(
             PLUGIN_DATA_KEYS.LAST_CELL_FILL_STYLE,
             cellFillStyle ? JSON.stringify(cellFillStyle) : ''
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_LINE_BACKGROUND_STYLE,
+            lineBackgroundStyle ? JSON.stringify(lineBackgroundStyle) : ''
         );
         node.setPluginData(
             PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE,

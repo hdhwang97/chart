@@ -163,7 +163,7 @@ function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask
         'rowColors', 'rowColorModes', 'rowPaintStyleIds',
         'colColors', 'colColorModes', 'colPaintStyleIds', 'colColorEnabled', 'markColorSource',
         'assistLineVisible', 'assistLineEnabled',
-        'cellFillStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
+        'cellFillStyle', 'lineBackgroundStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
         'assistLineStyle', 'markStyle', 'markStyles', 'rowStrokeStyles', 'colStrokeStyle'
     ];
     keys.forEach((key) => {
@@ -198,6 +198,7 @@ function normalizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
         };
     }
     if (source.cellFillStyle && typeof source.cellFillStyle === 'object') next.cellFillStyle = source.cellFillStyle;
+    if (source.lineBackgroundStyle && typeof source.lineBackgroundStyle === 'object') next.lineBackgroundStyle = source.lineBackgroundStyle;
     if (source.cellTopStyle && typeof source.cellTopStyle === 'object') next.cellTopStyle = source.cellTopStyle;
     if (source.tabRightStyle && typeof source.tabRightStyle === 'object') next.tabRightStyle = source.tabRightStyle;
     if (source.gridContainerStyle && typeof source.gridContainerStyle === 'object') next.gridContainerStyle = source.gridContainerStyle;
@@ -504,6 +505,7 @@ figma.ui.onmessage = async (msg) => {
             markStyles,
             xAxisLabels,
             cellFillStyle,
+            lineBackgroundStyle,
             rowStrokeStyles,
             colStrokeStyle,
             cellTopStyle,
@@ -772,6 +774,7 @@ figma.ui.onmessage = async (msg) => {
                         : []
                 } : {}),
                 ...(effectiveLocalMask.cellFillStyle ? { cellFillStyle: effectiveLocalOverrides.cellFillStyle } : {}),
+                ...(effectiveLocalMask.lineBackgroundStyle ? { lineBackgroundStyle: effectiveLocalOverrides.lineBackgroundStyle } : {}),
                 ...(effectiveLocalMask.cellTopStyle ? { cellTopStyle: effectiveLocalOverrides.cellTopStyle } : {}),
                 ...(effectiveLocalMask.tabRightStyle ? { tabRightStyle: effectiveLocalOverrides.tabRightStyle } : {}),
                 ...(effectiveLocalMask.gridContainerStyle ? { gridContainerStyle: effectiveLocalOverrides.gridContainerStyle } : {}),
@@ -795,6 +798,7 @@ figma.ui.onmessage = async (msg) => {
                 rowHeaderLabels: Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
                 xAxisLabels: Array.isArray(xAxisLabels) ? xAxisLabels : [],
                 cellFillStyle,
+                lineBackgroundStyle,
                 cellTopStyle: cellTopStyle ?? cellBottomStyle,
                 tabRightStyle,
                 gridContainerStyle,
@@ -936,6 +940,9 @@ figma.ui.onmessage = async (msg) => {
             cellFillStyle: effectiveLocalMask.cellFillStyle
                 ? (effectiveLocalOverrides.cellFillStyle || styleInfo.cellFillStyle || null)
                 : ((isDataOnlyApply ? styleInfo.cellFillStyle : cellFillStyle) || styleInfo.cellFillStyle || null),
+            lineBackgroundStyle: effectiveLocalMask.lineBackgroundStyle
+                ? (effectiveLocalOverrides.lineBackgroundStyle || styleInfo.lineBackgroundStyle || null)
+                : ((isDataOnlyApply ? styleInfo.lineBackgroundStyle : lineBackgroundStyle) || styleInfo.lineBackgroundStyle || null),
             markStyle: effectiveLocalMask.markStyle
                 ? (effectiveLocalOverrides.markStyle || styleInfo.markStyle || null)
                 : ((isDataOnlyApply ? styleInfo.markStyle : markStyle) || styleInfo.markStyle || null),
@@ -971,6 +978,7 @@ figma.ui.onmessage = async (msg) => {
                 colColorEnabled: colColorEnabledForUiBase,
                 markColorSource: markColorSourceForUiBase,
                 cellFillStyle: styleInfo.cellFillStyle || null,
+                lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
                 markStyle: styleInfo.markStyle || null,
                 markStyles: styleInfo.markStyles || [],
                 rowStrokeStyles: styleInfo.rowStrokeStyles || [],
@@ -1137,6 +1145,7 @@ figma.ui.onmessage = async (msg) => {
             cornerRadius: styleInfo.cornerRadius,
             strokeWidth: resolveStrokeWidthForUi(node, undefined, styleInfo.strokeWidth),
             cellFillStyle: styleInfo.cellFillStyle || null,
+            lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
             markStyle: styleInfo.markStyle || null,
             markStyles: styleInfo.markStyles || [],
             colStrokeStyle: styleInfo.colStrokeStyle || null,
@@ -1155,6 +1164,7 @@ figma.ui.onmessage = async (msg) => {
                 colColorEnabled: extractedColEnabled,
                 markColorSource: extractedMarkColorSource,
                 cellFillStyle: styleInfo.cellFillStyle || null,
+                lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
                 markStyle: styleInfo.markStyle || null,
                 markStyles: styleInfo.markStyles || [],
                 rowStrokeStyles: styleInfo.rowStrokeStyles || [],

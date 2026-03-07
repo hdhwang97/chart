@@ -501,6 +501,10 @@ function renderD3Preview(style: any) {
             const line = d3.line()
                 .x((_: any, i: number) => xScale(i)!)
                 .y((d: number) => yScale(d));
+            const area = d3.area()
+                .x((_: any, i: number) => xScale(i)!)
+                .y0(() => yScale(yDomain.yMin))
+                .y1((d: number) => yScale(d));
 
             const draftStyle = getMarkDraftStyleFromState(r);
             const baseColor = resolveSeriesStyleColor(rowColors, r, 'line', 'fill');
@@ -509,6 +513,17 @@ function renderD3Preview(style: any) {
                 weight: Math.max(1, draftStyle.thickness || strokeWidth),
                 dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
             };
+            const lineBackground = state.styleInjectionDraft.lineBackground;
+            const areaColor = normalizeHexColorInput(lineBackground.color) || baseColor;
+            const areaVisible = Boolean(lineBackground.visible);
+            if (areaVisible) {
+                g.append('path')
+                    .datum(lineData)
+                    .attr('fill', areaColor)
+                    .attr('stroke', 'none')
+                    .attr('opacity', 0.24)
+                    .attr('d', area);
+            }
             const path = g.append('path')
                 .datum(lineData)
                 .attr('fill', 'none')

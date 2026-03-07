@@ -4,6 +4,7 @@ import type {
     AssistLineInjectionStyle,
     CellFillInjectionStyle,
     GridStrokeInjectionStyle,
+    LineBackgroundInjectionStyle,
     MarkInjectionStyle,
     SideStrokeInjectionStyle,
     StyleTemplateItem,
@@ -75,6 +76,18 @@ function normalizeCellFillStyle(value: unknown): CellFillInjectionStyle | undefi
     return { color };
 }
 
+function normalizeLineBackgroundStyle(value: unknown): LineBackgroundInjectionStyle | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const source = value as LineBackgroundInjectionStyle;
+    const color = normalizeHexColor(source.color);
+    const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+    if (!color && visible === undefined) return undefined;
+    return {
+        color: color || undefined,
+        visible
+    };
+}
+
 function normalizeMarkStyle(value: unknown): MarkInjectionStyle | undefined {
     if (!value || typeof value !== 'object') return undefined;
     const source = value as MarkInjectionStyle;
@@ -119,6 +132,7 @@ function normalizePayload(value: unknown): StyleTemplatePayload | null {
     const payload: StyleTemplatePayload = {};
 
     const cellFillStyle = normalizeCellFillStyle(source.cellFillStyle);
+    const lineBackgroundStyle = normalizeLineBackgroundStyle(source.lineBackgroundStyle);
     const cellTopStyle = normalizeSideStyle(source.cellTopStyle || source.cellBottomStyle);
     const tabRightStyle = normalizeSideStyle(source.tabRightStyle);
     const gridContainerStyle = normalizeGridStyle(source.gridContainerStyle);
@@ -129,6 +143,7 @@ function normalizePayload(value: unknown): StyleTemplatePayload | null {
     const colColorEnabled = normalizeBooleanArray((source as any).colColorEnabled);
 
     if (cellFillStyle) payload.cellFillStyle = cellFillStyle;
+    if (lineBackgroundStyle) payload.lineBackgroundStyle = lineBackgroundStyle;
     if (cellTopStyle) payload.cellTopStyle = cellTopStyle;
     if (tabRightStyle) payload.tabRightStyle = tabRightStyle;
     if (gridContainerStyle) payload.gridContainerStyle = gridContainerStyle;

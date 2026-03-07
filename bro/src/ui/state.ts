@@ -32,6 +32,11 @@ export type AssistLineStyleInjectionDraftItem = {
     strokeStyle: 'solid' | 'dash';
 };
 
+export type LineBackgroundStyleInjectionDraftItem = {
+    color: string;
+    visible: boolean;
+};
+
 export type MarkStyleInjectionDraftItem = {
     fillColor: string;
     strokeColor: string;
@@ -52,6 +57,7 @@ export type StyleInjectionDraft = {
     cellFill: {
         color: string;
     };
+    lineBackground: LineBackgroundStyleInjectionDraftItem;
     cellTop: StyleInjectionDraftItem;
     tabRight: StyleInjectionDraftItem;
     gridContainer: GridStyleInjectionDraftItem;
@@ -68,6 +74,7 @@ export const DEFAULT_STYLE_INJECTION_ITEM: StyleInjectionDraftItem = {
 
 export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
     cellFill: { color: '#FFFFFF' },
+    lineBackground: { color: '#3B82F6', visible: true },
     cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
     tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
     gridContainer: {
@@ -128,6 +135,7 @@ export const state = {
     effectiveStyleSnapshot: {} as LocalStyleOverrides,
     styleInjectionDraft: {
         cellFill: { color: '#FFFFFF' },
+        lineBackground: { color: '#3B82F6', visible: true },
         cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
         tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
         gridContainer: {
