@@ -722,12 +722,33 @@ figma.ui.onmessage = async (msg) => {
             assistLineStyle: drawAssistLineStyle
         };
 
-        await perf.step('draw-chart', () => {
-            if (type === "bar") applyBar(drawConfig, H, targetNode);
-            else if (type === "line") applyLine(drawConfig, H, targetNode);
-            else if (isStackedType(type)) applyStackedBar(drawConfig, H, targetNode, columns);
-            applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
+        const lineApplyResult = await perf.step('draw-chart', () => {
+            if (type === "bar") {
+                applyBar(drawConfig, H, targetNode);
+                applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
+                return { ok: true } as const;
+            }
+            if (type === "line") {
+                const result = applyLine(drawConfig, H, targetNode);
+                if (!result.ok) return result;
+                applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
+                return result;
+            }
+            if (isStackedType(type)) {
+                applyStackedBar(drawConfig, H, targetNode, columns);
+                applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
+            }
+            return { ok: true } as const;
         });
+        if (type === 'line' && !lineApplyResult.ok) {
+            figma.notify('Line apply failed: required line structure is missing.');
+            console.error('[chart-plugin][line-apply-failed]', {
+                targetNodeId: targetNode.id,
+                targetNodeName: targetNode.name,
+                lineApplyResult
+            });
+            return;
+        }
 
         await perf.step('post-draw-layout', () => {
             const xEmptyAlign: 'center' | 'right' =

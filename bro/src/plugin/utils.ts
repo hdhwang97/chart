@@ -1,4 +1,4 @@
-import { MARK_NAME_PATTERNS } from './constants';
+import { LINE_COMPONENT_PATTERN, LINE_SERIES_CONTAINER_PATTERN, MARK_NAME_PATTERNS } from './constants';
 
 // ==========================================
 // UTILITIES & HELPERS
@@ -35,13 +35,12 @@ export function findActualPropKey(props: any, propName: string): string | null {
 
 export function findAllLineLayers(parentNode: SceneNode): (SceneNode & LayoutMixin)[] {
     const results: (SceneNode & LayoutMixin)[] = [];
-    if ("children" in parentNode) {
-        (parentNode as any).children.forEach((child: SceneNode) => {
-            if (MARK_NAME_PATTERNS.LINE.test(child.name)) {
-                results.push(child as (SceneNode & LayoutMixin));
-            }
-        });
-    }
+    traverse(parentNode, (child) => {
+        if (child.id === parentNode.id) return;
+        if (LINE_COMPONENT_PATTERN.test(child.name) || LINE_SERIES_CONTAINER_PATTERN.test(child.name)) {
+            results.push(child as (SceneNode & LayoutMixin));
+        }
+    });
     return results;
 }
 

@@ -1,176 +1,31 @@
 import { LINE_VARIANT_KEY_DEFAULT, LINE_VARIANT_VALUES } from '../constants';
-import { clamp, normalizeHexColor, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink, traverse } from '../utils';
+import { clamp, normalizeHexColor, traverse, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
 import { collectColumns, setVariantProperty } from './shared';
+import {
+    buildLineBundleMatrix,
+    type LineBundle,
+    type LineStructureIssue,
+    type LineStructureIssueReason,
+    validateLineStructureOrError
+} from './line-structure';
 
 // ==========================================
 // LINE CHART DRAWING
 // ==========================================
 
-type LineInstanceSource = 'currentCol' | 'nextCol' | 'fallback';
-
-type LineTestBundle = {
-    container: SceneNode;
-    lineNode: SceneNode;
-    fillNode: SceneNode;
-    fillTop: SceneNode;
-    fillBottom: SceneNode;
-};
-
-type LineTargetResolution =
-    | { kind: 'line_test'; source: LineInstanceSource; bundle: LineTestBundle }
-    | { kind: 'legacy'; source: LineInstanceSource; inst: InstanceNode };
-
-function normalizeToken(value: unknown): string {
-    return String(value ?? '').trim().toLowerCase();
-}
-
-function readInstancePropValueCI(instance: InstanceNode, canonicalKey: string): string | null {
-    try {
-        const props = instance.componentProperties || {};
-        const target = normalizeToken(canonicalKey);
-        const keys = Object.keys(props);
-        for (const rawKey of keys) {
-            const keyBase = normalizeToken(rawKey.split('#')[0]);
-            if (keyBase !== target) continue;
-            const rawValue = props[rawKey]?.value;
-            if (rawValue === null || rawValue === undefined) return '';
-            return typeof rawValue === 'string' ? rawValue : String(rawValue);
-        }
-    } catch {
-        return null;
+export type LineApplyResult =
+    | {
+        ok: true;
+        rowCount: number;
+        segmentCount: number;
+        appliedSegments: number;
     }
-    return null;
-}
-
-function findFirstInstanceDepthFirst(node: SceneNode): InstanceNode | null {
-    if (node.type === 'INSTANCE') return node;
-    if (!('children' in node)) return null;
-    for (const child of (node as SceneNode & ChildrenMixin).children) {
-        const found = findFirstInstanceDepthFirst(child);
-        if (found) return found;
-    }
-    return null;
-}
-
-function findFirstInstanceInColumn(colNode: SceneNode): InstanceNode | null {
-    if (!('children' in colNode)) return null;
-    const children = (colNode as SceneNode & ChildrenMixin).children;
-    const tab = children.find((child) => child.name === 'tab') || null;
-    if (tab) {
-        const foundInTab = findFirstInstanceDepthFirst(tab);
-        if (foundInTab) return foundInTab;
-    }
-    for (const child of children) {
-        if (tab && child.id === tab.id) continue;
-        const found = findFirstInstanceDepthFirst(child);
-        if (found) return found;
-    }
-    return null;
-}
-
-export function isLineTestColumn(colNode: SceneNode): boolean {
-    let targetInstance: InstanceNode | null = null;
-    if (colNode.type === 'INSTANCE') {
-        targetInstance = colNode;
-    } else {
-        targetInstance = findFirstInstanceInColumn(colNode);
-    }
-    if (!targetInstance) return false;
-    const value = readInstancePropValueCI(targetInstance, 'mark type');
-    return normalizeToken(value) === 'line_test';
-}
-
-function findTabContainer(colNode: SceneNode): SceneNode {
-    if ('children' in colNode) {
-        const tab = (colNode as SceneNode & ChildrenMixin).children.find((n) => n.name === 'tab');
-        if (tab) return tab as SceneNode;
-    }
-    return colNode;
-}
-
-function findLineInstanceByRow(parent: SceneNode, rowIndex: number): InstanceNode | null {
-    if (!('children' in parent)) return null;
-    const pattern = new RegExp(`^line[-_]?0*(${rowIndex + 1})$`);
-    const direct = (parent as SceneNode & ChildrenMixin).children.find((n) => pattern.test(n.name));
-    if (direct && direct.type === 'INSTANCE') return direct;
-
-    let found: InstanceNode | null = null;
-    traverse(parent, (node) => {
-        if (found || node.type !== 'INSTANCE') return;
-        if (pattern.test(node.name)) found = node;
-    });
-    return found;
-}
-
-function collectLineInstancesForRow(graph: SceneNode, rowIndex: number): InstanceNode[] {
-    const pattern = new RegExp(`^line[-_]?0*(${rowIndex + 1})$`);
-    const result: InstanceNode[] = [];
-    traverse(graph, (node) => {
-        if (node.type === 'INSTANCE' && pattern.test(node.name)) {
-            result.push(node);
-        }
-    });
-    result.sort((a, b) => (a.x || 0) - (b.x || 0));
-    return result;
-}
-
-function resolveLegacyLineInstanceForSegment(
-    cols: { node: SceneNode; index: number }[],
-    graph: SceneNode,
-    rowIndex: number,
-    segmentIndex: number,
-    fallbackCache: Map<number, InstanceNode[]>
-): { inst: InstanceNode | null; source: LineInstanceSource } {
-    if (segmentIndex < cols.length) {
-        const currentParent = findTabContainer(cols[segmentIndex].node);
-        const inCurrent = findLineInstanceByRow(currentParent, rowIndex);
-        if (inCurrent) return { inst: inCurrent, source: 'currentCol' };
-    }
-
-    if (segmentIndex + 1 < cols.length) {
-        const nextParent = findTabContainer(cols[segmentIndex + 1].node);
-        const inNext = findLineInstanceByRow(nextParent, rowIndex);
-        if (inNext) return { inst: inNext, source: 'nextCol' };
-    }
-
-    if (!fallbackCache.has(rowIndex)) {
-        fallbackCache.set(rowIndex, collectLineInstancesForRow(graph, rowIndex));
-    }
-    const fallback = fallbackCache.get(rowIndex) || [];
-    return { inst: fallback[segmentIndex] || null, source: 'fallback' };
-}
-
-function findChildByExactName(parent: SceneNode, name: string): SceneNode | null {
-    if (!('children' in parent)) return null;
-    const children = (parent as SceneNode & ChildrenMixin).children;
-    const direct = children.find((child) => child.name === name);
-    if (direct) return direct;
-    for (const child of children) {
-        const nested = findChildByExactName(child, name);
-        if (nested) return nested;
-    }
-    return null;
-}
-
-function findLineNContainer(parent: SceneNode, rowIndex: number): SceneNode | null {
-    const rowNum = rowIndex + 1;
-    // line_test container naming convention starts at line-01, line-02, ...
-    const paddedName = `line-${String(rowNum).padStart(2, '0')}`;
-    return findChildByExactName(parent, paddedName) || findChildByExactName(parent, `line-${rowNum}`);
-}
-
-function resolveLineTestBundleInColumn(colNode: SceneNode, rowIndex: number): LineTestBundle | null {
-    const targetParent = findTabContainer(colNode);
-    const container = findLineNContainer(targetParent, rowIndex);
-    if (!container) return null;
-    const lineNode = findChildByExactName(container, 'line');
-    const fillNode = findChildByExactName(container, 'fill');
-    if (!lineNode || !fillNode) return null;
-    const fillTop = findChildByExactName(fillNode, 'fill_top');
-    const fillBottom = findChildByExactName(fillNode, 'fill_bot');
-    if (!fillTop || !fillBottom) return null;
-    return { container, lineNode, fillNode, fillTop, fillBottom };
-}
+    | {
+        ok: false;
+        errorCode: 'line_structure_missing';
+        message: string;
+        missing: LineStructureIssue[];
+    };
 
 function canSetPaddingTop(node: SceneNode): node is SceneNode & { paddingTop: number } {
     return 'paddingTop' in node;
@@ -180,8 +35,18 @@ function canSetPaddingBottom(node: SceneNode): node is SceneNode & { paddingBott
     return 'paddingBottom' in node;
 }
 
+function getVariantPropKey(instance: InstanceNode, key: string): string | null {
+    try {
+        const props = instance.componentProperties || {};
+        const found = Object.keys(props).find((rawKey) => rawKey === key || rawKey.startsWith(`${key}#`));
+        return found || null;
+    } catch {
+        return null;
+    }
+}
+
 function hasDirectionVariant(instance: InstanceNode): boolean {
-    return readInstancePropValueCI(instance, 'direction') !== null;
+    return Boolean(getVariantPropKey(instance, LINE_VARIANT_KEY_DEFAULT));
 }
 
 function setPaddingTop(node: SceneNode, value: number): boolean {
@@ -206,47 +71,26 @@ function setPaddingBottom(node: SceneNode, value: number): boolean {
 
 function setDirectionVariant(target: SceneNode, direction: string): boolean {
     if (target.type !== 'INSTANCE') return false;
-    return setVariantProperty(target, LINE_VARIANT_KEY_DEFAULT, direction)
-        || setVariantProperty(target, 'Direction', direction);
-}
-
-function canApplyLineTestBundle(bundle: LineTestBundle): boolean {
-    if (bundle.lineNode.type !== 'INSTANCE' || bundle.fillNode.type !== 'INSTANCE') return false;
-    if (!hasDirectionVariant(bundle.lineNode) || !hasDirectionVariant(bundle.fillNode)) return false;
-    if (!canSetPaddingTop(bundle.lineNode) || !canSetPaddingBottom(bundle.lineNode)) return false;
-    if (!canSetPaddingTop(bundle.fillTop)) return false;
-    if (!canSetPaddingBottom(bundle.fillBottom)) return false;
-    return true;
-}
-
-function resolveLineTargetForSegment(
-    cols: { node: SceneNode; index: number }[],
-    lineTestFlags: boolean[],
-    graph: SceneNode,
-    rowIndex: number,
-    segmentIndex: number,
-    fallbackCache: Map<number, InstanceNode[]>
-): LineTargetResolution | null {
-    const canTryCurrentLineTest = segmentIndex < cols.length && lineTestFlags[segmentIndex];
-    if (canTryCurrentLineTest) {
-        const currentBundle = resolveLineTestBundleInColumn(cols[segmentIndex].node, rowIndex);
-        if (currentBundle && canApplyLineTestBundle(currentBundle)) {
-            return { kind: 'line_test', source: 'currentCol', bundle: currentBundle };
-        }
-        const canTryNextLineTest = segmentIndex + 1 < cols.length && lineTestFlags[segmentIndex + 1];
-        if (canTryNextLineTest) {
-            const nextBundle = resolveLineTestBundleInColumn(cols[segmentIndex + 1].node, rowIndex);
-            if (nextBundle && canApplyLineTestBundle(nextBundle)) {
-                return { kind: 'line_test', source: 'nextCol', bundle: nextBundle };
-            }
-        }
-        const legacy = resolveLegacyLineInstanceForSegment(cols, graph, rowIndex, segmentIndex, fallbackCache);
-        if (legacy.inst) return { kind: 'legacy', source: legacy.source, inst: legacy.inst };
-        return null;
+    const propKey = getVariantPropKey(target, LINE_VARIANT_KEY_DEFAULT);
+    if (!propKey) return false;
+    const current = target.componentProperties?.[propKey]?.value;
+    if (current === direction) return true;
+    try {
+        target.setProperties({ [propKey]: direction });
+        return true;
+    } catch {
+        return false;
     }
+}
 
-    const legacy = resolveLegacyLineInstanceForSegment(cols, graph, rowIndex, segmentIndex, fallbackCache);
-    if (legacy.inst) return { kind: 'legacy', source: legacy.source, inst: legacy.inst };
+function validateBundleCompatibility(bundle: LineBundle): LineStructureIssueReason | null {
+    if (bundle.lineNode.type !== 'INSTANCE') return 'line_not_instance';
+    if (bundle.fillNode.type !== 'INSTANCE') return 'fill_not_instance';
+    if (!hasDirectionVariant(bundle.lineNode)) return 'line_direction_variant_missing';
+    if (!hasDirectionVariant(bundle.fillNode)) return 'fill_direction_variant_missing';
+    if (!canSetPaddingTop(bundle.lineNode) || !canSetPaddingBottom(bundle.lineNode)) return 'line_padding_unsupported';
+    if (!canSetPaddingTop(bundle.fillTop)) return 'fill_top_padding_unsupported';
+    if (!canSetPaddingBottom(bundle.fillBot)) return 'fill_bot_padding_unsupported';
     return null;
 }
 
@@ -321,61 +165,102 @@ function applyLineColorAndStroke(targetNode: SceneNode, rowColor: string | null,
     });
 }
 
-function applyLineTestLayout(bundle: LineTestBundle, pTop: number, pBottom: number, direction: string): boolean {
-    if (!setPaddingTop(bundle.lineNode, pTop)) return false;
-    if (!setPaddingBottom(bundle.lineNode, pBottom)) return false;
-    if (!setPaddingTop(bundle.fillTop, pTop)) return false;
-    if (!setPaddingBottom(bundle.fillBottom, pBottom)) return false;
-    if (!setDirectionVariant(bundle.lineNode, direction)) return false;
-    if (!setDirectionVariant(bundle.fillNode, direction)) return false;
-    return true;
+function applyLineBundleLayout(bundle: LineBundle, pTop: number, pBottom: number, direction: string): LineStructureIssueReason | null {
+    if (!setPaddingTop(bundle.lineNode, pTop) || !setPaddingBottom(bundle.lineNode, pBottom)) {
+        return 'line_padding_unsupported';
+    }
+    if (!setPaddingTop(bundle.fillTop, pTop)) return 'fill_top_padding_unsupported';
+    if (!setPaddingBottom(bundle.fillBot, pBottom)) return 'fill_bot_padding_unsupported';
+    if (!setDirectionVariant(bundle.lineNode, direction)) return 'line_direction_variant_missing';
+    if (!setDirectionVariant(bundle.fillNode, direction)) return 'fill_direction_variant_missing';
+    return null;
 }
 
-export function applyLine(config: any, H: number, graph: SceneNode) {
-    const { values, mode } = config;
-    const thickness = config.strokeWidth || 2;
-
-    let min = 0, max = 100;
-
-    if (mode === "raw") {
-        min = 0;
-        const configuredMax = Number(config.yMax);
+function computeYRange(config: any, values: any[][]): { min: number; max: number } {
+    const mode = config?.mode;
+    if (mode === 'raw') {
+        const min = 0;
+        const configuredMax = Number(config?.yMax);
         if (Number.isFinite(configuredMax) && configuredMax > 0) {
-            max = configuredMax;
-        } else {
-            const flat = values.flat().map((v: any) => Number(v) || 0);
-            max = Math.max(...flat, 1);
+            return { min, max: configuredMax };
         }
-    } else {
-        min = config.yMin !== undefined ? config.yMin : 0;
-        max = config.yMax !== undefined ? config.yMax : 100;
+        const flat = values.flat().map((v: any) => Number(v) || 0);
+        return { min, max: Math.max(...flat, 1) };
     }
-    const range = max - min;
-    const safeRange = range === 0 ? 1 : range;
+    const yMin = Number(config?.yMin);
+    const yMax = Number(config?.yMax);
+    return {
+        min: Number.isFinite(yMin) ? yMin : 0,
+        max: Number.isFinite(yMax) ? yMax : 100
+    };
+}
 
-    const cols = collectColumns(graph);
+function buildLineApplyFailure(message: string, missing: LineStructureIssue[]): LineApplyResult {
+    return {
+        ok: false,
+        errorCode: 'line_structure_missing',
+        message,
+        missing
+    };
+}
+
+export function applyLine(config: any, H: number, graph: SceneNode): LineApplyResult {
+    const values = Array.isArray(config?.values) ? config.values : [];
     const rowCount = values.length;
-    const rowColors = Array.isArray(config?.rowColors) ? config.rowColors : [];
-    const lineTestFlags = cols.map((col) => isLineTestColumn(col.node));
-    const segmentCols = Math.max(1, cols.length);
-    const fallbackCache = new Map<number, InstanceNode[]>();
-    let lineTestApplied = 0;
-    let lineTestFallback = 0;
-    let legacyApplied = 0;
-    let unresolved = 0;
+    const thickness = Number.isFinite(Number(config?.strokeWidth)) ? Number(config.strokeWidth) : 2;
+    const cols = collectColumns(graph).filter((col) => col.node.visible);
+    const maxSegmentsFromValues = values.reduce((max, row) => {
+        const count = Array.isArray(row) ? Math.max(0, row.length - 1) : 0;
+        return Math.max(max, count);
+    }, 0);
+    const segmentCount = Math.max(0, Math.min(cols.length, maxSegmentsFromValues));
 
+    if (rowCount === 0 || segmentCount === 0) {
+        return { ok: true, rowCount, segmentCount, appliedSegments: 0 };
+    }
+
+    const resolveStart = Date.now();
+    const matrix = buildLineBundleMatrix(cols, rowCount);
+    const validation = validateLineStructureOrError(matrix, rowCount, segmentCount, validateBundleCompatibility);
+    const resolveMs = Date.now() - resolveStart;
+    if (!validation.ok) {
+        console.error('[chart-plugin][line-structure-missing]', {
+            rowCount,
+            segmentCount,
+            resolveMs,
+            missingCount: validation.missing.length,
+            missing: validation.missing
+        });
+        return buildLineApplyFailure('Line structure is missing required line-n bundle nodes.', validation.missing);
+    }
+
+    const yRange = computeYRange(config, values);
+    const safeRange = yRange.max - yRange.min === 0 ? 1 : (yRange.max - yRange.min);
+
+    const applyStart = Date.now();
+    let appliedSegments = 0;
     for (let r = 0; r < rowCount; r++) {
-        const rowColor = normalizeHexColor(rowColors[r]);
+        const rowColor = normalizeHexColor(Array.isArray(config?.rowColors) ? config.rowColors[r] : null);
         const rowStyleId = getLineStyleId(config, r);
-        const seriesData = values[r];
-        if (!Array.isArray(seriesData)) continue;
+        const seriesData = Array.isArray(values[r]) ? values[r] : [];
+        const rowSegmentCount = Math.max(0, Math.min(segmentCount, seriesData.length - 1));
 
-        for (let c = 0; c < seriesData.length - 1; c++) {
-            if (c >= segmentCols) break;
+        for (let c = 0; c < rowSegmentCount; c++) {
+            const bundle = matrix[r]?.[c];
+            if (!bundle) {
+                return buildLineApplyFailure('Line structure matrix was not resolved for all segments.', [{
+                    rowIndex: r,
+                    segmentIndex: c,
+                    columnIndex: c,
+                    containerName: `line-${String(r + 1).padStart(2, '0')}`,
+                    reason: 'missing_bundle'
+                }]);
+            }
+
             const startVal = Number(seriesData[c]);
             const endVal = Number(seriesData[c + 1]);
-            const startRatio = (startVal - min) / safeRange;
-            const endRatio = (endVal - min) / safeRange;
+            const startRatio = (startVal - yRange.min) / safeRange;
+            const endRatio = (endVal - yRange.min) / safeRange;
             const startPx = H * clamp(startRatio, 0, 1);
             const endPx = H * clamp(endRatio, 0, 1);
             const pBottom = Math.min(startPx, endPx);
@@ -384,51 +269,36 @@ export function applyLine(config: any, H: number, graph: SceneNode) {
             if (endPx > startPx) dir = LINE_VARIANT_VALUES.UP;
             if (endPx < startPx) dir = LINE_VARIANT_VALUES.DOWN;
 
-            const resolved = resolveLineTargetForSegment(cols, lineTestFlags, graph, r, c, fallbackCache);
-            if (!resolved) {
-                unresolved += 1;
-                continue;
+            bundle.container.visible = true;
+            bundle.lineNode.visible = true;
+            bundle.fillNode.visible = true;
+            applyLineColorAndStroke(bundle.lineNode, rowColor, rowStyleId, thickness);
+            const layoutIssue = applyLineBundleLayout(bundle, pTop, pBottom, dir);
+            if (layoutIssue) {
+                return buildLineApplyFailure('Line bundle layout injection failed.', [{
+                    rowIndex: r,
+                    segmentIndex: c,
+                    columnIndex: c,
+                    containerName: `line-${String(r + 1).padStart(2, '0')}`,
+                    reason: layoutIssue
+                }]);
             }
-
-            if (resolved.kind === 'line_test') {
-                applyLineColorAndStroke(resolved.bundle.lineNode, rowColor, rowStyleId, thickness);
-                const applied = applyLineTestLayout(resolved.bundle, pTop, pBottom, dir);
-                if (applied) {
-                    lineTestApplied += 1;
-                    continue;
-                }
-                const fallbackLegacy = resolveLegacyLineInstanceForSegment(cols, graph, r, c, fallbackCache);
-                if (!fallbackLegacy.inst) {
-                    unresolved += 1;
-                    continue;
-                }
-                fallbackLegacy.inst.visible = true;
-                applyLineColorAndStroke(fallbackLegacy.inst, rowColor, rowStyleId, thickness);
-                fallbackLegacy.inst.paddingBottom = Math.max(0, pBottom);
-                fallbackLegacy.inst.paddingTop = Math.max(0, pTop);
-                setDirectionVariant(fallbackLegacy.inst, dir);
-                lineTestFallback += 1;
-                legacyApplied += 1;
-                continue;
-            }
-
-            const isLineTestSegment = c < lineTestFlags.length && lineTestFlags[c];
-            resolved.inst.visible = true;
-            applyLineColorAndStroke(resolved.inst, rowColor, rowStyleId, thickness);
-            resolved.inst.paddingBottom = Math.max(0, pBottom);
-            resolved.inst.paddingTop = Math.max(0, pTop);
-            setDirectionVariant(resolved.inst, dir);
-            if (isLineTestSegment) lineTestFallback += 1;
-            legacyApplied += 1;
+            appliedSegments += 1;
         }
     }
 
-    if (lineTestApplied > 0 || lineTestFallback > 0) {
-        console.log('[chart-plugin][line-test-summary]', {
-            lineTestApplied,
-            lineTestFallback,
-            legacyApplied,
-            unresolved
-        });
-    }
+    console.log('[chart-plugin][line-apply-summary]', {
+        rowCount,
+        segmentCount,
+        appliedSegments,
+        resolveMs,
+        applyMs: Date.now() - applyStart
+    });
+
+    return {
+        ok: true,
+        rowCount,
+        segmentCount,
+        appliedSegments
+    };
 }

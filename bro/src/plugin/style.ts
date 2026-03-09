@@ -1,7 +1,7 @@
 import { MARK_NAME_PATTERNS } from './constants';
 import { rgbToHex, findAllLineLayers, traverse } from './utils';
-import { isLineTestColumn } from './drawing/line';
 import { collectColumns, type ColRef } from './drawing/shared';
+import { collectLineBundlesInColumn } from './drawing/line-structure';
 import type { CellFillInjectionStyle, CellStrokeStyle, LineBackgroundInjectionStyle, MarkInjectionStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 
 // ==========================================
@@ -269,25 +269,6 @@ function getSolidFillColor(node: SceneNode): string | null {
     return rgbToHex(first.color.r, first.color.g, first.color.b);
 }
 
-function parseLineTestSeriesIndex(name: string): number | null {
-    const match = /^line[-_]?0*(\d+)$/i.exec(name.trim());
-    if (!match) return null;
-    const idx = Number(match[1]);
-    return Number.isFinite(idx) && idx > 0 ? idx : null;
-}
-
-function findChildByExactName(parent: SceneNode, name: string): SceneNode | null {
-    if (!('children' in parent)) return null;
-    const children = (parent as SceneNode & ChildrenMixin).children;
-    const direct = children.find((child) => child.name === name);
-    if (direct) return direct;
-    for (const child of children) {
-        const nested = findChildByExactName(child, name);
-        if (nested) return nested;
-    }
-    return null;
-}
-
 function resolveLayerVisible(node: SceneNode | null): boolean | undefined {
     if (!node) return undefined;
     if (!node.visible) return false;
@@ -300,30 +281,21 @@ function resolveLayerVisible(node: SceneNode | null): boolean | undefined {
 export function extractLineBackgroundStyle(graph: SceneNode, precomputedCols?: ColRef[]): LineBackgroundInjectionStyle | null {
     const columns = resolveColumns(graph, precomputedCols);
     for (const col of columns) {
-        if (!isLineTestColumn(col.node)) continue;
-
         let color: string | null = null;
         let visible: boolean | undefined;
-
-        traverse(col.node, (node) => {
-            if (color && visible !== undefined) return;
-            const seriesIndex = parseLineTestSeriesIndex(node.name);
-            if (!seriesIndex || !('children' in node)) return;
-            const fillNode = findChildByExactName(node, 'fill');
-            if (!fillNode) return;
-            const fillTop = findChildByExactName(fillNode, 'fill_top');
-            const triNode = fillTop ? findChildByExactName(fillTop, 'tri') : null;
-            const fillBot = findChildByExactName(fillNode, 'fill_bot');
-
+        const bundles = collectLineBundlesInColumn(col.node, col.index - 1);
+        const sorted = Array.from(bundles.entries()).sort((a, b) => a[0] - b[0]);
+        for (const [, bundle] of sorted) {
             if (!color) {
-                color = getSolidFillColor(triNode || fillBot || fillNode);
+                color = getSolidFillColor(bundle.triNode || bundle.fillBot || bundle.fillNode);
             }
             if (visible === undefined) {
-                visible = resolveLayerVisible(triNode);
-                if (visible === undefined) visible = resolveLayerVisible(fillBot);
-                if (visible === undefined) visible = resolveLayerVisible(fillNode);
+                visible = resolveLayerVisible(bundle.triNode);
+                if (visible === undefined) visible = resolveLayerVisible(bundle.fillBot);
+                if (visible === undefined) visible = resolveLayerVisible(bundle.fillNode);
             }
-        });
+            if (color && visible !== undefined) break;
+        }
 
         if (color || visible !== undefined) {
             return {
@@ -395,6 +367,14 @@ export function extractMarkStyles(graph: SceneNode, precomputedCols?: ColRef[]):
     const byIndex = new Map<number, MarkInjectionStyle>();
 
     columns.forEach((col) => {
+        const lineBundles = collectLineBundlesInColumn(col.node, col.index - 1);
+        const sortedBundles = Array.from(lineBundles.entries()).sort((a, b) => a[0] - b[0]);
+        sortedBundles.forEach(([rowIndex, bundle]) => {
+            const seriesIndex = rowIndex + 1;
+            if (byIndex.has(seriesIndex)) return;
+            const lineStyle = toLineInstanceMarkStyle(bundle.lineNode);
+            if (lineStyle) byIndex.set(seriesIndex, lineStyle);
+        });
         traverse(col.node, (node) => {
             if (!node.visible) return;
             const idx = parseMarkSeriesIndex(node.name);

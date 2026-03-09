@@ -1,5 +1,4 @@
 import { MARK_NAME_PATTERNS } from '../constants';
-import { isLineTestColumn } from './line';
 import type {
     CellFillInjectionStyle,
     ColorMode,
@@ -13,6 +12,7 @@ import type {
 } from '../../shared/style-types';
 import { normalizeHexColor, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke } from '../utils';
 import { collectColumns, type ColRef } from './shared';
+import { collectLineBundlesInColumn } from './line-structure';
 
 type SideName = 'top' | 'right' | 'bottom' | 'left';
 
@@ -516,25 +516,6 @@ function isLineLikeNode(node: SceneNode): boolean {
     return false;
 }
 
-function parseLineTestContainerSeriesIndex(name: string): number | null {
-    const match = /^line[-_]?0*(\d+)$/i.exec(name.trim());
-    if (!match) return null;
-    const idx = Number(match[1]);
-    return Number.isFinite(idx) && idx > 0 ? idx : null;
-}
-
-function findChildByExactName(parent: SceneNode, name: string): SceneNode | null {
-    if (!('children' in parent)) return null;
-    const children = (parent as SceneNode & ChildrenMixin).children;
-    const direct = children.find((child) => child.name === name);
-    if (direct) return direct;
-    for (const child of children) {
-        const nested = findChildByExactName(child, name);
-        if (nested) return nested;
-    }
-    return null;
-}
-
 function applyLineSeriesStyleTargets(
     root: SceneNode,
     style: NormalizedMarkStyle,
@@ -578,16 +559,17 @@ function applyLineSeriesStyleTargets(
     }
 }
 
-function applyLineTestStylesForColumn(
+function applyLineBundleStylesForColumn(
     colNode: SceneNode,
+    colIndex: number,
     styles: NormalizedMarkStyle[],
     rowColorModes: ColorMode[] | undefined,
     result: ScopeResult
 ) {
-    traverse(colNode, (node) => {
-        if (!node.visible) return;
-        const seriesIndex = parseLineTestContainerSeriesIndex(node.name);
-        if (!seriesIndex || !('children' in node)) return;
+    const bundles = collectLineBundlesInColumn(colNode, colIndex);
+    const sorted = Array.from(bundles.entries()).sort((a, b) => a[0] - b[0]);
+    sorted.forEach(([rowIndex, bundle]) => {
+        const seriesIndex = rowIndex + 1;
         const style = getMarkStyleBySeries(styles, seriesIndex);
         if (!style) return;
 
@@ -595,10 +577,7 @@ function applyLineTestStylesForColumn(
             Array.isArray(rowColorModes)
             && rowColorModes[seriesIndex - 1] === 'paint_style';
 
-        const lineNode = findChildByExactName(node, 'line');
-        if (lineNode) {
-            applyLineSeriesStyleTargets(lineNode, style, skipStrokeColorForSeries, result);
-        }
+        applyLineSeriesStyleTargets(bundle.lineNode, style, skipStrokeColorForSeries, result);
     });
 }
 
@@ -611,18 +590,9 @@ function applyLineBackgroundStyles(
     if (options?.chartType !== 'line' || !style) return result;
 
     columns.forEach((col) => {
-        if (!isLineTestColumn(col.node)) return;
-        traverse(col.node, (node) => {
-            if (!node.visible) return;
-            const seriesIndex = parseLineTestContainerSeriesIndex(node.name);
-            if (!seriesIndex || !('children' in node)) return;
-
-            const fillNode = findChildByExactName(node, 'fill');
-            if (!fillNode) return;
-            const fillTop = findChildByExactName(fillNode, 'fill_top');
-            const triNode = fillTop ? findChildByExactName(fillTop, 'tri') : null;
-            const fillBot = findChildByExactName(fillNode, 'fill_bot');
-            const targets = [triNode, fillBot].filter((target): target is SceneNode => Boolean(target));
+        const bundles = collectLineBundlesInColumn(col.node, col.index - 1);
+        bundles.forEach((bundle) => {
+            const targets = [bundle.triNode, bundle.fillBot].filter((target): target is SceneNode => Boolean(target));
             if (targets.length === 0) return;
 
             targets.forEach((target) => {
@@ -676,9 +646,8 @@ function applyMarkStyles(
     columns.forEach((col) => {
         const colIndex = Math.max(0, col.index - 1);
         const skipColorForColumn = options?.chartType === 'bar' && Boolean(options?.colColorEnabled?.[colIndex]);
-        const isLineTest = options?.chartType === 'line' && isLineTestColumn(col.node);
-        if (isLineTest) {
-            applyLineTestStylesForColumn(col.node, styles, options?.rowColorModes, result);
+        if (options?.chartType === 'line') {
+            applyLineBundleStylesForColumn(col.node, colIndex, styles, options?.rowColorModes, result);
             return;
         }
         traverse(col.node, (node) => {

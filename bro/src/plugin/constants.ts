@@ -29,6 +29,8 @@ export const LINE_VARIANT_VALUES = {
     DOWN: "down",
     FLAT: "flat"
 } as const;
+export const LINE_SERIES_CONTAINER_PATTERN = /^line-(\d{2})$/i;
+export const LINE_COMPONENT_PATTERN = /^line$/i;
 
 // [Data Keys] 저장할 키 목록
 export const PLUGIN_DATA_KEYS = {
@@ -90,7 +92,7 @@ export const MARK_NAME_PATTERNS = {
     STACKED_SUB_INSTANCE: /^st\.bar.*$|^bar.*$/,
     STACKED_SEGMENT: /^bar[-_]?0*(\d+)$/,
 
-    LINE: /^line[-_]?0*(\d*)$/,
+    LINE: /^line$/,
     COL_ALL: /^col-0*(\d+)$/,
 
     CEL: /^cel[-_]?0*(\d+)$/,

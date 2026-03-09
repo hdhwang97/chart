@@ -8,11 +8,12 @@ import { loadChartData, loadLocalStyleOverrides } from './data-layer';
 import { extractChartColors, extractStyleFromNode } from './style';
 import { collectColumns } from './drawing/shared';
 import { applyBar } from './drawing/bar';
-import { applyLine, isLineTestColumn } from './drawing/line';
+import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
 import { getGraphHeight, getXEmptyHeight } from './drawing/shared';
+import { detectLineSeriesCountInColumns, hasLineBundleStructureInColumns } from './drawing/line-structure';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import type {
     AssistLineInjectionStyle,
@@ -477,7 +478,19 @@ export async function initPluginUI(
         const xEmptyHeight = getXEmptyHeight(node as FrameNode);
         if (chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
         else if (chartType === 'bar') applyBar(payload, H, node);
-        else if (chartType === 'line') applyLine(payload, H, node);
+        else if (chartType === 'line') {
+            const lineResult = applyLine(payload, H, node);
+            if (!lineResult.ok) {
+                figma.notify('Line apply failed: required line structure is missing.');
+                console.error('[chart-plugin][line-apply-failed]', {
+                    reason: opts?.reason || 'auto-resize',
+                    targetNodeId: node.id,
+                    targetNodeName: node.name,
+                    lineResult
+                });
+                return;
+            }
+        }
         applyAssistLines(payload, node, H, { xEmptyHeight });
         if (node.type === 'INSTANCE' && hasTruthyMask(localOverrideState.mask)) {
             applyStrokeInjection(node, {
@@ -744,7 +757,12 @@ export function inferStructureFromGraph(chartType: string, graph: SceneNode) {
         const maxVisibleSegments = groupStructure.length > 0 ? Math.max(...groupStructure) : 0;
         rowCount = Math.max(1, maxVisibleSegments + 1);
 
-    } else if (chartType === "bar" || chartType === "line") {
+    } else if (chartType === "line") {
+        const visibleCols = cols.filter((col) => col.node.visible);
+        const maxRows = detectLineSeriesCountInColumns(visibleCols.length > 0 ? visibleCols : cols);
+        markNum = maxRows;
+        rowCount = Math.max(1, maxRows);
+    } else if (chartType === "bar") {
         let maxRows = 1;
         cols.forEach(c => {
             let parent: any = c.node;
@@ -755,14 +773,10 @@ export function inferStructureFromGraph(chartType: string, graph: SceneNode) {
             if (parent.children) {
                 parent.children.forEach((child: SceneNode) => {
                     if (!child.visible) return;
-                    if (chartType === "bar") {
-                        if (MARK_NAME_PATTERNS.BAR_ITEM_MULTI.test(child.name)) count++;
-                    } else {
-                        if (MARK_NAME_PATTERNS.LINE.test(child.name)) count++;
-                    }
+                    if (MARK_NAME_PATTERNS.BAR_ITEM_MULTI.test(child.name)) count++;
                 });
             }
-            if (chartType === "bar" && count === 0) {
+            if (count === 0) {
                 const singleBar = parent.children.find((n: SceneNode) => MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(n.name));
                 if (singleBar && singleBar.visible) count = 1;
             }
@@ -789,7 +803,7 @@ export function inferChartType(node: SceneNode): string {
         if (typePropKey && props[typePropKey]) return props[typePropKey].value as string;
     }
     const visibleCols = collectColumns(node).filter((col) => col.node.visible);
-    if (visibleCols.some((col) => isLineTestColumn(col.node))) {
+    if (hasLineBundleStructureInColumns(visibleCols)) {
         return 'line';
     }
     let found = 'bar';
