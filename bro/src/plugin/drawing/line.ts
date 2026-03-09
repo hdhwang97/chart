@@ -1,6 +1,7 @@
 import { LINE_VARIANT_KEY_DEFAULT, LINE_VARIANT_VALUES } from '../constants';
 import { clamp, normalizeHexColor, traverse, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
 import { collectColumns, setVariantProperty } from './shared';
+import { debugLog } from '../log';
 import {
     buildLineBundleMatrix,
     type LineBundle,
@@ -287,7 +288,7 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
         }
     }
 
-    console.log('[chart-plugin][line-apply-summary]', {
+    debugLog('[chart-plugin][line-apply-summary]', {
         rowCount,
         segmentCount,
         appliedSegments,

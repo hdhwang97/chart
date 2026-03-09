@@ -38,6 +38,7 @@ bro/
    │  ├─ main.ts                         # 메시지 라우팅, selectionchange, apply/generate
    │  ├─ init.ts                         # init payload 구성, 컴포넌트 탐색/구조 추론
    │  ├─ data-layer.ts                   # pluginData + local override 저장/복원
+   │  ├─ log.ts                          # plugin 디버그 로그 게이트(__CHART_PLUGIN_DEBUG__)
    │  ├─ constants.ts                    # 패턴/키/상수 정의
    │  ├─ style.ts                        # 현재 차트 스타일 추출
    │  ├─ utils.ts                        # 색상/노드/스타일링 유틸
@@ -48,6 +49,7 @@ bro/
    │     ├─ y-range.ts                   # Y 범위 계산(raw/percent)
    │     ├─ bar.ts                       # Bar 적용 로직
    │     ├─ stacked.ts                   # Stacked Bar 적용 로직
+   │     ├─ line-structure.ts            # line bundle 탐색/검증 공통 유틸
    │     ├─ line.ts                      # Line 적용 로직
    │     ├─ assist-line.ts               # min/max/avg/ctr 보조선
    │     └─ stroke-injection.ts          # fill/stroke 인젝션 동기화
@@ -55,6 +57,7 @@ bro/
    │  ├─ index.html                      # UI 마크업 엔트리
    │  ├─ style.css                       # UI 스타일
    │  ├─ main.ts                         # UI 이벤트 + plugin 메시지 처리
+   │  ├─ log.ts                          # UI 디버그 로그 게이트(__CHART_UI_DEBUG__)
    │  ├─ state.ts                        # 전역 상태
    │  ├─ dom.ts                          # DOM accessor
    │  ├─ steps.ts                        # generate/apply payload 생성
@@ -158,7 +161,39 @@ bro/
 
 ---
 
-## 6) 현재 운영 메모
+## 6) Line 템플릿/주입 정책 (최신)
+
+- line 차트는 단일 모델 사용:
+  - `line-01`, `line-02`, ... 컨테이너
+  - 내부 필수 레이어: `line`, `fill`, `fill_top`, `fill_bot`
+  - optional 레이어: `fill_top/tri`
+- `line-n` 네이밍 규칙:
+  - `line-01` 형태(2자리 zero-pad)만 인식
+- `applyLine`는 `LineApplyResult`를 반환:
+  - `ok: false` + `errorCode: "line_structure_missing"`이면 전체 apply 중단
+  - 누락/불일치 상세는 `missing[]`로 제공 (`reason`, `rowIndex`, `segmentIndex`, `columnIndex`)
+- direction variant 기준:
+  - 실제 Figma 프로퍼티 `direction`만 사용
+  - 값이 이미 동일한 경우(no-op)도 성공으로 처리
+- 레거시 line fallback 경로는 제거됨:
+  - 구조가 맞지 않으면 자동 대체하지 않고 실패 처리
+
+---
+
+## 7) 로그 정책 (최신)
+
+- 기본 정책:
+  - `console.error` / `console.warn`는 항상 출력
+  - `console.log` 디버그 로그는 기본 비활성
+- Plugin 디버그 로그 활성화:
+  - DevTools 콘솔에서 `globalThis.__CHART_PLUGIN_DEBUG__ = true`
+- UI 디버그 로그 활성화:
+  - DevTools 콘솔에서 `window.__CHART_UI_DEBUG__ = true`
+- 디버그 로그는 `debugLog` / `uiDebugLog`를 통해 출력 제어
+
+---
+
+## 8) 현재 운영 메모
 
 - manifest 이름: `Test 1.0.2`
 - allowedDomains:

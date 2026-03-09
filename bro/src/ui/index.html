@@ -881,7 +881,9 @@
                     if (hovered.id === lastHoveredId) return;
 
                     lastHoveredId = hovered.id;
-                    console.log(`[hover][${panel.id}] ${hovered.id}`);
+                    if (window.__CHART_UI_DEBUG__ === true) {
+                        console.log(`[hover][${panel.id}] ${hovered.id}`);
+                    }
                 });
 
                 panel.addEventListener('mouseleave', () => {

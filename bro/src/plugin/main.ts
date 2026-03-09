@@ -12,6 +12,7 @@ import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromG
 import { normalizeHexColor, rgbToHex, traverse } from './utils';
 import { deleteStyleTemplate, loadStyleTemplates, renameStyleTemplate, saveStyleTemplate } from './template-store';
 import { PerfTracker, shouldLogApplyPerf } from './perf';
+import { debugLog } from './log';
 import type {
     ColorMode,
     LocalStyleOverrideMask,
@@ -457,7 +458,7 @@ function logSelectionRecognition(node: SceneNode) {
     const columnCount = collectColumns(node).length;
     const recognized = isRecognizedChartSelection(node);
 
-    console.log('[chart-plugin][selection]', {
+    debugLog('[chart-plugin][selection]', {
         recognized,
         nodeId: node.id,
         nodeName: node.name,
@@ -544,7 +545,7 @@ figma.ui.onmessage = async (msg) => {
                     resolvedNode.type === 'COMPONENT'
                         ? 'template-master'
                         : (resolvedNode.type === 'INSTANCE' ? 'instance-data' : 'default');
-                console.log('[chart-plugin][apply]', {
+                debugLog('[chart-plugin][apply]', {
                     selectedNodeId: nodes[0].id,
                     targetNodeId: resolvedNode.id,
                     selectedNodeName: nodes[0].name,
@@ -610,7 +611,7 @@ figma.ui.onmessage = async (msg) => {
             }
             const savedMode = targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
             templateExistingMode = savedMode === 'percent' ? 'percent' : 'raw';
-            console.log('[chart-plugin][apply-policy]', {
+            debugLog('[chart-plugin][apply-policy]', {
                 applyPolicy,
                 targetNodeId: targetNode.id,
                 targetNodeType: targetNode.type,
@@ -656,7 +657,7 @@ figma.ui.onmessage = async (msg) => {
         const xEmptyHeight = getXEmptyHeight(targetNode as FrameNode);
         const chartLegendHeight = getChartLegendHeight(targetNode as FrameNode);
         if (type === 'bar') {
-            console.log('[chart-plugin][bar-height-debug][graph]', {
+            debugLog('[chart-plugin][bar-height-debug][graph]', {
                 graphId: targetNode.id,
                 graphName: targetNode.name,
                 graphHeight: 'height' in targetNode ? targetNode.height : null,
@@ -756,13 +757,13 @@ figma.ui.onmessage = async (msg) => {
                     ? 'right'
                     : 'center';
             const xEmptyAlignResult = applyColumnXEmptyAlign(targetNode, xEmptyAlign, columns);
-            console.log('[chart-plugin][x-empty-align]', { type, align: xEmptyAlign, ...xEmptyAlignResult });
+            debugLog('[chart-plugin][x-empty-align]', { type, align: xEmptyAlign, ...xEmptyAlignResult });
             const xEmptyLabelResult = applyColumnXEmptyLabels(
                 targetNode,
                 Array.isArray(xAxisLabels) ? xAxisLabels : [],
                 columns
             );
-            console.log('[chart-plugin][x-empty-label]', { type, ...xEmptyLabelResult });
+            debugLog('[chart-plugin][x-empty-label]', { type, ...xEmptyLabelResult });
             const legendLabelResult = applyLegendLabelsFromRowHeaders(
                 targetNode,
                 {
@@ -776,7 +777,7 @@ figma.ui.onmessage = async (msg) => {
                     columns
                 }
             );
-            console.log('[chart-plugin][legend-label]', { type, ...legendLabelResult });
+            debugLog('[chart-plugin][legend-label]', { type, ...legendLabelResult });
         });
 
         const runtimeStrokePayload = isDataOnlyApply
@@ -831,7 +832,7 @@ figma.ui.onmessage = async (msg) => {
             };
 
         const strokeInjectionResult = await perf.step('stroke-injection', () => applyStrokeInjection(targetNode, runtimeStrokePayload, columns));
-        console.log('[chart-plugin][stroke-injection]', strokeInjectionResult);
+        debugLog('[chart-plugin][stroke-injection]', strokeInjectionResult);
 
         // 5. 스타일 자동 추출 및 전송
         const shouldUseFastStyleSync = msg.type === 'apply' && isStackedType(type);
@@ -1021,7 +1022,7 @@ figma.ui.onmessage = async (msg) => {
             if (targetNode.type === 'INSTANCE') {
                 saveLocalStyleOverrides(targetNode, effectiveLocalOverrides, effectiveLocalMask);
             }
-            console.log('[chart-plugin][save-policy]', {
+            debugLog('[chart-plugin][save-policy]', {
                 applyPolicy,
                 targetNodeId: targetNode.id,
                 skipDataKeys: isTemplateMasterApply
@@ -1030,7 +1031,7 @@ figma.ui.onmessage = async (msg) => {
         });
         const perfReport = perf.done();
         if (shouldLogApplyPerf(msg.type, type)) {
-            console.log('[chart-plugin][perf][apply][stacked]', perfReport);
+            debugLog('[chart-plugin][perf][apply][stacked]', perfReport);
         }
 
         if (msg.type === 'generate') {
@@ -1302,14 +1303,14 @@ figma.on("selectionchange", () => {
         if (isCType) {
             const resizedCount = applyCTypeResizeRules(node);
             if (resizedCount > 0) {
-                console.log('[chart-plugin][ctype-resize-fill]', {
+                debugLog('[chart-plugin][ctype-resize-fill]', {
                     selectedNodeId: node.id,
                     resizedCount
                 });
             }
         }
         logSelectionRecognition(resolvedNode);
-        console.log('[chart-plugin][selection-resolve]', {
+        debugLog('[chart-plugin][selection-resolve]', {
             selectedNodeId: node.id,
             resolvedNodeId: resolvedNode.id,
             selectedNodeName: node.name,
@@ -1330,7 +1331,7 @@ figma.on("selectionchange", () => {
         }
     } else {
         currentSelectionId = null;
-        console.log('[chart-plugin][selection]', {
+        debugLog('[chart-plugin][selection]', {
             recognized: false,
             reason: selection.length === 0 ? 'empty-selection' : 'multi-selection',
             selectionCount: selection.length
@@ -1355,7 +1356,7 @@ setInterval(() => {
     }
 
     if (Math.abs(trackedScene.width - prevWidth) > 1 || Math.abs(trackedScene.height - prevHeight) > 1) {
-        console.log('[chart-plugin][auto-resize]', {
+        debugLog('[chart-plugin][auto-resize]', {
             nodeId: trackedScene.id,
             prevWidth,
             nextWidth: trackedScene.width,

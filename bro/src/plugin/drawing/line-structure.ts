@@ -119,7 +119,6 @@ export function collectLineBundlesInColumn(colNode: SceneNode, columnIndex = 0):
     const byRow = new Map<number, LineBundle>();
     const root = resolveColumnSearchRoot(colNode);
     traverse(root, (node) => {
-        if (!node.visible) return;
         const rowIndex = parseLineSeriesIndex(node.name);
         if (rowIndex === null || byRow.has(rowIndex)) return;
         const bundle = resolveLineBundleInContainer(node, rowIndex, columnIndex);

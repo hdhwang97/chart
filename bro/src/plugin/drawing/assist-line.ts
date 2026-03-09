@@ -1,5 +1,6 @@
 import { collectColumns } from './shared';
 import { clamp, traverse, findActualPropKey, normalizeHexColor, tryApplyDashPattern, tryApplyStroke } from '../utils';
+import { debugLog } from '../log';
 
 type AssistMetricType = 'min' | 'max' | 'avg' | 'ctr';
 
@@ -237,7 +238,7 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
         const paddingTop = toPaddingTop(metricValue, yMin, yMax, graphHeight);
 
         if (metricNodes.length === 0) {
-            console.log('[chart-plugin][assist-line]', {
+            debugLog('[chart-plugin][assist-line]', {
                 metric,
                 enabled: isEnabled,
                 found: 0
@@ -252,7 +253,7 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
                 }
                 node.visible = isEnabled;
                 if (!isEnabled) {
-                    console.log('[chart-plugin][assist-line]', {
+                    debugLog('[chart-plugin][assist-line]', {
                         metric,
                         enabled: isEnabled,
                         nodeId: node.id,
@@ -264,7 +265,7 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
                 if ('paddingTop' in node) {
                     (node as SceneNode & { paddingTop: number }).paddingTop = paddingTop;
                 } else {
-                    console.log('[chart-plugin][assist-line]', {
+                    debugLog('[chart-plugin][assist-line]', {
                         metric,
                         enabled: isEnabled,
                         nodeId: node.id,
@@ -279,7 +280,7 @@ export function applyAssistLines(config: any, graph: SceneNode, fallbackHeight: 
                 }
                 applyAssistLineVisualStyle(node, assistLineStyle);
 
-                console.log('[chart-plugin][assist-line]', {
+                debugLog('[chart-plugin][assist-line]', {
                     metric,
                     enabled: isEnabled,
                     metricValue,

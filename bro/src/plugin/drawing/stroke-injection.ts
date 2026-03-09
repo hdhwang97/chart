@@ -11,6 +11,7 @@ import type {
     StrokeStyleSnapshot
 } from '../../shared/style-types';
 import { normalizeHexColor, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke } from '../utils';
+import { debugLog } from '../log';
 import { collectColumns, type ColRef } from './shared';
 import { collectLineBundlesInColumn } from './line-structure';
 
@@ -900,7 +901,7 @@ function applyLegendMarkSync(
     });
 
     if (!isStacked && !isBar) {
-        console.log('[chart-plugin][legend-sync][line]', {
+        debugLog('[chart-plugin][legend-sync][line]', {
             chartType,
             markCount,
             extractedStrokeColors: styles.map((style) => style.strokeColor || null),

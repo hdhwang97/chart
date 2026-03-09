@@ -1,6 +1,7 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM, PLUGIN_DATA_KEYS } from '../constants';
 import { collectColumns, setVariantProperty } from './shared';
 import { normalizeHexColor, tryApplyFill, tryApplyFillStyleLink, tryApplyStroke, tryApplyStrokeStyleLink, traverse } from '../utils';
+import { debugLog } from '../log';
 
 // ==========================================
 // BAR CHART DRAWING
@@ -339,7 +340,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                                 totalRatioAfter += ratioAfter;
                                 loggedColumns += 1;
 
-                                console.log('[chart-plugin][bar-resize][col]', {
+                                debugLog('[chart-plugin][bar-resize][col]', {
                                     colIndex: cIdx,
                                     measuredCellWidth: measureWidth,
                                     barWidthBefore,
@@ -364,7 +365,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                         (barLayer as any).paddingBottom = finalH;
                     }
                     if (m === 0) {
-                        console.log('[chart-plugin][bar-height-debug][col]', {
+                        debugLog('[chart-plugin][bar-height-debug][col]', {
                             colIndex: cIdx,
                             colName: colObj.node.name,
                             colHeight,
@@ -383,7 +384,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
     });
 
     if (shouldLogResizeDebug && loggedColumns > 0) {
-        console.log('[chart-plugin][bar-resize][summary]', {
+        debugLog('[chart-plugin][bar-resize][summary]', {
             columns: loggedColumns,
             appliedRatio: targetRatio,
             avgRatioBefore: totalRatioBefore / loggedColumns,
@@ -392,7 +393,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
     }
 
     if (ratioAuditRows.length > 0) {
-        console.log('[chart-plugin][bar-ratio-check][summary]', {
+        debugLog('[chart-plugin][bar-ratio-check][summary]', {
             reason: reason || 'apply/generate',
             source: ratioSource,
             inputRatio: configRatio,
@@ -408,7 +409,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
             columns: ratioAuditRows.length
         });
         ratioAuditRows.forEach((row) => {
-            console.log('[chart-plugin][bar-ratio-check][col]', row);
+            debugLog('[chart-plugin][bar-ratio-check][col]', row);
         });
     }
 }

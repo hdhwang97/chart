@@ -36,6 +36,7 @@ import { bindStyleTabEvents, buildTemplatePayloadFromDraft, buildLocalStyleOverr
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection } from '../shared/style-types';
 import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
+import { uiDebugLog } from './log';
 
 // ==========================================
 // UI ENTRY POINT
@@ -1071,7 +1072,7 @@ function handlePluginMessage(msg: any) {
                 renderStylePreview();
                 refreshExportPreview();
             }
-            console.log('[ui][style-extracted]', {
+            uiDebugLog('[ui][style-extracted]', {
                 source: msg.source,
                 dirty: wasDirty,
                 syncApplied

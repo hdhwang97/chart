@@ -1,6 +1,7 @@
 import { PLUGIN_DATA_KEYS } from './constants';
 import { inferStructureFromGraph } from './init';
 import { normalizeHexColor } from './utils';
+import { debugLog } from './log';
 import type {
     AssistLineInjectionStyle,
     CellFillInjectionStyle,
@@ -554,7 +555,7 @@ export async function loadChartData(node: SceneNode, chartType: string) {
                 ? recoverLegacyStackedValuesIfNeeded(parsedValues, markNum)
                 : parsedValues;
             const cellCount = Number(savedCell) || 4;
-            console.log('[chart-plugin][data] saved LAST_VALUES found', {
+            debugLog('[chart-plugin][data] saved LAST_VALUES found', {
                 nodeId: node.id,
                 valuesRows: Array.isArray(values) ? values.length : 0,
                 cellCount,
@@ -574,7 +575,7 @@ export async function loadChartData(node: SceneNode, chartType: string) {
         }
     }
 
-    console.log('[chart-plugin][data] no saved LAST_VALUES, infer from structure', {
+    debugLog('[chart-plugin][data] no saved LAST_VALUES, infer from structure', {
         nodeId: node.id,
         chartType
     });
