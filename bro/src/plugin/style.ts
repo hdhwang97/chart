@@ -472,7 +472,7 @@ export function deriveRowStrokeStyles(cellStrokeStyles: CellStrokeStyle[], rowCo
         if (strokes.length === 0) return;
 
         const colorMode = mode(strokes.map(s => s.color).filter((v): v is string => Boolean(v)));
-        const alignMode = mode(strokes.map(s => s.align).filter((v): v is string => Boolean(v))) as StrokeStyleSnapshot['align'];
+        const alignMode = mode(strokes.map(s => s.align as string | undefined).filter((v): v is string => Boolean(v))) as StrokeStyleSnapshot['align'];
         const dashMode = mode(strokes.map(s => serializeDashPattern(s.dashPattern)).filter((v): v is string => Boolean(v)));
 
         const snapshot: StrokeStyleSnapshot = {};

@@ -500,17 +500,17 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
             xGuidePositions
                 .filter((x) => x > 0 && x <= w)
                 .forEach((x) => {
-                const line = g.append('line')
-                    .attr('x1', x)
-                    .attr('x2', x)
-                    .attr('y1', 0)
-                    .attr('y2', h);
-                applyStroke(line, tabRightStroke, '#E5E7EB', 1);
-                line.attr('opacity', tabRightOpacity);
-                markDataContextLine(line);
-                markStyleTarget(line, 'tab-right', mode);
-                addStyleHitLine(g, x, x, 0, h, 'tab-right', mode);
-            });
+                    const line = g.append('line')
+                        .attr('x1', x)
+                        .attr('x2', x)
+                        .attr('y1', 0)
+                        .attr('y2', h);
+                    applyStroke(line, tabRightStroke, '#E5E7EB', 1);
+                    line.attr('opacity', tabRightOpacity);
+                    markDataContextLine(line);
+                    markStyleTarget(line, 'tab-right', mode);
+                    addStyleHitLine(g, x, x, 0, h, 'tab-right', mode);
+                });
         } else {
             const step = w / totalCols;
             for (let c = 1; c <= totalCols; c++) {
@@ -811,8 +811,8 @@ function renderBarPreview(
             const barH = Math.max(0, h - yScale(val));
             const isHighlighted = activeHighlight
                 ? (activeHighlight.type === 'col' && activeHighlight.index === c)
-                    || (activeHighlight.type === 'row' && activeHighlight.index === r)
-                    || (activeHighlight.type === 'cell' && activeHighlight.row === r && activeHighlight.col === c)
+                || (activeHighlight.type === 'row' && activeHighlight.index === r)
+                || (activeHighlight.type === 'cell' && activeHighlight.row === r && activeHighlight.col === c)
                 : false;
 
             const colX = xScale(c)!;
@@ -831,7 +831,7 @@ function renderBarPreview(
                 .attr('rx', 2);
 
             if (mode === 'data') {
-                rect.on('mouseenter', function () {
+                rect.on('mouseenter', function (this: SVGElement) {
                     highlightGridCellFromMark(r, c);
                     dimOtherMarks(containerId, this as SVGElement);
                     dimDataContextLines(containerId);
@@ -943,7 +943,7 @@ function renderLinePreview(
         }
 
         if (mode === 'data') {
-            path.on('mouseenter', function () {
+            path.on('mouseenter', function (this: SVGElement) {
                 highlightGridRowFromMark(r);
                 dimOtherMarks(containerId, this as SVGElement);
                 dimDataContextLines(containerId);
@@ -1065,9 +1065,9 @@ function renderStackedPreview(
 
                 const isHighlighted = activeHighlight
                     ? (activeHighlight.type === 'group' && activeHighlight.index === gIdx)
-                        || (activeHighlight.type === 'col' && activeHighlight.index === flatIdx)
-                        || (activeHighlight.type === 'row' && activeHighlight.index === r)
-                        || (activeHighlight.type === 'cell' && activeHighlight.row === r && activeHighlight.col === flatIdx)
+                    || (activeHighlight.type === 'col' && activeHighlight.index === flatIdx)
+                    || (activeHighlight.type === 'row' && activeHighlight.index === r)
+                    || (activeHighlight.type === 'cell' && activeHighlight.row === r && activeHighlight.col === flatIdx)
                     : false;
 
                 const rect = g.append('rect')
@@ -1084,7 +1084,7 @@ function renderStackedPreview(
                     .attr('rx', 1);
 
                 if (mode === 'data') {
-                    rect.on('mouseenter', function () {
+                    rect.on('mouseenter', function (this: SVGElement) {
                         highlightGridCellFromMark(r, flatIdx);
                         dimOtherMarks(containerId, this as SVGElement);
                         dimDataContextLines(containerId);

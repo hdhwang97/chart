@@ -583,7 +583,7 @@ figma.ui.onmessage = async (msg) => {
             return instance;
         });
         if (!targetNode) return;
-        const isTemplateMasterApply = msg.type === 'apply' && targetNode.type === 'COMPONENT';
+        const isTemplateMasterApply = msg.type === 'apply' && (targetNode as any).type === 'COMPONENT';
         const applyPolicy: ApplyPolicy = isTemplateMasterApply
             ? 'template-master'
             : (targetNode.type === 'INSTANCE' ? 'instance-data' : 'default');

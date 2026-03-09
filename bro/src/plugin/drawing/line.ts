@@ -210,7 +210,7 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
     const rowCount = values.length;
     const thickness = Number.isFinite(Number(config?.strokeWidth)) ? Number(config.strokeWidth) : 2;
     const cols = collectColumns(graph).filter((col) => col.node.visible);
-    const maxSegmentsFromValues = values.reduce((max, row) => {
+    const maxSegmentsFromValues = values.reduce((max: number, row: any) => {
         const count = Array.isArray(row) ? Math.max(0, row.length - 1) : 0;
         return Math.max(max, count);
     }, 0);

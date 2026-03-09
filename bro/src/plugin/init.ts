@@ -368,11 +368,11 @@ export async function getOrImportComponent(): Promise<ComponentNode | ComponentS
 
     let found = figma.currentPage.findOne(n =>
         (n.type === "COMPONENT" || n.type === "COMPONENT_SET") && n.name === NAME
-    );
+    ) as SceneNode | null;
     if (!found) {
         found = figma.root.findOne(n =>
             (n.type === "COMPONENT" || n.type === "COMPONENT_SET") && n.name === NAME
-        );
+        ) as SceneNode | null;
     }
 
     if (found) {
