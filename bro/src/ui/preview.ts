@@ -319,6 +319,9 @@ function getMarkDraftStyle(seriesIndex: number) {
         fillColor: normalizeHexColorInput(source.fillColor) || normalizeHexColorInput(fallback.fillColor) || '#3B82F6',
         strokeColor: normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || '#3B82F6',
         lineBackgroundColor: normalizeHexColorInput(source.lineBackgroundColor) || normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || '#3B82F6',
+        lineBackgroundOpacity: Number.isFinite(Number(source.lineBackgroundOpacity))
+            ? Math.max(0, Math.min(100, Number(source.lineBackgroundOpacity)))
+            : Math.max(0, Math.min(100, Number((fallback as any).lineBackgroundOpacity ?? 100))),
         thickness: Number.isFinite(Number(source.thickness)) ? Math.max(0, Number(source.thickness)) : Math.max(0, Number(fallback.thickness) || 1),
         strokeStyle: source.strokeStyle === 'dash' ? 'dash' : 'solid'
     };
@@ -904,7 +907,8 @@ function renderLinePreview(
         const areaVisible = true;
         const yDomain = yScale.domain();
         const yBase = Array.isArray(yDomain) && Number.isFinite(Number(yDomain[0])) ? Number(yDomain[0]) : 0;
-        const areaOpacity = activeHighlight ? (relatedRow ? 0.24 : 0.06) : 0.24;
+        const lineBgOpacityFactor = Math.max(0, Math.min(1, Number(styleMark.lineBackgroundOpacity) / 100));
+        const areaOpacity = (activeHighlight ? (relatedRow ? 0.24 : 0.06) : 0.24) * lineBgOpacityFactor;
         if (areaVisible) {
             const area = d3.area()
                 .x((_: any, i: number) => xScale(i)!)

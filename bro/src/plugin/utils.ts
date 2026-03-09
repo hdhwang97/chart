@@ -62,18 +62,21 @@ export function hexToRgb01(hex: string) {
     };
 }
 
-export function buildSolidPaint(hex: string): SolidPaint | null {
+export function buildSolidPaint(hex: string, opacity?: number): SolidPaint | null {
     const rgb = hexToRgb01(hex);
     if (!rgb) return null;
+    const hasOpacity = Number.isFinite(opacity);
+    const normalizedOpacity = hasOpacity ? Math.max(0, Math.min(1, Number(opacity))) : undefined;
     return {
         type: 'SOLID',
-        color: rgb
+        color: rgb,
+        ...(normalizedOpacity !== undefined ? { opacity: normalizedOpacity } : {})
     };
 }
 
-export function tryApplyFill(node: SceneNode, hex: string) {
+export function tryApplyFill(node: SceneNode, hex: string, opacity?: number) {
     if (!('fills' in node)) return false;
-    const paint = buildSolidPaint(hex);
+    const paint = buildSolidPaint(hex, opacity);
     if (!paint) return false;
     try {
         (node as SceneNode & GeometryMixin).fills = [paint];
@@ -88,9 +91,9 @@ export function tryApplyFill(node: SceneNode, hex: string) {
     }
 }
 
-export function tryApplyStroke(node: SceneNode, hex: string) {
+export function tryApplyStroke(node: SceneNode, hex: string, opacity?: number) {
     if (!('strokes' in node)) return false;
-    const paint = buildSolidPaint(hex);
+    const paint = buildSolidPaint(hex, opacity);
     if (!paint) return false;
     try {
         (node as SceneNode & GeometryMixin).strokes = [paint];

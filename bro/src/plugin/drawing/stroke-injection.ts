@@ -59,6 +59,7 @@ type NormalizedMarkStyle = {
     fillColor?: string;
     strokeColor?: string;
     lineBackgroundColor?: string;
+    lineBackgroundOpacity?: number;
     thickness?: number;
     strokeStyle?: 'solid' | 'dash';
 };
@@ -113,13 +114,18 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
     const fillColor = normalizeHexColor(source.fillColor);
     const strokeColor = normalizeHexColor(source.strokeColor);
     const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
+    const lineBackgroundOpacityRaw = Number(source.lineBackgroundOpacity);
+    const lineBackgroundOpacity = Number.isFinite(lineBackgroundOpacityRaw)
+        ? Math.max(0, Math.min(1, lineBackgroundOpacityRaw))
+        : undefined;
     const thickness = normalizeThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && thickness === undefined && !strokeStyle) return null;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && thickness === undefined && !strokeStyle) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         lineBackgroundColor: lineBackgroundColor || undefined,
+        lineBackgroundOpacity,
         thickness,
         strokeStyle
     };
@@ -601,6 +607,7 @@ function applyLineBackgroundStyles(
             const seriesIndex = rowIndex + 1;
             const markStyle = getMarkStyleBySeries(markStyles, seriesIndex);
             const color = markStyle?.lineBackgroundColor || markStyle?.fillColor || markStyle?.strokeColor || style?.color;
+            const opacity = typeof markStyle?.lineBackgroundOpacity === 'number' ? markStyle.lineBackgroundOpacity : undefined;
             const targets = [bundle.triNode, bundle.fillBot].filter((target): target is SceneNode => Boolean(target));
             if (targets.length === 0) return;
 
@@ -612,7 +619,7 @@ function applyLineBackgroundStyles(
                         applied = setNodeFillVisibility(target, style.visible) || applied;
                     }
                     if (color) {
-                        applied = tryApplyFill(target, color) || applied;
+                        applied = tryApplyFill(target, color, opacity) || applied;
                         if (typeof style?.visible === 'boolean') {
                             applied = setNodeFillVisibility(target, style.visible) || applied;
                         }

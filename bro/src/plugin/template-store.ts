@@ -94,13 +94,18 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | undefined {
     const fillColor = normalizeHexColor(source.fillColor);
     const strokeColor = normalizeHexColor(source.strokeColor);
     const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
+    const lineBackgroundOpacityRaw = Number(source.lineBackgroundOpacity);
+    const lineBackgroundOpacity = Number.isFinite(lineBackgroundOpacityRaw)
+        ? Math.max(0, Math.min(1, lineBackgroundOpacityRaw))
+        : undefined;
     const thickness = clampThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && thickness === undefined && !strokeStyle) return undefined;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && thickness === undefined && !strokeStyle) return undefined;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         lineBackgroundColor: lineBackgroundColor || undefined,
+        lineBackgroundOpacity,
         thickness,
         strokeStyle
     };
