@@ -40,6 +40,7 @@ export type LineBackgroundStyleInjectionDraftItem = {
 export type MarkStyleInjectionDraftItem = {
     fillColor: string;
     strokeColor: string;
+    lineBackgroundColor: string;
     thickness: number;
     strokeStyle: 'solid' | 'dash';
 };
@@ -89,6 +90,7 @@ export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
     mark: {
         fillColor: '#3B82F6',
         strokeColor: '#3B82F6',
+        lineBackgroundColor: '#3B82F6',
         thickness: 1,
         strokeStyle: 'solid'
     }
@@ -150,6 +152,7 @@ export const state = {
         mark: {
             fillColor: '#3B82F6',
             strokeColor: '#3B82F6',
+            lineBackgroundColor: '#3B82F6',
             thickness: 1,
             strokeStyle: 'solid'
         }
@@ -158,6 +161,7 @@ export const state = {
     markStylesDraft: [{
         fillColor: '#3B82F6',
         strokeColor: '#3B82F6',
+        lineBackgroundColor: '#3B82F6',
         thickness: 1,
         strokeStyle: 'solid'
     }] as MarkStyleInjectionDraftItem[],
@@ -435,10 +439,11 @@ function normalizeMarkStyleItem(
 ): MarkStyleInjectionDraftItem {
     const fillColor = normalizeHexColorInput(input?.fillColor) || fallbackColor;
     const strokeColor = normalizeHexColorInput(input?.strokeColor) || fillColor;
+    const lineBackgroundColor = normalizeHexColorInput(input?.lineBackgroundColor) || strokeColor;
     const rawThickness = Number(input?.thickness);
     const thickness = Number.isFinite(rawThickness) ? Math.max(0, Math.round(rawThickness * 100) / 100) : 1;
     const strokeStyle = input?.strokeStyle === 'dash' ? 'dash' : 'solid';
-    return { fillColor, strokeColor, thickness, strokeStyle };
+    return { fillColor, strokeColor, lineBackgroundColor, thickness, strokeStyle };
 }
 
 export function deriveRowColorsFromMarkStyles(
@@ -497,6 +502,7 @@ export function seedMarkStylesFromRowColorsIfNeeded(
         next.push({
             fillColor: baseColor,
             strokeColor: baseColor,
+            lineBackgroundColor: baseColor,
             thickness: 1,
             strokeStyle: 'solid'
         });

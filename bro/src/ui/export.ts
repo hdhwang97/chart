@@ -102,11 +102,12 @@ function getMarkDraftStyleFromState(seriesIndex: number) {
     const source = styles[idx] || fallback;
     const fill = normalizeHexColorInput(source.fillColor) || normalizeHexColorInput(fallback.fillColor) || '#3B82F6';
     const stroke = normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || fill;
+    const lineBackground = normalizeHexColorInput(source.lineBackgroundColor) || stroke;
     const thickness = Number.isFinite(Number(source.thickness))
         ? Math.max(0, Number(source.thickness))
         : Math.max(0, Number(fallback.thickness) || 1);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : 'solid';
-    return { fillColor: fill, strokeColor: stroke, thickness, strokeStyle };
+    return { fillColor: fill, strokeColor: stroke, lineBackgroundColor: lineBackground, thickness, strokeStyle };
 }
 
 function resolveSeriesStyleColor(rowColors: string[], rowIndex: number, chartType: string, role: 'fill' | 'stroke') {
@@ -513,9 +514,8 @@ function renderD3Preview(style: any) {
                 weight: Math.max(1, draftStyle.thickness || strokeWidth),
                 dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
             };
-            const lineBackground = state.styleInjectionDraft.lineBackground;
-            const areaColor = normalizeHexColorInput(lineBackground.color) || baseColor;
-            const areaVisible = Boolean(lineBackground.visible);
+            const areaColor = normalizeHexColorInput(draftStyle.lineBackgroundColor) || normalizeHexColorInput(draftStyle.strokeColor) || baseColor;
+            const areaVisible = true;
             if (areaVisible) {
                 g.append('path')
                     .datum(lineData)

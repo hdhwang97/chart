@@ -327,12 +327,14 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
     const source = value as MarkInjectionStyle;
     const fillColor = normalizeHexColor(source.fillColor);
     const strokeColor = normalizeHexColor(source.strokeColor);
+    const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
     const thickness = normalizeThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && thickness === undefined && !strokeStyle) return null;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && thickness === undefined && !strokeStyle) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
+        lineBackgroundColor: lineBackgroundColor || undefined,
         thickness,
         strokeStyle
     };

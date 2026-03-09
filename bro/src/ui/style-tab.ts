@@ -152,9 +152,6 @@ let isSyncingStyleColorPicker = false;
 let stylePopoverPaintStyles: PaintStyleSelection[] = [];
 
 function getBackgroundPopoverTargets(): BackgroundPopoverTarget[] {
-    if (state.chartType === 'line') {
-        return ['grid', 'line-background', 'cell-top', 'tab-right', 'cell-fill'];
-    }
     return ['grid', 'cell-top', 'tab-right', 'cell-fill'];
 }
 
@@ -292,12 +289,14 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
     const source = value as MarkInjectionStyle;
     const fillColor = normalizeHexColorInput(source.fillColor);
     const strokeColor = normalizeHexColorInput(source.strokeColor);
+    const lineBackgroundColor = normalizeHexColorInput(source.lineBackgroundColor);
     const thickness = Number.isFinite(Number(source.thickness)) ? clampThickness(source.thickness, DEFAULT_STYLE_INJECTION_DRAFT.mark.thickness) : undefined;
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && thickness === undefined && !strokeStyle) return null;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && thickness === undefined && !strokeStyle) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
+        lineBackgroundColor: lineBackgroundColor || undefined,
         thickness,
         strokeStyle
     };
@@ -360,6 +359,7 @@ function draftItemFromMarkStyle(style: MarkInjectionStyle | null, fallback: Mark
     return {
         fillColor: normalizeHexColorInput(style.fillColor) || fallback.fillColor,
         strokeColor: normalizeHexColorInput(style.strokeColor) || fallback.strokeColor,
+        lineBackgroundColor: normalizeHexColorInput(style.lineBackgroundColor) || normalizeHexColorInput(style.strokeColor) || fallback.lineBackgroundColor,
         thickness: clampThickness(style.thickness, fallback.thickness),
         strokeStyle: style.strokeStyle === 'dash' ? 'dash' : 'solid'
     };
@@ -524,6 +524,7 @@ function resolveStyleColorLabel(input: HTMLInputElement): string {
     if (input === ui.styleLineBackgroundColorInput) return 'Line Background';
     if (input === ui.styleMarkFillColorInput) return 'Mark Fill';
     if (input === ui.styleMarkStrokeColorInput) return 'Mark Stroke';
+    if (input === ui.styleMarkLineBackgroundColorInput) return 'Mark Line Background';
     if (input === ui.styleCellTopColorInput) return 'Y-axis line';
     if (input === ui.styleTabRightColorInput) return 'X-axis line';
     if (input === ui.styleGridColorInput) return 'Plot area';
@@ -539,6 +540,7 @@ function getHexPreviewFallback(input: HTMLInputElement): string {
     if (input === ui.styleGridColorInput) return state.styleInjectionDraft.gridContainer.color;
     if (input === ui.styleMarkFillColorInput) return state.styleInjectionDraft.mark.fillColor;
     if (input === ui.styleMarkStrokeColorInput) return state.styleInjectionDraft.mark.strokeColor;
+    if (input === ui.styleMarkLineBackgroundColorInput) return state.styleInjectionDraft.mark.lineBackgroundColor;
     if (input === ui.styleAssistLineColorInput) return state.styleInjectionDraft.assistLine.color;
     return DEFAULT_STYLE_INJECTION_ITEM.color;
 }
@@ -551,6 +553,7 @@ function getHexPreviewElement(input: HTMLInputElement): HTMLElement | null {
     if (input === ui.styleGridColorInput) return ui.styleGridColorPreview;
     if (input === ui.styleMarkFillColorInput) return ui.styleMarkFillColorPreview;
     if (input === ui.styleMarkStrokeColorInput) return ui.styleMarkStrokeColorPreview;
+    if (input === ui.styleMarkLineBackgroundColorInput) return ui.styleMarkLineBackgroundColorPreview;
     if (input === ui.styleAssistLineColorInput) return ui.styleAssistLineColorPreview;
     return null;
 }
@@ -570,6 +573,7 @@ export function syncAllHexPreviewsFromDom() {
         ui.styleGridColorInput,
         ui.styleMarkFillColorInput,
         ui.styleMarkStrokeColorInput,
+        ui.styleMarkLineBackgroundColorInput,
         ui.styleAssistLineColorInput
     ];
     colorInputs.forEach((input) => {
@@ -630,6 +634,7 @@ function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSelectEle
         ui.styleLineBackgroundVisibleInput,
         ui.styleMarkFillColorInput,
         ui.styleMarkStrokeColorInput,
+        ui.styleMarkLineBackgroundColorInput,
         ui.styleMarkStrokeStyleInput,
         ui.styleMarkThicknessInput,
         ui.styleCellTopColorInput,
@@ -688,7 +693,6 @@ function cloneMarkStrokeLinks(source: boolean[]) {
 
 function isBackgroundPopoverTarget(target: StyleItemPopoverTarget): target is BackgroundPopoverTarget {
     return target === 'cell-fill'
-        || target === 'line-background'
         || target === 'cell-top'
         || target === 'tab-right'
         || target === 'grid'
@@ -697,7 +701,6 @@ function isBackgroundPopoverTarget(target: StyleItemPopoverTarget): target is Ba
 
 function getBackgroundTargetLabel(target: BackgroundPopoverTarget): string {
     if (target === 'cell-fill') return 'Background';
-    if (target === 'line-background') return 'Line background';
     if (target === 'cell-top') return 'Y-axis line';
     if (target === 'tab-right') return 'X-axis line';
     if (target === 'grid') return 'Plot area';
@@ -1416,6 +1419,7 @@ function applyMarkIndexFromPreview(seriesIndex: number) {
     const active = getActiveMarkDraft();
     ui.styleMarkFillColorInput.value = active.fillColor;
     ui.styleMarkStrokeColorInput.value = active.strokeColor;
+    ui.styleMarkLineBackgroundColorInput.value = active.lineBackgroundColor;
     ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
     ui.styleMarkThicknessInput.value = String(active.thickness);
     syncAllHexPreviewsFromDom();
@@ -1738,11 +1742,12 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleCellFillColorInput.value = draft.cellFill.color;
     ui.styleLineBackgroundColorInput.value = draft.lineBackground.color;
     ui.styleLineBackgroundVisibleInput.checked = draft.lineBackground.visible;
-    ui.styleLineBackgroundSection.classList.toggle('hidden', state.chartType !== 'line');
+    ui.styleLineBackgroundSection.classList.add('hidden');
     syncMarkIndexSelector();
     const activeMark = getActiveMarkDraft();
     ui.styleMarkFillColorInput.value = activeMark.fillColor;
     ui.styleMarkStrokeColorInput.value = activeMark.strokeColor;
+    ui.styleMarkLineBackgroundColorInput.value = activeMark.lineBackgroundColor;
     ui.styleMarkStrokeStyleInput.value = activeMark.strokeStyle;
     ui.styleMarkThicknessInput.value = String(activeMark.thickness);
     ui.styleCellTopColorInput.value = draft.cellTop.color;
@@ -1777,9 +1782,6 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
 export function readStyleTabDraft(): StyleInjectionDraft {
     const cellFillColor = normalizeHexColorInput(ui.styleCellFillColorInput.value)
         || state.styleInjectionDraft.cellFill.color;
-    const lineBackgroundColor = normalizeHexColorInput(ui.styleLineBackgroundColorInput.value)
-        || state.styleInjectionDraft.lineBackground.color;
-    const lineBackgroundVisible = Boolean(ui.styleLineBackgroundVisibleInput.checked);
     const cellTop = normalizeFromDom(
         ui.styleCellTopColorInput,
         ui.styleCellTopStrokeStyleInput,
@@ -1813,6 +1815,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
     const markNormalized = normalizeMarkStyle({
         fillColor: normalizeHexColorInput(ui.styleMarkFillColorInput.value) || state.styleInjectionDraft.mark.fillColor,
         strokeColor: normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || state.styleInjectionDraft.mark.strokeColor,
+        lineBackgroundColor: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || state.styleInjectionDraft.mark.lineBackgroundColor,
         thickness: Number(ui.styleMarkThicknessInput.value),
         strokeStyle: ui.styleMarkStrokeStyleInput.value === 'dash' ? 'dash' : 'solid'
     });
@@ -1820,12 +1823,16 @@ export function readStyleTabDraft(): StyleInjectionDraft {
         ? {
             fillColor: markNormalized.fillColor || state.styleInjectionDraft.mark.fillColor,
             strokeColor: markNormalized.strokeColor || state.styleInjectionDraft.mark.strokeColor,
+            lineBackgroundColor: markNormalized.lineBackgroundColor
+                || markNormalized.strokeColor
+                || state.styleInjectionDraft.mark.lineBackgroundColor,
             thickness: typeof markNormalized.thickness === 'number' ? markNormalized.thickness : state.styleInjectionDraft.mark.thickness,
             strokeStyle: markNormalized.strokeStyle === 'dash' ? 'dash' : 'solid'
         }
         : { ...state.styleInjectionDraft.mark };
     if (state.chartType === 'line') {
         mark.fillColor = mark.strokeColor;
+        mark.lineBackgroundColor = mark.lineBackgroundColor || mark.strokeColor;
     }
 
     const styles = ensureMarkDraftSeriesCount(state.markStylesDraft);
@@ -1836,7 +1843,10 @@ export function readStyleTabDraft(): StyleInjectionDraft {
 
     return {
         cellFill: { color: cellFillColor },
-        lineBackground: { color: lineBackgroundColor, visible: lineBackgroundVisible },
+        lineBackground: {
+            color: normalizeHexColorInput(mark.lineBackgroundColor) || normalizeHexColorInput(mark.strokeColor) || state.styleInjectionDraft.lineBackground.color,
+            visible: true
+        },
         mark: { ...mark },
         cellTop,
         tabRight,
@@ -1852,13 +1862,14 @@ export function readStyleTabDraft(): StyleInjectionDraft {
 
 export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: StyleInjectionDraft; isValid: boolean } {
     const cellFillValid = Boolean(normalizeHexColorInput(ui.styleCellFillColorInput.value));
-    const lineBackgroundColorValid = state.chartType !== 'line'
-        || Boolean(normalizeHexColorInput(ui.styleLineBackgroundColorInput.value));
     const lineStrokeOnly = state.chartType === 'line';
     const markFillValid = lineStrokeOnly
         ? Boolean(normalizeHexColorInput(ui.styleMarkStrokeColorInput.value))
         : Boolean(normalizeHexColorInput(ui.styleMarkFillColorInput.value));
     const markStrokeValid = Boolean(normalizeHexColorInput(ui.styleMarkStrokeColorInput.value));
+    const markLineBackgroundValid = lineStrokeOnly
+        ? Boolean(normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value))
+        : true;
     const markThicknessRaw = Number(ui.styleMarkThicknessInput.value);
     const markThicknessValid = Number.isFinite(markThicknessRaw) && markThicknessRaw >= THICKNESS_MIN && markThicknessRaw <= THICKNESS_MAX;
     const cellTopNorm = normalizeFromDom(
@@ -1899,9 +1910,9 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     );
 
     setInputError(ui.styleCellFillColorInput, !cellFillValid);
-    setInputError(ui.styleLineBackgroundColorInput, state.chartType === 'line' && !lineBackgroundColorValid);
     setInputError(ui.styleMarkFillColorInput, !markFillValid && !lineStrokeOnly);
     setInputError(ui.styleMarkStrokeColorInput, !markStrokeValid);
+    setInputError(ui.styleMarkLineBackgroundColorInput, !markLineBackgroundValid && lineStrokeOnly);
     setInputError(ui.styleMarkThicknessInput, !markThicknessValid);
     setInputError(ui.styleCellTopColorInput, !cellTopNorm.colorValid);
     setInputError(ui.styleCellTopThicknessInput, !cellTopNorm.thicknessValid);
@@ -1914,9 +1925,9 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
 
     const isValid = cellTopNorm.colorValid
         && cellFillValid
-        && lineBackgroundColorValid
         && markFillValid
         && markStrokeValid
+        && markLineBackgroundValid
         && markThicknessValid
         && cellTopNorm.thicknessValid
         && tabRightNorm.colorValid
@@ -1930,14 +1941,15 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
         draft: {
             cellFill: { color: normalizeHexColorInput(ui.styleCellFillColorInput.value) || draft.cellFill.color },
             lineBackground: {
-                color: normalizeHexColorInput(ui.styleLineBackgroundColorInput.value) || draft.lineBackground.color,
-                visible: Boolean(ui.styleLineBackgroundVisibleInput.checked)
+                color: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor,
+                visible: true
             },
             mark: {
                 fillColor: lineStrokeOnly
                     ? (normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor)
                     : (normalizeHexColorInput(ui.styleMarkFillColorInput.value) || draft.mark.fillColor),
                 strokeColor: normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor,
+                lineBackgroundColor: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.lineBackgroundColor,
                 thickness: markThicknessValid ? markThicknessRaw : clampThickness(markThicknessRaw, draft.mark.thickness),
                 strokeStyle: ui.styleMarkStrokeStyleInput.value === 'dash' ? 'dash' : 'solid'
             },
@@ -1962,19 +1974,17 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
         cellFillStyle: {
             color: draft.cellFill.color
         },
-        lineBackgroundStyle: {
-            color: draft.lineBackground.color,
-            visible: draft.lineBackground.visible
-        },
         markStyle: {
             fillColor: draft.mark.fillColor,
             strokeColor: draft.mark.strokeColor,
+            lineBackgroundColor: draft.mark.lineBackgroundColor,
             thickness: draft.mark.thickness,
             strokeStyle: draft.mark.strokeStyle
         },
         markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item) => ({
             fillColor: item.fillColor,
             strokeColor: item.strokeColor,
+            lineBackgroundColor: item.lineBackgroundColor,
             thickness: item.thickness,
             strokeStyle: item.strokeStyle
         })),
@@ -2040,10 +2050,6 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             cellFillStyle: {
                 color: draft.cellFill.color
             },
-            lineBackgroundStyle: {
-                color: draft.lineBackground.color,
-                visible: draft.lineBackground.visible
-            },
             cellTopStyle: {
                 color: draft.cellTop.color,
                 thickness: draft.cellTop.thickness,
@@ -2077,12 +2083,14 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             markStyle: {
                 fillColor: draft.mark.fillColor,
                 strokeColor: draft.mark.strokeColor,
+                lineBackgroundColor: draft.mark.lineBackgroundColor,
                 thickness: draft.mark.thickness,
                 strokeStyle: draft.mark.strokeStyle
             },
             markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item) => ({
                 fillColor: item.fillColor,
                 strokeColor: item.strokeColor,
+                lineBackgroundColor: item.lineBackgroundColor,
                 thickness: item.thickness,
                 strokeStyle: item.strokeStyle
             })),
@@ -2108,7 +2116,6 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             colPaintStyleIds: true,
             colColorEnabled: true,
             cellFillStyle: true,
-            lineBackgroundStyle: true,
             cellTopStyle: true,
             tabRightStyle: true,
             gridContainerStyle: true,
@@ -2158,7 +2165,6 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
         const draftOverrides = buildLocalStyleOverridesFromDraft(nextDraft);
         setLocalStyleOverrideField('rowColors', draftOverrides.overrides.rowColors);
         setLocalStyleOverrideField('cellFillStyle', draftOverrides.overrides.cellFillStyle);
-        setLocalStyleOverrideField('lineBackgroundStyle', draftOverrides.overrides.lineBackgroundStyle);
         setLocalStyleOverrideField('cellTopStyle', draftOverrides.overrides.cellTopStyle);
         setLocalStyleOverrideField('tabRightStyle', draftOverrides.overrides.tabRightStyle);
         setLocalStyleOverrideField('gridContainerStyle', draftOverrides.overrides.gridContainerStyle);
@@ -2186,8 +2192,8 @@ function renderTemplateCard(item: StyleTemplateItem): string {
     const editing = inEdit && state.editingTemplateId === item.id;
     const swatches = [
         item.payload.cellFillStyle?.color || '#FFFFFF',
-        item.payload.lineBackgroundStyle?.color || '#3B82F6',
-        item.payload.markStyle?.fillColor || '#3B82F6',
+        item.payload.markStyle?.lineBackgroundColor || item.payload.markStyle?.strokeColor || item.payload.markStyle?.fillColor || '#3B82F6',
+        item.payload.markStyle?.fillColor || item.payload.markStyle?.strokeColor || '#3B82F6',
         item.payload.cellTopStyle?.color || '#E5E7EB',
         item.payload.tabRightStyle?.color || '#E5E7EB',
         item.payload.gridContainerStyle?.color || '#E5E7EB',
@@ -2334,6 +2340,7 @@ export function bindStyleTabEvents() {
         ui.styleLineBackgroundVisibleInput,
         ui.styleMarkFillColorInput,
         ui.styleMarkStrokeColorInput,
+        ui.styleMarkLineBackgroundColorInput,
         ui.styleMarkStrokeStyleInput,
         ui.styleMarkThicknessInput,
         ui.styleCellTopColorInput,
@@ -2369,6 +2376,7 @@ export function bindStyleTabEvents() {
         const active = getActiveMarkDraft();
         ui.styleMarkFillColorInput.value = active.fillColor;
         ui.styleMarkStrokeColorInput.value = active.strokeColor;
+        ui.styleMarkLineBackgroundColorInput.value = active.lineBackgroundColor;
         ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
         ui.styleMarkThicknessInput.value = String(active.thickness);
         syncAllHexPreviewsFromDom();
@@ -2380,7 +2388,7 @@ export function bindStyleTabEvents() {
         syncStyleDraftFromDomAndEmit();
     });
 
-    [ui.styleCellFillColorInput, ui.styleLineBackgroundColorInput, ui.styleMarkFillColorInput, ui.styleMarkStrokeColorInput, ui.styleCellTopColorInput, ui.styleTabRightColorInput, ui.styleGridColorInput, ui.styleAssistLineColorInput].forEach((input) => {
+    [ui.styleCellFillColorInput, ui.styleLineBackgroundColorInput, ui.styleMarkFillColorInput, ui.styleMarkStrokeColorInput, ui.styleMarkLineBackgroundColorInput, ui.styleCellTopColorInput, ui.styleTabRightColorInput, ui.styleGridColorInput, ui.styleAssistLineColorInput].forEach((input) => {
         input.addEventListener('focus', () => openStyleColorPopover(input));
         input.addEventListener('click', () => openStyleColorPopover(input));
     });
@@ -2523,6 +2531,7 @@ export function bindStyleTabEvents() {
             ui.styleLineBackgroundColorInput,
             ui.styleMarkFillColorInput,
             ui.styleMarkStrokeColorInput,
+            ui.styleMarkLineBackgroundColorInput,
             ui.styleCellTopColorInput,
             ui.styleTabRightColorInput,
             ui.styleGridColorInput,

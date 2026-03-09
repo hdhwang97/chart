@@ -59,6 +59,7 @@ export type AssistLineInjectionStyle = {
 export type MarkInjectionStyle = {
     fillColor?: string;
     strokeColor?: string;
+    lineBackgroundColor?: string;
     thickness?: number;
     strokeStyle?: 'solid' | 'dash';
 };

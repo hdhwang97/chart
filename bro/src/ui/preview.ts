@@ -318,6 +318,7 @@ function getMarkDraftStyle(seriesIndex: number) {
     return {
         fillColor: normalizeHexColorInput(source.fillColor) || normalizeHexColorInput(fallback.fillColor) || '#3B82F6',
         strokeColor: normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || '#3B82F6',
+        lineBackgroundColor: normalizeHexColorInput(source.lineBackgroundColor) || normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || '#3B82F6',
         thickness: Number.isFinite(Number(source.thickness)) ? Math.max(0, Number(source.thickness)) : Math.max(0, Number(fallback.thickness) || 1),
         strokeStyle: source.strokeStyle === 'dash' ? 'dash' : 'solid'
     };
@@ -899,9 +900,8 @@ function renderLinePreview(
         const pathStrokeWidth = mode === 'style'
             ? Math.max(1, styleMark.thickness)
             : activePathStroke;
-        const lineBackground = state.styleInjectionDraft.lineBackground;
-        const areaColor = normalizeHexColorInput(lineBackground.color) || pathStrokeColor;
-        const areaVisible = Boolean(lineBackground.visible);
+        const areaColor = normalizeHexColorInput(styleMark.lineBackgroundColor) || normalizeHexColorInput(styleMark.strokeColor) || pathStrokeColor;
+        const areaVisible = true;
         const yDomain = yScale.domain();
         const yBase = Array.isArray(yDomain) && Number.isFinite(Number(yDomain[0])) ? Number(yDomain[0]) : 0;
         const areaOpacity = activeHighlight ? (relatedRow ? 0.24 : 0.06) : 0.24;
@@ -920,7 +920,7 @@ function renderLinePreview(
                 .attr('data-base-opacity', areaOpacity)
                 .style('pointer-events', mode === 'style' ? 'auto' : 'none');
             if (mode === 'style') {
-                markStyleTarget(areaPath, 'line-background', mode);
+                markStyleTarget(areaPath, 'mark', mode);
                 markStyleTargetSeries(areaPath, r, mode);
             }
         }

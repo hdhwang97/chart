@@ -58,6 +58,7 @@ type ScopeResult = {
 type NormalizedMarkStyle = {
     fillColor?: string;
     strokeColor?: string;
+    lineBackgroundColor?: string;
     thickness?: number;
     strokeStyle?: 'solid' | 'dash';
 };
@@ -111,12 +112,14 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
     const source = input as MarkInjectionStyle;
     const fillColor = normalizeHexColor(source.fillColor);
     const strokeColor = normalizeHexColor(source.strokeColor);
+    const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
     const thickness = normalizeThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && thickness === undefined && !strokeStyle) return null;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && thickness === undefined && !strokeStyle) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
+        lineBackgroundColor: lineBackgroundColor || undefined,
         thickness,
         strokeStyle
     };
@@ -585,14 +588,19 @@ function applyLineBundleStylesForColumn(
 function applyLineBackgroundStyles(
     columns: ColRef[],
     style: NormalizedLineBackgroundStyle | null,
+    markStyles: NormalizedMarkStyle[],
     options?: { chartType?: string }
 ): ScopeResult {
     const result = createScopeResult();
-    if (options?.chartType !== 'line' || !style) return result;
+    if (options?.chartType !== 'line') return result;
 
     columns.forEach((col) => {
         const bundles = collectLineBundlesInColumn(col.node, col.index - 1);
-        bundles.forEach((bundle) => {
+        const sorted = Array.from(bundles.entries()).sort((a, b) => a[0] - b[0]);
+        sorted.forEach(([rowIndex, bundle]) => {
+            const seriesIndex = rowIndex + 1;
+            const markStyle = getMarkStyleBySeries(markStyles, seriesIndex);
+            const color = markStyle?.lineBackgroundColor || markStyle?.fillColor || markStyle?.strokeColor || style?.color;
             const targets = [bundle.triNode, bundle.fillBot].filter((target): target is SceneNode => Boolean(target));
             if (targets.length === 0) return;
 
@@ -600,12 +608,12 @@ function applyLineBackgroundStyles(
                 result.candidates += 1;
                 try {
                     let applied = false;
-                    if (typeof style.visible === 'boolean') {
+                    if (typeof style?.visible === 'boolean') {
                         applied = setNodeFillVisibility(target, style.visible) || applied;
                     }
-                    if (style.color) {
-                        applied = tryApplyFill(target, style.color) || applied;
-                        if (typeof style.visible === 'boolean') {
+                    if (color) {
+                        applied = tryApplyFill(target, color) || applied;
+                        if (typeof style?.visible === 'boolean') {
                             applied = setNodeFillVisibility(target, style.visible) || applied;
                         }
                     }
@@ -1023,7 +1031,7 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
 
     return {
         cellFill: cellFillStyle ? applyCellFill(columns, cellFillStyle, payload.chartType) : createScopeResult(),
-        lineBackground: lineBackgroundStyle ? applyLineBackgroundStyles(columns, lineBackgroundStyle, { chartType: payload.chartType }) : createScopeResult(),
+        lineBackground: applyLineBackgroundStyles(columns, lineBackgroundStyle, markStyles, { chartType: payload.chartType }),
         mark: skipMarkStyleApply
             ? createScopeResult()
             : applyMarkStyles(columns, markStyles, {
