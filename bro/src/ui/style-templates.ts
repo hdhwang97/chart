@@ -5,8 +5,6 @@ import { emitStyleDraftUpdated, hydrateStyleTab, markStyleInjectionDirty, setSty
 
 import type { StyleTemplateItem, StyleTemplatePayload } from '../shared/style-types';
 
-
-
 const MAX_STYLE_TEMPLATES = 20;
 
 export function formatTemplateTime(ts: number): string {
@@ -203,7 +201,6 @@ export function setStyleTemplateMode(mode: 'read' | 'edit') {
 export function requestNewTemplateName(): string {
     return estimateNextTemplateName();
 }
-
 
 export function bindStyleTemplateEvents() {
     ui.styleTemplateModeReadBtn.addEventListener('click', () => setStyleTemplateMode('read'));

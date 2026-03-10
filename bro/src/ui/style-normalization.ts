@@ -2,8 +2,6 @@ import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, deriveRowC
 import { setInputError, normalizeFromDom, normalizeColorThicknessFromDom } from './style-tab';
 import { ui } from './dom';
 
-
-
 export type SavedStylePayload = {
     savedCellFillStyle?: unknown;
     savedLineBackgroundStyle?: unknown;
@@ -44,8 +42,6 @@ import type {
     StrokeInjectionPayload,
     StrokeStyleSnapshot
 } from '../shared/style-types';
-
-
 
 const THICKNESS_MIN = 0;
 const THICKNESS_MAX = 20;
@@ -518,6 +514,10 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
         cellFillStyle: {
             color: draft.cellFill.color
         },
+        lineBackgroundStyle: {
+            color: draft.lineBackground.color,
+            visible: draft.lineBackground.visible
+        },
         markStyle: {
             fillColor: draft.mark.fillColor,
             strokeColor: draft.mark.strokeColor,
@@ -580,8 +580,6 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
 export function buildTemplatePayloadFromDraft(draft: StyleInjectionDraft): StyleTemplatePayload {
     return toStrokeInjectionPayload(draft);
 }
-
-
 
 export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: StyleInjectionDraft; isValid: boolean } {
     const cellFillValid = Boolean(normalizeHexColorInput(ui.styleCellFillColorInput.value));
@@ -674,7 +672,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
                 opacity: markLineBackgroundOpacityValid
                     ? Math.max(0, Math.min(1, markLineBackgroundOpacityRaw / 100))
                     : draft.lineBackground.opacity,
-                visible: true
+                visible: ui.styleLineBackgroundVisibleInput.checked
             },
             mark: {
                 fillColor: lineStrokeOnly
@@ -697,9 +695,6 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     };
 }
 
-
-
-
 export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
     overrides: LocalStyleOverrides;
     mask: LocalStyleOverrideMask;
@@ -714,6 +709,10 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             ),
             cellFillStyle: {
                 color: draft.cellFill.color
+            },
+            lineBackgroundStyle: {
+                color: draft.lineBackground.color,
+                visible: draft.lineBackground.visible
             },
             cellTopStyle: {
                 color: draft.cellTop.color,
@@ -783,6 +782,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             colPaintStyleIds: true,
             colColorEnabled: true,
             cellFillStyle: true,
+            lineBackgroundStyle: true,
             cellTopStyle: true,
             tabRightStyle: true,
             gridContainerStyle: true,
@@ -794,4 +794,3 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
         }
     };
 }
-

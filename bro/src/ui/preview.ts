@@ -908,7 +908,7 @@ function renderLinePreview(
         const yDomain = yScale.domain();
         const yBase = Array.isArray(yDomain) && Number.isFinite(Number(yDomain[0])) ? Number(yDomain[0]) : 0;
         const lineBgOpacityFactor = Math.max(0, Math.min(1, Number(styleMark.lineBackgroundOpacity) / 100));
-        const areaOpacity = (activeHighlight ? (relatedRow ? 0.24 : 0.06) : 0.24) * lineBgOpacityFactor;
+        const areaOpacity = (activeHighlight ? (relatedRow ? 1 : 0.25) : 1) * lineBgOpacityFactor;
         if (areaVisible) {
             const area = d3.area()
                 .x((_: any, i: number) => xScale(i)!)

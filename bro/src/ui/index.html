@@ -413,7 +413,7 @@
                 <span class="text-text-sub text-xs">Generating Preview...</span>
             </div>
         </div>
-        <div id="style-panel" class="bg-white border border-border rounded-md p-3 flex flex-col gap-3 shadow-sm overflow-auto">
+        <div id="style-panel" class="style-panel-scroll-area bg-white border border-border rounded-md p-3 flex flex-col gap-3 shadow-sm overflow-auto">
             <div class="border border-border rounded-md p-2 flex flex-col gap-2">
                 <div class="flex items-center justify-between gap-2">
                     <h2 class="text-xs font-semibold text-text-sub m-0">Templates</h2>
@@ -440,200 +440,208 @@
                 <span class="text-[10px] text-gray-400">Apply로 Figma에 반영됩니다.</span>
             </div>
 
-            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
-                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Plot area</div>
+            <div class="style-injection-layout">
+                <div class="style-injection-tabs" role="tablist" aria-label="Style Injection Tabs">
+                    <button type="button" class="style-injection-tab is-active" data-style-injection-tab="plot-area">Plot Area</button>
+                    <button type="button" class="style-injection-tab" data-style-injection-tab="mark">Mark</button>
+                    <button type="button" class="style-injection-tab" data-style-injection-tab="assist-line">Assist Line</button>
+                </div>
 
-                <div class="border border-border rounded-md p-2 flex flex-col gap-2">
-                    <div class="text-xxs font-semibold text-text-sub">Y-axis line</div>
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xxs text-text-sub">Background Color (HEX)</span>
-                        <div class="hex-input-with-preview">
-                            <input id="style-cell-fill-color" type="text" value="#FFFFFF"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-                            <span id="style-cell-fill-color-preview" class="style-hex-preview"></span>
+                <div class="style-injection-panel is-active" data-style-injection-panel="plot-area">
+                    <div class="style-injection-card-rail">
+                    <div class="style-injection-card">
+                        <div class="style-injection-card-header">
+                            <span class="style-injection-card-title">Background</span>
+                            <label class="style-injection-visible-toggle">
+                                <span>Visible</span>
+                                <input id="style-line-background-visible" type="checkbox" class="cursor-pointer" checked />
+                            </label>
                         </div>
-                    </label>
-                    <div class="grid grid-cols-4 gap-2 items-end">
                         <label class="flex flex-col gap-1">
                             <span class="text-xxs text-text-sub">Color (HEX)</span>
                             <div class="hex-input-with-preview">
-                                <input id="style-cell-top-color" type="text" value="#E5E7EB"
+                                <input id="style-cell-fill-color" type="text" value="#FFFFFF"
                                     class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-                                <span id="style-cell-top-color-preview" class="style-hex-preview"></span>
+                                <span id="style-cell-fill-color-preview" class="style-hex-preview"></span>
                             </div>
                         </label>
-                        <label class="flex flex-col gap-1">
-                            <span class="text-xxs text-text-sub">Stroke Style</span>
-                            <select id="style-cell-top-stroke-style"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
-                                <option value="solid">Solid</option>
-                                <option value="dash">Dash</option>
-                            </select>
-                        </label>
-                        <label class="flex flex-col gap-1">
-                            <span class="text-xxs text-text-sub">Thickness</span>
-                            <input id="style-cell-top-thickness" type="number" value="1" min="0" max="20" step="0.5"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
-                        </label>
-                        <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
-                            <input id="style-cell-top-visible" type="checkbox" class="cursor-pointer" checked />
-                            <span>Visible</span>
-                        </label>
+                    </div>
+
+                    <div class="style-injection-card">
+                        <div class="style-injection-card-header">
+                            <span class="style-injection-card-title">X-axis line</span>
+                            <label class="style-injection-visible-toggle">
+                                <span>Visible</span>
+                                <input id="style-tab-right-visible" type="checkbox" class="cursor-pointer" checked />
+                            </label>
+                        </div>
+                        <div class="style-injection-card-body">
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Color (HEX)</span>
+                                <div class="hex-input-with-preview">
+                                    <input id="style-tab-right-color" type="text" value="#E5E7EB"
+                                        class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                    <span id="style-tab-right-color-preview" class="style-hex-preview"></span>
+                                </div>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Stroke Style</span>
+                                <select id="style-tab-right-stroke-style"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                                    <option value="solid">Solid</option>
+                                    <option value="dash">Dash</option>
+                                </select>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Thickness</span>
+                                <input id="style-tab-right-thickness" type="number" value="1" min="0" max="20" step="0.5"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="style-injection-card">
+                        <div class="style-injection-card-header">
+                            <span class="style-injection-card-title">Y-axis line</span>
+                            <label class="style-injection-visible-toggle">
+                                <span>Visible</span>
+                                <input id="style-cell-top-visible" type="checkbox" class="cursor-pointer" checked />
+                            </label>
+                        </div>
+                        <div class="style-injection-card-body">
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Color (HEX)</span>
+                                <div class="hex-input-with-preview">
+                                    <input id="style-cell-top-color" type="text" value="#E5E7EB"
+                                        class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                    <span id="style-cell-top-color-preview" class="style-hex-preview"></span>
+                                </div>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Stroke Style</span>
+                                <select id="style-cell-top-stroke-style"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                                    <option value="solid">Solid</option>
+                                    <option value="dash">Dash</option>
+                                </select>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Thickness</span>
+                                <input id="style-cell-top-thickness" type="number" value="1" min="0" max="20" step="0.5"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="style-injection-card">
+                        <div class="style-injection-card-header">
+                            <span class="style-injection-card-title">Plot Area</span>
+                            <label class="style-injection-visible-toggle">
+                                <span>Visible</span>
+                                <input id="style-grid-visible" type="checkbox" class="cursor-pointer" checked />
+                            </label>
+                        </div>
+                        <div class="style-injection-card-body">
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Color (HEX)</span>
+                                <div class="hex-input-with-preview">
+                                    <input id="style-grid-color" type="text" value="#E5E7EB"
+                                        class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                    <span id="style-grid-color-preview" class="style-hex-preview"></span>
+                                </div>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Stroke Style</span>
+                                <select id="style-grid-stroke-style"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                                    <option value="solid">Solid</option>
+                                    <option value="dash">Dash</option>
+                                </select>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Thickness</span>
+                                <input id="style-grid-thickness" type="number" value="1" min="0" max="20" step="0.5"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                            </label>
+                        </div>
+                        <div class="hidden">
+                            <input id="style-grid-side-top" type="checkbox" checked />
+                            <input id="style-grid-side-right" type="checkbox" checked />
+                            <input id="style-grid-side-bottom" type="checkbox" checked />
+                            <input id="style-grid-side-left" type="checkbox" checked />
+                        </div>
                     </div>
                 </div>
-
-                <div class="border border-border rounded-md p-2 flex flex-col gap-2">
-                    <div class="text-xxs font-semibold text-text-sub">X-axis line</div>
-                    <div class="grid grid-cols-4 gap-2 items-end">
-                        <label class="flex flex-col gap-1">
-                            <span class="text-xxs text-text-sub">Color (HEX)</span>
-                            <div class="hex-input-with-preview">
-                                <input id="style-tab-right-color" type="text" value="#E5E7EB"
-                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-                                <span id="style-tab-right-color-preview" class="style-hex-preview"></span>
-                            </div>
-                        </label>
-                        <label class="flex flex-col gap-1">
-                            <span class="text-xxs text-text-sub">Stroke Style</span>
-                            <select id="style-tab-right-stroke-style"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
-                                <option value="solid">Solid</option>
-                                <option value="dash">Dash</option>
-                            </select>
-                        </label>
-                        <label class="flex flex-col gap-1">
-                            <span class="text-xxs text-text-sub">Thickness</span>
-                            <input id="style-tab-right-thickness" type="number" value="1" min="0" max="20" step="0.5"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
-                        </label>
-                        <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
-                            <input id="style-tab-right-visible" type="checkbox" class="cursor-pointer" checked />
-                            <span>Visible</span>
-                        </label>
-                    </div>
                 </div>
 
-                <div class="border border-border rounded-md p-2 flex flex-col gap-2">
-                    <div class="text-xxs font-semibold text-text-sub">Plot area</div>
-                    <div class="grid grid-cols-4 gap-2 items-end">
-                        <label class="flex flex-col gap-1">
-                            <span class="text-xxs text-text-sub">Color (HEX)</span>
-                            <div class="hex-input-with-preview">
-                                <input id="style-grid-color" type="text" value="#E5E7EB"
-                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-                                <span id="style-grid-color-preview" class="style-hex-preview"></span>
-                            </div>
-                        </label>
-                        <label class="flex flex-col gap-1">
-                            <span class="text-xxs text-text-sub">Stroke Style</span>
-                            <select id="style-grid-stroke-style"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
-                                <option value="solid">Solid</option>
-                                <option value="dash">Dash</option>
-                            </select>
-                        </label>
-                        <label class="flex flex-col gap-1">
-                            <span class="text-xxs text-text-sub">Thickness</span>
-                            <input id="style-grid-thickness" type="number" value="1" min="0" max="20" step="0.5"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
-                        </label>
-                        <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
-                            <input id="style-grid-visible" type="checkbox" class="cursor-pointer" checked />
-                            <span>Visible</span>
-                        </label>
-                    </div>
-                    <div class="flex items-center gap-3 text-xxs text-text-sub">
-                        <span class="font-medium">Individual Sides</span>
-                        <label class="flex items-center gap-1 select-none">
-                            <input id="style-grid-side-top" type="checkbox" class="cursor-pointer" checked />
-                            <span>Top</span>
-                        </label>
-                        <label class="flex items-center gap-1 select-none">
-                            <input id="style-grid-side-right" type="checkbox" class="cursor-pointer" checked />
-                            <span>Right</span>
-                        </label>
-                        <label class="flex items-center gap-1 select-none">
-                            <input id="style-grid-side-bottom" type="checkbox" class="cursor-pointer" checked />
-                            <span>Bottom</span>
-                        </label>
-                        <label class="flex items-center gap-1 select-none">
-                            <input id="style-grid-side-left" type="checkbox" class="cursor-pointer" checked />
-                            <span>Left</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
-                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Mark</div>
+                <div class="style-injection-panel" data-style-injection-panel="mark">
                 <label class="flex flex-col gap-1">
                     <span class="text-xxs text-text-sub">Mark Index</span>
                     <select id="style-mark-index"
                         class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors"></select>
                 </label>
-                <div class="grid grid-cols-5 gap-2 items-end">
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xxs text-text-sub">Fill (HEX)</span>
-                        <div class="hex-input-with-preview">
-                            <input id="style-mark-fill-color" type="text" value="#3B82F6"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-                            <span id="style-mark-fill-color-preview" class="style-hex-preview"></span>
-                        </div>
-                    </label>
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xxs text-text-sub">Stroke (HEX)</span>
-                        <div class="hex-input-with-preview">
-                            <input id="style-mark-stroke-color" type="text" value="#3B82F6"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-                            <span id="style-mark-stroke-color-preview" class="style-hex-preview"></span>
-                        </div>
-                    </label>
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xxs text-text-sub">Line Bg (HEX)</span>
-                        <div class="hex-input-with-preview">
-                            <input id="style-mark-line-background-color" type="text" value="#3B82F6"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-                            <span id="style-mark-line-background-color-preview" class="style-hex-preview"></span>
-                        </div>
-                        <input id="style-mark-line-background-opacity" type="number" value="100" min="0" max="100" step="1" class="hidden" />
-                    </label>
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xxs text-text-sub">Stroke Style</span>
-                        <select id="style-mark-stroke-style"
-                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
-                            <option value="solid">Solid</option>
-                            <option value="dash">Dash</option>
-                        </select>
-                    </label>
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xxs text-text-sub">Thickness</span>
-                        <input id="style-mark-thickness" type="number" value="1" min="0" max="20" step="0.5"
-                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
-                    </label>
+                <div class="style-injection-menu-header">
+                    <span class="style-injection-card-title">Style</span>
                 </div>
-            </div>
-
-            <div id="style-line-background-section" class="hidden border border-border rounded-md p-2 flex flex-col gap-2">
-                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Line Background</div>
-                <div class="grid grid-cols-2 gap-2 items-end">
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xxs text-text-sub">Color (HEX)</span>
-                        <div class="hex-input-with-preview">
-                            <input id="style-line-background-color" type="text" value="#3B82F6"
-                                class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
-                            <span id="style-line-background-color-preview" class="style-hex-preview"></span>
+                <div class="style-injection-card-rail">
+                    <div class="style-injection-card">
+                        <div class="style-injection-card-header">
+                            <span class="style-injection-card-title">Stroke</span>
                         </div>
-                    </label>
-                    <label class="flex items-center gap-2 h-7 text-xxs text-text-sub select-none">
-                        <input id="style-line-background-visible" type="checkbox" class="cursor-pointer" checked />
-                        <span>Visible</span>
-                    </label>
-                </div>
-            </div>
+                        <div class="style-injection-card-body">
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Stroke (HEX)</span>
+                                <div class="hex-input-with-preview">
+                                    <input id="style-mark-stroke-color" type="text" value="#3B82F6"
+                                        class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                    <span id="style-mark-stroke-color-preview" class="style-hex-preview"></span>
+                                </div>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Stroke Style</span>
+                                <select id="style-mark-stroke-style"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors">
+                                    <option value="solid">Solid</option>
+                                    <option value="dash">Dash</option>
+                                </select>
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Thickness</span>
+                                <input id="style-mark-thickness" type="number" value="1" min="0" max="20" step="0.5"
+                                    class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
+                            </label>
+                        </div>
+                    </div>
 
-            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
-                <div class="text-xxs font-semibold text-text-sub uppercase tracking-wide">Assist Line</div>
-                <div class="grid grid-cols-3 gap-2 items-end">
+                    <div class="style-injection-card">
+                        <div class="style-injection-card-header">
+                            <span class="style-injection-card-title">Fill</span>
+                        </div>
+                        <div class="style-injection-card-body">
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Line BG (HEX)</span>
+                                <div class="hex-input-with-preview">
+                                    <input id="style-mark-line-background-color" type="text" value="#3B82F6"
+                                        class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                    <span id="style-mark-line-background-color-preview" class="style-hex-preview"></span>
+                                </div>
+                                <input id="style-mark-line-background-opacity" type="number" value="100" min="0" max="100" step="1" class="hidden" />
+                            </label>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-xxs text-text-sub">Color (HEX)</span>
+                                <div class="hex-input-with-preview">
+                                    <input id="style-mark-fill-color" type="text" value="#3B82F6"
+                                        class="w-full px-2 py-1 border border-border rounded text-xs h-7 font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                                    <span id="style-mark-fill-color-preview" class="style-hex-preview"></span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                </div>
+
+                <div class="style-injection-panel" data-style-injection-panel="assist-line">
+                <div class="style-injection-card-body style-injection-assist-grid">
                     <label class="flex flex-col gap-1">
                         <span class="text-xxs text-text-sub">Color (HEX)</span>
                         <div class="hex-input-with-preview">
@@ -656,6 +664,12 @@
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
                     </label>
                 </div>
+                </div>
+            </div>
+
+            <div id="style-line-background-section" class="hidden">
+                <input id="style-line-background-color" type="text" value="#3B82F6" />
+                <span id="style-line-background-color-preview" class="style-hex-preview"></span>
             </div>
         </div>
     </div>

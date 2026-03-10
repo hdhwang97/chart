@@ -1,34 +1,25 @@
-import { buildDraftFromPayload, buildMarkStylesFromRowHeaders, clampOpacityPercent, clampThickness, cloneDraft, ensureMarkDraftSeriesCount, ensureMarkStrokeLinkStateCount, getActiveMarkDraft, normalizeMarkStyle, setActiveMarkStrokeLinked, toStrokeInjectionPayload } from './style-normalization';
+import {
+    buildDraftFromPayload,
+    buildMarkStylesFromRowHeaders,
+    clampOpacityPercent,
+    clampThickness,
+    cloneDraft,
+    ensureMarkDraftSeriesCount,
+    ensureMarkStrokeLinkStateCount,
+    getActiveMarkDraft,
+    normalizeMarkStyle,
+    setActiveMarkStrokeLinked,
+    toStrokeInjectionPayload,
+    type ExtractedStylePayload,
+    type SavedStylePayload
+} from './style-normalization';
 import { applyQuickSwatchColor, applySelectedPaintStyleColor, applyStylePopoverHexInputValue, bindStylePopoverEvents, canApplyStylePopoverColorEdit, closeStyleItemPopover, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, normalizePopoverSegmentIndex, openStyleColorPopover, openStyleItemPopover, openStyleItemPopoverWithMeta, positionStyleItemPopover, refreshStyleItemModeUi, setStylePopoverPaintStyles, stepStyleItemPopoverNavigator, styleItemPopoverActiveColorField, styleItemPopoverAnchorRect, styleItemPopoverConfig, styleItemPopoverMode, styleItemPopoverNavigator, styleItemPopoverOpen, styleItemPopoverSegmentIndexCache, styleItemPopoverSelectedStyleId, styleItemPopoverTarget, suppressOutsideCloseFromInsidePointerDown, switchStyleItemPopoverSegment, syncColumnPopoverStateAndEmit, syncMarkLinkUiState, syncPopoverNavigatorUi, syncStyleItemPopoverFromConfig, updateStyleItemPopoverPreview } from './style-popover';
 import { applyTemplateToDraft, bindStyleTemplateEvents, closeTemplateNameEditor, normalizeTemplateNameInput, renderStyleTemplateGallery, requestNewTemplateName, setStyleTemplateList, setStyleTemplateMode } from './style-templates';
 import { ui } from './dom';
 import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, deriveRowColorsFromMarkStyles, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, seedMarkStylesFromRowColorsIfNeeded, setLocalStyleOverrideField, state, type AssistLineStyleInjectionDraftItem, type GridStyleInjectionDraftItem, type LineBackgroundStyleInjectionDraftItem, type MarkStyleInjectionDraftItem, type StyleInjectionDraft, type StyleInjectionDraftItem } from './state';
 
-import type {
-    AssistLineInjectionStyle,
-    CellFillInjectionStyle,
-    ColorMode,
-    GridStrokeInjectionStyle,
-    LineBackgroundInjectionStyle,
-    LocalStyleOverrideMask,
-    LocalStyleOverrides,
-    MarkInjectionStyle,
-    PaintStyleSelection,
-    RowStrokeStyle,
-    SideStrokeInjectionStyle,
-    StyleTemplateItem,
-    StyleTemplatePayload,
-    StrokeInjectionPayload,
-    StrokeStyleSnapshot
-} from '../shared/style-types';
-import type { StylePreviewTarget } from './preview';
-
-declare const iro: any;
-
 const THICKNESS_MIN = 0;
 const THICKNESS_MAX = 20;
-const STYLE_COLOR_POPOVER_MARGIN = 8;
-
 
 function debounce<F extends (...args: any[]) => void>(func: F, wait: number): F {
     let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -39,6 +30,40 @@ function debounce<F extends (...args: any[]) => void>(func: F, wait: number): F 
             func.apply(this, args);
         }, wait);
     } as F;
+}
+
+type StyleInjectionTabKey = 'plot-area' | 'mark' | 'assist-line';
+
+function setActiveStyleInjectionTab(tabKey: StyleInjectionTabKey) {
+    const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-style-injection-tab]'));
+    const panels = Array.from(document.querySelectorAll<HTMLElement>('[data-style-injection-panel]'));
+    if (tabButtons.length === 0 || panels.length === 0) return;
+
+    tabButtons.forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.styleInjectionTab === tabKey);
+    });
+    panels.forEach((panel) => {
+        panel.classList.toggle('is-active', panel.dataset.styleInjectionPanel === tabKey);
+    });
+}
+
+function bindStyleInjectionTabEvents() {
+    const stylePanel = document.querySelector<HTMLElement>('#style-panel');
+    if (!stylePanel) return;
+    const tabButtons = Array.from(stylePanel.querySelectorAll<HTMLButtonElement>('[data-style-injection-tab]'));
+    if (tabButtons.length === 0) return;
+
+    const activeTab = tabButtons.find((btn) => btn.classList.contains('is-active'))?.dataset.styleInjectionTab as StyleInjectionTabKey | undefined;
+    setActiveStyleInjectionTab(activeTab || 'plot-area');
+
+    stylePanel.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement | null;
+        const tabButton = target?.closest<HTMLButtonElement>('[data-style-injection-tab]');
+        if (!tabButton) return;
+        const tabKey = tabButton.dataset.styleInjectionTab as StyleInjectionTabKey | undefined;
+        if (!tabKey) return;
+        setActiveStyleInjectionTab(tabKey);
+    });
 }
 
 export function getStyleColorInputs(): HTMLInputElement[] {
@@ -54,148 +79,6 @@ export function getStyleColorInputs(): HTMLInputElement[] {
         ui.styleAssistLineColorInput
     ];
 }
-
-type SavedStylePayload = {
-    savedCellFillStyle?: unknown;
-    savedLineBackgroundStyle?: unknown;
-    savedCellTopStyle?: unknown;
-    savedTabRightStyle?: unknown;
-    savedGridContainerStyle?: unknown;
-    savedAssistLineStyle?: unknown;
-    savedMarkStyle?: unknown;
-    savedMarkStyles?: unknown;
-    savedRowColors?: unknown;
-};
-
-type ExtractedStylePayload = {
-    cellFillStyle?: unknown;
-    lineBackgroundStyle?: unknown;
-    markStyle?: unknown;
-    markStyles?: unknown;
-    rowStrokeStyles?: unknown;
-    colStrokeStyle?: unknown;
-    chartContainerStrokeStyle?: unknown;
-    assistLineStrokeStyle?: unknown;
-};
-
-type StyleItemPopoverTarget = StylePreviewTarget | 'input-color';
-
-type StylePopoverConfig = {
-    title: string;
-    primaryLabel: string;
-    primaryInput: HTMLInputElement;
-    primaryValue?: string;
-    secondaryLabel?: string;
-    secondaryInput?: HTMLInputElement;
-    strokeStyleInput?: HTMLSelectElement;
-    thicknessInput?: HTMLInputElement;
-    opacityInput?: HTMLInputElement;
-    visibleInput?: HTMLInputElement;
-    enableOverride?: boolean;
-    sides?: {
-        top: HTMLInputElement;
-        right: HTMLInputElement;
-        bottom: HTMLInputElement;
-        left: HTMLInputElement;
-    };
-};
-
-type AnchorRectLike = { left: number; top: number; right: number; bottom: number };
-
-type StyleFormSnapshot = {
-    [key: string]: string | boolean;
-};
-
-type ColumnPopoverSnapshot = {
-    colIndex: number;
-    color: string;
-    enabled: boolean;
-    mode: ColorMode;
-    styleId: string | null;
-};
-
-type PopoverSegment = 'mark' | 'column' | 'background';
-type BackgroundPopoverTarget = 'cell-fill' | 'line-background' | 'cell-top' | 'tab-right' | 'grid' | 'assist-line';
-
-type PopoverNavigatorState = {
-    segment: PopoverSegment;
-    index: number;
-};
-
-type PopoverSessionSnapshot = {
-    styleFormSnapshot: StyleFormSnapshot;
-    styleInjectionDraft: StyleInjectionDraft;
-    markStylesDraft: MarkStyleInjectionDraftItem[];
-    rowColors: string[];
-    colHeaderColors: string[];
-    colHeaderColorEnabled: boolean[];
-    colHeaderColorModes: ColorMode[];
-    colHeaderPaintStyleIds: Array<string | null>;
-    activeMarkStyleIndex: number;
-    markStrokeLinkByIndex: boolean[];
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 function syncMarkIndexSelector() {
     const select = ui.styleMarkIndexInput;
@@ -265,10 +148,6 @@ export function syncAllHexPreviewsFromDom() {
     });
 }
 
-
-
-
-
 export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSelectElement> {
     return [
         ui.styleCellFillColorInput,
@@ -302,32 +181,6 @@ export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSe
     ];
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export function syncStyleDraftFromDomAndEmit() {
     markStyleInjectionDirty();
     const normalized = validateStyleTabDraft(readStyleTabDraft());
@@ -352,74 +205,6 @@ function syncRowColorsFromMarkStyles(options: { emitLocalOverride: boolean }) {
         recomputeEffectiveStyleSnapshot();
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 export function normalizeFromDom(
     colorInput: HTMLInputElement,
@@ -475,20 +260,6 @@ export function normalizeColorThicknessFromDom(
 export function emitStyleDraftUpdated() {
     document.dispatchEvent(new CustomEvent('style-draft-updated'));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleCellFillColorInput.value = draft.cellFill.color;
@@ -604,7 +375,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
         lineBackground: {
             color: normalizeHexColorInput(mark.lineBackgroundColor) || normalizeHexColorInput(mark.strokeColor) || state.styleInjectionDraft.lineBackground.color,
             opacity: Math.max(0, Math.min(1, mark.lineBackgroundOpacity / 100)),
-            visible: true
+            visible: ui.styleLineBackgroundVisibleInput.checked
         },
         mark: { ...mark },
         cellTop,
@@ -710,7 +481,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
                 opacity: markLineBackgroundOpacityValid
                     ? Math.max(0, Math.min(1, markLineBackgroundOpacityRaw / 100))
                     : draft.lineBackground.opacity,
-                visible: true
+                visible: ui.styleLineBackgroundVisibleInput.checked
             },
             mark: {
                 fillColor: lineStrokeOnly
@@ -732,22 +503,6 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
         isValid
     };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 export function setStyleInjectionDraft(draft: StyleInjectionDraft) {
     state.styleInjectionDraft = cloneDraft(draft);
@@ -808,11 +563,15 @@ export function syncStyleTabDraftFromExtracted(extracted: ExtractedStylePayload)
 }
 
 export function bindStyleTabEvents() {
+    bindStyleInjectionTabEvents();
+
     const handleChange = debounce(() => {
         syncStyleDraftFromDomAndEmit();
     }, 150);
 
-    const styleInputsFormContainer = document.querySelector('.style-panel-scroll-area') || document.body;
+    const styleInputsFormContainer = document.querySelector('#style-panel')
+        || document.querySelector('.style-panel-scroll-area')
+        || document.body;
     styleInputsFormContainer.addEventListener('input', (e) => {
         const target = e.target as HTMLElement;
         const trackedInputs = getStyleFormInputsForSnapshot();
@@ -875,7 +634,6 @@ export function bindStyleTabEvents() {
 
     bindStyleTemplateEvents();
 }
-
 
 export * from './style-popover';
 export * from './style-templates';

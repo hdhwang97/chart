@@ -4,30 +4,6 @@ import { emitStyleDraftUpdated, getHexPreviewElement, getHexPreviewFallback, get
 import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, getGridColsForChart, getRowColor, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, setLocalStyleOverrideField, state } from './state';
 import { ui } from './dom';
 
-// 
-// 
-// 
-// 
-// 
-// 
-// 
-// 
-
-
-
-
-
-
-
-// 
-// 
-// 
-// 
-
-// 
-
-
-
 import type { ColorMode, PaintStyleSelection } from '../shared/style-types';
 import type { StylePreviewTarget } from './preview';
 
@@ -1048,7 +1024,6 @@ export function setStylePopoverPaintStyles(list: PaintStyleSelection[]) {
         refreshStyleItemModeUi();
     }
 }
-
 
 export function bindStylePopoverEvents() {
     ui.styleItemPopover.addEventListener('click', (e) => e.stopPropagation());
