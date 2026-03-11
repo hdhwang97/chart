@@ -672,7 +672,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
                 opacity: markLineBackgroundOpacityValid
                     ? Math.max(0, Math.min(1, markLineBackgroundOpacityRaw / 100))
                     : draft.lineBackground.opacity,
-                visible: ui.styleLineBackgroundVisibleInput.checked
+                visible: ui.styleMarkLineBackgroundVisibleInput.checked
             },
             mark: {
                 fillColor: lineStrokeOnly

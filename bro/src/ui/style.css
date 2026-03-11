@@ -387,6 +387,11 @@ input[type=number]::-webkit-outer-spin-button {
     user-select: none;
 }
 
+.style-panel-scroll-area > * {
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .style-template-card {
     border: 1px solid #E5E7EB;
     border-radius: 6px;

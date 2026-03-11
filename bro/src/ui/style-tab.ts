@@ -153,6 +153,7 @@ export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSe
         ui.styleCellFillColorInput,
         ui.styleLineBackgroundColorInput,
         ui.styleLineBackgroundVisibleInput,
+        ui.styleMarkLineBackgroundVisibleInput,
         ui.styleMarkFillColorInput,
         ui.styleMarkStrokeColorInput,
         ui.styleMarkLineBackgroundColorInput,
@@ -265,6 +266,7 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleCellFillColorInput.value = draft.cellFill.color;
     ui.styleLineBackgroundColorInput.value = draft.lineBackground.color;
     ui.styleLineBackgroundVisibleInput.checked = draft.lineBackground.visible;
+    ui.styleMarkLineBackgroundVisibleInput.checked = draft.lineBackground.visible;
     ui.styleLineBackgroundSection.classList.add('hidden');
     syncMarkIndexSelector();
     const activeMark = getActiveMarkDraft();
@@ -375,7 +377,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
         lineBackground: {
             color: normalizeHexColorInput(mark.lineBackgroundColor) || normalizeHexColorInput(mark.strokeColor) || state.styleInjectionDraft.lineBackground.color,
             opacity: Math.max(0, Math.min(1, mark.lineBackgroundOpacity / 100)),
-            visible: ui.styleLineBackgroundVisibleInput.checked
+            visible: ui.styleMarkLineBackgroundVisibleInput.checked
         },
         mark: { ...mark },
         cellTop,
@@ -481,7 +483,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
                 opacity: markLineBackgroundOpacityValid
                     ? Math.max(0, Math.min(1, markLineBackgroundOpacityRaw / 100))
                     : draft.lineBackground.opacity,
-                visible: ui.styleLineBackgroundVisibleInput.checked
+                visible: ui.styleMarkLineBackgroundVisibleInput.checked
             },
             mark: {
                 fillColor: lineStrokeOnly
@@ -565,6 +567,10 @@ export function syncStyleTabDraftFromExtracted(extracted: ExtractedStylePayload)
 export function bindStyleTabEvents() {
     bindStyleInjectionTabEvents();
 
+    ui.styleMarkLineBackgroundVisibleInput.addEventListener('change', () => {
+        ui.styleLineBackgroundVisibleInput.checked = ui.styleMarkLineBackgroundVisibleInput.checked;
+    });
+
     const handleChange = debounce(() => {
         syncStyleDraftFromDomAndEmit();
     }, 150);
@@ -604,6 +610,7 @@ export function bindStyleTabEvents() {
         ui.styleMarkStrokeColorInput.value = active.strokeColor;
         ui.styleMarkLineBackgroundColorInput.value = active.lineBackgroundColor;
         ui.styleMarkLineBackgroundOpacityInput.value = String(clampOpacityPercent(active.lineBackgroundOpacity, 100));
+        ui.styleLineBackgroundVisibleInput.checked = ui.styleMarkLineBackgroundVisibleInput.checked;
         ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
         ui.styleMarkThicknessInput.value = String(active.thickness);
         syncAllHexPreviewsFromDom();

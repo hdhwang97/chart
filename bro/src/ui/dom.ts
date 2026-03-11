@@ -193,6 +193,7 @@ export const ui = {
     get styleLineBackgroundSection() { return byId<HTMLElement>('style-line-background-section'); },
     get styleLineBackgroundColorInput() { return byId<HTMLInputElement>('style-line-background-color'); },
     get styleLineBackgroundVisibleInput() { return byId<HTMLInputElement>('style-line-background-visible'); },
+    get styleMarkLineBackgroundVisibleInput() { return byId<HTMLInputElement>('style-mark-line-background-visible'); },
     get styleMarkFillColorInput() { return byId<HTMLInputElement>('style-mark-fill-color'); },
     get styleMarkStrokeColorInput() { return byId<HTMLInputElement>('style-mark-stroke-color'); },
     get styleMarkLineBackgroundColorInput() { return byId<HTMLInputElement>('style-mark-line-background-color'); },
