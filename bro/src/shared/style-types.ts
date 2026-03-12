@@ -148,10 +148,22 @@ export type LocalStyleOverrideMask = {
 
 export type StyleTemplatePayload = StrokeInjectionPayload;
 
+export type StyleTemplateChartType = 'bar' | 'line' | 'stackedBar';
+
+export type StyleTemplateStoredPayload = {
+    common?: StrokeInjectionPayload;
+    byChart?: {
+        bar?: StrokeInjectionPayload;
+        line?: StrokeInjectionPayload;
+        stackedBar?: StrokeInjectionPayload;
+    };
+};
+
 export type StyleTemplateItem = {
     id: string;
     name: string;
-    payload: StyleTemplatePayload;
+    chartType?: string;
+    payload: StyleTemplatePayload | StyleTemplateStoredPayload;
     createdAt: number;
     updatedAt: number;
 };

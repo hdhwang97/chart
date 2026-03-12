@@ -774,7 +774,7 @@ function handlePluginMessage(msg: any) {
             state.rowStrokeStyles = [];
             ensureRowHeaderLabelsLength(state.rows, state.chartType);
             initializeStyleTabDraft({}, {});
-            parent.postMessage({ pluginMessage: { type: 'load_style_templates' } }, '*');
+            parent.postMessage({ pluginMessage: { type: 'load_style_templates', chartType: state.chartType } }, '*');
             switchTab('data');
             goToStep(1);
             ui.editModeBtn.classList.add('hidden');
@@ -935,7 +935,7 @@ function handlePluginMessage(msg: any) {
             }
         );
         syncAllHexPreviewsFromDom();
-        parent.postMessage({ pluginMessage: { type: 'load_style_templates' } }, '*');
+        parent.postMessage({ pluginMessage: { type: 'load_style_templates', chartType: state.chartType } }, '*');
 
         // Line-specific UI
         if (msg.chartType === 'line') {
@@ -1447,7 +1447,7 @@ function bindUiEvents() {
             return;
         }
         const payload = buildTemplatePayloadFromDraft(validated.draft);
-        parent.postMessage({ pluginMessage: { type: 'save_style_template', name, payload } }, '*');
+        parent.postMessage({ pluginMessage: { type: 'save_style_template', name, payload, chartType: state.chartType } }, '*');
     });
     document.addEventListener('style-draft-updated', () => {
         if (state.isInstanceTarget) {

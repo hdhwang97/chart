@@ -1,11 +1,35 @@
 import { buildLocalStyleOverridesFromDraft, SavedStylePayload, buildDraftFromPayload } from './style-normalization';
 import { ui } from './dom';
-import { ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, setLocalStyleOverrideField, state } from './state';
+import { ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, setLocalStyleOverrideField, state } from './state';
 import { emitStyleDraftUpdated, hydrateStyleTab, markStyleInjectionDirty, setStyleInjectionDraft } from './style-tab';
 
-import type { StyleTemplateItem, StyleTemplatePayload } from '../shared/style-types';
+import type { StyleTemplateChartType, StyleTemplateItem, StyleTemplatePayload, StyleTemplateStoredPayload } from '../shared/style-types';
 
 const MAX_STYLE_TEMPLATES = 20;
+
+function normalizeTemplateChartType(value: unknown): StyleTemplateChartType {
+    if (value === 'line') return 'line';
+    if (value === 'stackedBar' || value === 'stacked') return 'stackedBar';
+    return 'bar';
+}
+
+function isStoredPayload(payload: StyleTemplatePayload | StyleTemplateStoredPayload): payload is StyleTemplateStoredPayload {
+    return Boolean(payload && typeof payload === 'object' && ('common' in payload || 'byChart' in payload));
+}
+
+function mergePayload(base?: StyleTemplatePayload, scoped?: StyleTemplatePayload): StyleTemplatePayload {
+    return {
+        ...(base || {}),
+        ...(scoped || {})
+    };
+}
+
+export function resolveTemplatePayload(template: StyleTemplateItem): StyleTemplatePayload {
+    const payload = template.payload as (StyleTemplatePayload | StyleTemplateStoredPayload);
+    if (!isStoredPayload(payload)) return payload || {};
+    const currentChart = normalizeTemplateChartType(state.chartType);
+    return mergePayload(payload.common, payload.byChart?.[currentChart]);
+}
 
 export function formatTemplateTime(ts: number): string {
     try {
@@ -60,7 +84,8 @@ export function estimateNextTemplateName(): string {
 }
 
 export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
-    const nextDraft = buildDraftFromPayload(toSavedStylePayload(template.payload), {});
+    const resolvedPayload = resolveTemplatePayload(template);
+    const nextDraft = buildDraftFromPayload(toSavedStylePayload(resolvedPayload), {});
     setStyleInjectionDraft(nextDraft);
     hydrateStyleTab(nextDraft);
     const totalCols = state.chartType === 'stackedBar'
@@ -68,33 +93,47 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
         : getGridColsForChart(state.chartType, state.cols);
     ensureColHeaderColorsLength(totalCols);
     ensureColHeaderColorEnabledLength(totalCols);
-    if (Array.isArray(template.payload.colColors)) {
-        state.colHeaderColors = template.payload.colColors
+    if (Array.isArray(resolvedPayload.colColors)) {
+        state.colHeaderColors = resolvedPayload.colColors
             .map((color) => normalizeHexColorInput(color) || getRowColor(0))
             .slice(0, totalCols);
         ensureColHeaderColorsLength(totalCols);
     }
-    if (Array.isArray(template.payload.colColorEnabled)) {
-        state.colHeaderColorEnabled = template.payload.colColorEnabled
+    if (Array.isArray(resolvedPayload.colColorEnabled)) {
+        state.colHeaderColorEnabled = resolvedPayload.colColorEnabled
             .map((flag) => Boolean(flag))
             .slice(0, totalCols);
         ensureColHeaderColorEnabledLength(totalCols);
     }
-    if (Array.isArray(template.payload.colColorModes)) {
-        state.colHeaderColorModes = template.payload.colColorModes
+    if (Array.isArray(resolvedPayload.colColorModes)) {
+        state.colHeaderColorModes = resolvedPayload.colColorModes
             .map((value) => value === 'paint_style' ? 'paint_style' : 'hex')
             .slice(0, totalCols);
         ensureColHeaderColorModesLength(totalCols);
     }
-    if (Array.isArray(template.payload.colPaintStyleIds)) {
-        state.colHeaderPaintStyleIds = template.payload.colPaintStyleIds
+    if (Array.isArray(resolvedPayload.colPaintStyleIds)) {
+        state.colHeaderPaintStyleIds = resolvedPayload.colPaintStyleIds
             .map((value) => (typeof value === 'string' && value.trim()) ? value : null)
             .slice(0, totalCols);
         ensureColHeaderPaintStyleIdsLength(totalCols);
     }
+    if (Array.isArray(resolvedPayload.rowColorModes)) {
+        state.rowColorModes = resolvedPayload.rowColorModes
+            .map((value) => value === 'paint_style' ? 'paint_style' : 'hex')
+            .slice(0, state.rows);
+        ensureRowColorModesLength(state.rows);
+    }
+    if (Array.isArray(resolvedPayload.rowPaintStyleIds)) {
+        state.rowPaintStyleIds = resolvedPayload.rowPaintStyleIds
+            .map((value) => (typeof value === 'string' && value.trim()) ? value : null)
+            .slice(0, state.rows);
+        ensureRowPaintStyleIdsLength(state.rows);
+    }
     if (state.isInstanceTarget) {
         const draftOverrides = buildLocalStyleOverridesFromDraft(nextDraft);
         setLocalStyleOverrideField('rowColors', draftOverrides.overrides.rowColors);
+        if (Array.isArray(resolvedPayload.rowColorModes)) setLocalStyleOverrideField('rowColorModes', state.rowColorModes.slice());
+        if (Array.isArray(resolvedPayload.rowPaintStyleIds)) setLocalStyleOverrideField('rowPaintStyleIds', state.rowPaintStyleIds.slice());
         setLocalStyleOverrideField('cellFillStyle', draftOverrides.overrides.cellFillStyle);
         setLocalStyleOverrideField('cellTopStyle', draftOverrides.overrides.cellTopStyle);
         setLocalStyleOverrideField('tabRightStyle', draftOverrides.overrides.tabRightStyle);
@@ -118,17 +157,18 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
 }
 
 export function renderTemplateCard(item: StyleTemplateItem): string {
+    const payload = resolveTemplatePayload(item);
     const selectedClass = state.selectedStyleTemplateId === item.id ? ' selected' : '';
     const inEdit = state.styleTemplateMode === 'edit';
     const editing = inEdit && state.editingTemplateId === item.id;
     const swatches = [
-        item.payload.cellFillStyle?.color || '#FFFFFF',
-        item.payload.markStyle?.lineBackgroundColor || item.payload.markStyle?.strokeColor || item.payload.markStyle?.fillColor || '#3B82F6',
-        item.payload.markStyle?.fillColor || item.payload.markStyle?.strokeColor || '#3B82F6',
-        item.payload.cellTopStyle?.color || '#E5E7EB',
-        item.payload.tabRightStyle?.color || '#E5E7EB',
-        item.payload.gridContainerStyle?.color || '#E5E7EB',
-        item.payload.assistLineStyle?.color || '#E5E7EB'
+        payload.cellFillStyle?.color || '#FFFFFF',
+        payload.markStyle?.lineBackgroundColor || payload.markStyle?.strokeColor || payload.markStyle?.fillColor || '#3B82F6',
+        payload.markStyle?.fillColor || payload.markStyle?.strokeColor || '#3B82F6',
+        payload.cellTopStyle?.color || '#E5E7EB',
+        payload.tabRightStyle?.color || '#E5E7EB',
+        payload.gridContainerStyle?.color || '#E5E7EB',
+        payload.assistLineStyle?.color || '#E5E7EB'
     ];
     const escapedName = escapeHtml(item.name);
 
@@ -245,7 +285,7 @@ export function bindStyleTemplateEvents() {
                 window.alert('템플릿 이름은 1~40자로 입력해야 합니다.');
                 return;
             }
-            parent.postMessage({ pluginMessage: { type: 'rename_style_template', id, name: normalized } }, '*');
+            parent.postMessage({ pluginMessage: { type: 'rename_style_template', id, name: normalized, chartType: state.chartType } }, '*');
             closeTemplateNameEditor();
             renderStyleTemplateGallery();
             return;
@@ -258,7 +298,7 @@ export function bindStyleTemplateEvents() {
             const id = deleteBtn.dataset.templateDeleteId;
             if (!id) return;
             if (!window.confirm('이 템플릿을 삭제하시겠습니까?')) return;
-            parent.postMessage({ pluginMessage: { type: 'delete_style_template', id } }, '*');
+            parent.postMessage({ pluginMessage: { type: 'delete_style_template', id, chartType: state.chartType } }, '*');
             return;
         }
 
@@ -286,7 +326,7 @@ export function bindStyleTemplateEvents() {
                 window.alert('템플릿 이름은 1~40자로 입력해야 합니다.');
                 return;
             }
-            parent.postMessage({ pluginMessage: { type: 'rename_style_template', id, name: normalized } }, '*');
+            parent.postMessage({ pluginMessage: { type: 'rename_style_template', id, name: normalized, chartType: state.chartType } }, '*');
             closeTemplateNameEditor();
             renderStyleTemplateGallery();
             return;

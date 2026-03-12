@@ -1263,11 +1263,11 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.postMessage({ type: 'paint_styles_loaded', list: await loadLocalPaintStyleSelections() });
     }
     else if (msg.type === 'load_style_templates') {
-        const list = await loadStyleTemplates();
+        const list = await loadStyleTemplates(msg.chartType);
         figma.ui.postMessage({ type: 'style_templates_loaded', list });
     }
     else if (msg.type === 'save_style_template') {
-        const result = await saveStyleTemplate(msg.name, msg.payload);
+        const result = await saveStyleTemplate(msg.name, msg.payload, msg.chartType);
         if (result.error) {
             figma.ui.postMessage({ type: 'style_template_error', reason: result.error });
             return;
@@ -1275,7 +1275,7 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.postMessage({ type: 'style_template_saved', list: result.list || [] });
     }
     else if (msg.type === 'delete_style_template') {
-        const result = await deleteStyleTemplate(msg.id);
+        const result = await deleteStyleTemplate(msg.id, msg.chartType);
         if (result.error) {
             figma.ui.postMessage({ type: 'style_template_error', reason: result.error });
             return;
@@ -1283,7 +1283,7 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.postMessage({ type: 'style_template_deleted', id: msg.id, list: result.list || [] });
     }
     else if (msg.type === 'rename_style_template') {
-        const result = await renameStyleTemplate(msg.id, msg.name);
+        const result = await renameStyleTemplate(msg.id, msg.name, msg.chartType);
         if (result.error) {
             figma.ui.postMessage({ type: 'style_template_error', reason: result.error });
             return;

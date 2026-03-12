@@ -3,15 +3,24 @@ import { normalizeHexColor } from './utils';
 import type {
     AssistLineInjectionStyle,
     CellFillInjectionStyle,
+    ColorMode,
     GridStrokeInjectionStyle,
     LineBackgroundInjectionStyle,
     MarkInjectionStyle,
     SideStrokeInjectionStyle,
+    StyleTemplateChartType,
     StyleTemplateItem,
-    StyleTemplatePayload
+    StyleTemplatePayload,
+    StyleTemplateStoredPayload
 } from '../shared/style-types';
 
 const MAX_STYLE_TEMPLATES = 20;
+
+function normalizeTemplateChartType(value: unknown): StyleTemplateChartType {
+    if (value === 'line') return 'line';
+    if (value === 'stackedBar' || value === 'stacked') return 'stackedBar';
+    return 'bar';
+}
 
 function clampThickness(value: unknown): number | undefined {
     const n = typeof value === 'number' ? value : Number(value);
@@ -135,11 +144,30 @@ function normalizeBooleanArray(value: unknown): boolean[] | undefined {
     return next.length > 0 ? next : undefined;
 }
 
-function normalizePayload(value: unknown): StyleTemplatePayload | null {
+function normalizeColorModeArray(value: unknown): ColorMode[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const next = value.map((item) => item === 'paint_style' ? 'paint_style' : 'hex');
+    return next.length > 0 ? next : undefined;
+}
+
+function normalizeStyleIdArray(value: unknown): Array<string | null> | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const next = value.map((item) => (typeof item === 'string' && item.trim()) ? item : null);
+    return next.length > 0 ? next : undefined;
+}
+
+function hasAnyPayloadField(payload: StyleTemplatePayload): boolean {
+    return Object.keys(payload).length > 0;
+}
+
+function normalizeFlatPayload(value: unknown): StyleTemplatePayload | null {
     if (!value || typeof value !== 'object') return null;
     const source = value as StyleTemplatePayload;
     const payload: StyleTemplatePayload = {};
 
+    const rowColors = normalizeColorArray((source as any).rowColors);
+    const rowColorModes = normalizeColorModeArray((source as any).rowColorModes);
+    const rowPaintStyleIds = normalizeStyleIdArray((source as any).rowPaintStyleIds);
     const cellFillStyle = normalizeCellFillStyle(source.cellFillStyle);
     const lineBackgroundStyle = normalizeLineBackgroundStyle(source.lineBackgroundStyle);
     const cellTopStyle = normalizeSideStyle(source.cellTopStyle || source.cellBottomStyle);
@@ -150,7 +178,12 @@ function normalizePayload(value: unknown): StyleTemplatePayload | null {
     const markStyles = normalizeMarkStyles(source.markStyles);
     const colColors = normalizeColorArray((source as any).colColors);
     const colColorEnabled = normalizeBooleanArray((source as any).colColorEnabled);
+    const colColorModes = normalizeColorModeArray((source as any).colColorModes);
+    const colPaintStyleIds = normalizeStyleIdArray((source as any).colPaintStyleIds);
 
+    if (rowColors) payload.rowColors = rowColors;
+    if (rowColorModes) payload.rowColorModes = rowColorModes;
+    if (rowPaintStyleIds) payload.rowPaintStyleIds = rowPaintStyleIds;
     if (cellFillStyle) payload.cellFillStyle = cellFillStyle;
     if (lineBackgroundStyle) payload.lineBackgroundStyle = lineBackgroundStyle;
     if (cellTopStyle) payload.cellTopStyle = cellTopStyle;
@@ -161,9 +194,81 @@ function normalizePayload(value: unknown): StyleTemplatePayload | null {
     if (markStyles) payload.markStyles = markStyles;
     if (colColors) payload.colColors = colColors;
     if (colColorEnabled) payload.colColorEnabled = colColorEnabled;
+    if (colColorModes) payload.colColorModes = colColorModes;
+    if (colPaintStyleIds) payload.colPaintStyleIds = colPaintStyleIds;
 
-    const hasAnyField = Object.keys(payload).length > 0;
-    return hasAnyField ? payload : null;
+    return hasAnyPayloadField(payload) ? payload : null;
+}
+
+function isStructuredPayload(value: unknown): value is StyleTemplateStoredPayload {
+    if (!value || typeof value !== 'object') return false;
+    const source = value as any;
+    return typeof source.common === 'object' || typeof source.byChart === 'object';
+}
+
+function pickCommonPayload(flat: StyleTemplatePayload): StyleTemplatePayload {
+    const common: StyleTemplatePayload = {};
+    if (flat.cellFillStyle) common.cellFillStyle = flat.cellFillStyle;
+    if (flat.cellTopStyle) common.cellTopStyle = flat.cellTopStyle;
+    if (flat.tabRightStyle) common.tabRightStyle = flat.tabRightStyle;
+    if (flat.gridContainerStyle) common.gridContainerStyle = flat.gridContainerStyle;
+    if (flat.assistLineStyle) common.assistLineStyle = flat.assistLineStyle;
+    if (flat.markStyle) common.markStyle = flat.markStyle;
+    if (flat.markStyles) common.markStyles = flat.markStyles;
+    return common;
+}
+
+function pickChartPayload(flat: StyleTemplatePayload, chartType: StyleTemplateChartType): StyleTemplatePayload {
+    const scoped: StyleTemplatePayload = {};
+    if (flat.rowColors) scoped.rowColors = flat.rowColors;
+    if (flat.rowColorModes) scoped.rowColorModes = flat.rowColorModes;
+    if (flat.rowPaintStyleIds) scoped.rowPaintStyleIds = flat.rowPaintStyleIds;
+
+    if (chartType === 'bar') {
+        if (flat.colColors) scoped.colColors = flat.colColors;
+        if (flat.colColorEnabled) scoped.colColorEnabled = flat.colColorEnabled;
+        if (flat.colColorModes) scoped.colColorModes = flat.colColorModes;
+        if (flat.colPaintStyleIds) scoped.colPaintStyleIds = flat.colPaintStyleIds;
+    }
+    if (chartType === 'line') {
+        if (flat.lineBackgroundStyle) scoped.lineBackgroundStyle = flat.lineBackgroundStyle;
+    }
+    return scoped;
+}
+
+function normalizeStructuredPayload(value: unknown, chartType: StyleTemplateChartType): StyleTemplateStoredPayload | null {
+    if (!value || typeof value !== 'object') return null;
+
+    if (isStructuredPayload(value)) {
+        const source = value as StyleTemplateStoredPayload;
+        const common = normalizeFlatPayload(source.common);
+        const byChartRaw = source.byChart || {};
+        const bar = normalizeFlatPayload(byChartRaw.bar);
+        const line = normalizeFlatPayload(byChartRaw.line);
+        const stackedBar = normalizeFlatPayload(byChartRaw.stackedBar);
+        const next: StyleTemplateStoredPayload = {};
+        if (common) next.common = common;
+        if (bar || line || stackedBar) {
+            next.byChart = {};
+            if (bar) next.byChart.bar = bar;
+            if (line) next.byChart.line = line;
+            if (stackedBar) next.byChart.stackedBar = stackedBar;
+        }
+        const hasAny = Boolean(next.common) || Boolean(next.byChart && Object.keys(next.byChart).length > 0);
+        return hasAny ? next : null;
+    }
+
+    const flat = normalizeFlatPayload(value);
+    if (!flat) return null;
+    const common = pickCommonPayload(flat);
+    const scoped = pickChartPayload(flat, chartType);
+    const payload: StyleTemplateStoredPayload = {};
+    if (hasAnyPayloadField(common)) payload.common = common;
+    if (hasAnyPayloadField(scoped)) {
+        payload.byChart = { [chartType]: scoped };
+    }
+    const hasAny = Boolean(payload.common) || Boolean(payload.byChart && Object.keys(payload.byChart).length > 0);
+    return hasAny ? payload : null;
 }
 
 function normalizeTemplateName(name: unknown): string | null {
@@ -183,7 +288,8 @@ function normalizeTemplateItem(value: unknown): StyleTemplateItem | null {
     const source = value as StyleTemplateItem;
     const id = typeof source.id === 'string' && source.id.trim() ? source.id.trim() : null;
     const name = normalizeTemplateName(source.name);
-    const payload = normalizePayload(source.payload);
+    const chartType = normalizeTemplateChartType((source as any).chartType);
+    const payload = normalizeStructuredPayload(source.payload, chartType);
     const createdAt = Number(source.createdAt);
     const updatedAt = Number(source.updatedAt);
 
@@ -193,36 +299,51 @@ function normalizeTemplateItem(value: unknown): StyleTemplateItem | null {
     return {
         id,
         name,
+        chartType,
         payload,
         createdAt,
         updatedAt
     };
 }
 
-export async function loadStyleTemplates(): Promise<StyleTemplateItem[]> {
+async function loadAllStyleTemplates(): Promise<StyleTemplateItem[]> {
     const raw = await figma.clientStorage.getAsync(CLIENT_STORAGE_KEYS.STYLE_TEMPLATES);
     const parsed = Array.isArray(raw) ? raw : [];
     const normalized = parsed
         .map((item) => normalizeTemplateItem(item))
         .filter((item): item is StyleTemplateItem => Boolean(item));
-    return sortTemplates(normalized).slice(0, MAX_STYLE_TEMPLATES);
+    return sortTemplates(normalized);
+}
+
+export async function loadStyleTemplates(chartTypeInput?: unknown): Promise<StyleTemplateItem[]> {
+    const chartType = normalizeTemplateChartType(chartTypeInput);
+    const all = await loadAllStyleTemplates();
+    return all
+        .filter((item) => normalizeTemplateChartType((item as any).chartType) === chartType)
+        .slice(0, MAX_STYLE_TEMPLATES);
 }
 
 async function persistTemplates(items: StyleTemplateItem[]) {
-    const trimmed = sortTemplates(items).slice(0, MAX_STYLE_TEMPLATES);
+    const trimmed = sortTemplates(items);
     await figma.clientStorage.setAsync(CLIENT_STORAGE_KEYS.STYLE_TEMPLATES, trimmed);
     return trimmed;
 }
 
-export async function saveStyleTemplate(name: unknown, payloadInput: unknown): Promise<{ list?: StyleTemplateItem[]; error?: string }> {
+export async function saveStyleTemplate(
+    name: unknown,
+    payloadInput: unknown,
+    chartTypeInput?: unknown
+): Promise<{ list?: StyleTemplateItem[]; error?: string }> {
     const normalizedName = normalizeTemplateName(name);
     if (!normalizedName) return { error: 'Template name must be 1-40 chars.' };
+    const chartType = normalizeTemplateChartType(chartTypeInput);
 
-    const payload = normalizePayload(payloadInput);
+    const payload = normalizeStructuredPayload(payloadInput, chartType);
     if (!payload) return { error: 'Template payload is empty or invalid.' };
 
-    const list = await loadStyleTemplates();
-    if (list.length >= MAX_STYLE_TEMPLATES) {
+    const list = await loadAllStyleTemplates();
+    const sameChartTypeCount = list.filter((item) => normalizeTemplateChartType((item as any).chartType) === chartType).length;
+    if (sameChartTypeCount >= MAX_STYLE_TEMPLATES) {
         return { error: `Maximum ${MAX_STYLE_TEMPLATES} templates allowed.` };
     }
 
@@ -230,29 +351,37 @@ export async function saveStyleTemplate(name: unknown, payloadInput: unknown): P
     const item: StyleTemplateItem = {
         id: `${now}-${Math.random().toString(36).slice(2, 10)}`,
         name: normalizedName,
+        chartType,
         payload,
         createdAt: now,
         updatedAt: now
     };
 
-    const next = await persistTemplates([item, ...list]);
-    return { list: next };
+    await persistTemplates([item, ...list]);
+    return { list: await loadStyleTemplates(chartType) };
 }
 
-export async function deleteStyleTemplate(id: unknown): Promise<{ list?: StyleTemplateItem[]; error?: string }> {
+export async function deleteStyleTemplate(id: unknown, chartTypeInput?: unknown): Promise<{ list?: StyleTemplateItem[]; error?: string }> {
     if (typeof id !== 'string' || !id.trim()) return { error: 'Invalid template id.' };
-    const list = await loadStyleTemplates();
+    const chartType = normalizeTemplateChartType(chartTypeInput);
+    const list = await loadAllStyleTemplates();
     const next = list.filter((item) => item.id !== id);
     if (next.length === list.length) return { error: 'Template not found.' };
-    return { list: await persistTemplates(next) };
+    await persistTemplates(next);
+    return { list: await loadStyleTemplates(chartType) };
 }
 
-export async function renameStyleTemplate(id: unknown, name: unknown): Promise<{ list?: StyleTemplateItem[]; error?: string }> {
+export async function renameStyleTemplate(
+    id: unknown,
+    name: unknown,
+    chartTypeInput?: unknown
+): Promise<{ list?: StyleTemplateItem[]; error?: string }> {
     if (typeof id !== 'string' || !id.trim()) return { error: 'Invalid template id.' };
     const normalizedName = normalizeTemplateName(name);
     if (!normalizedName) return { error: 'Template name must be 1-40 chars.' };
+    const chartType = normalizeTemplateChartType(chartTypeInput);
 
-    const list = await loadStyleTemplates();
+    const list = await loadAllStyleTemplates();
     let found = false;
     const now = Date.now();
     const next = list.map((item) => {
@@ -265,5 +394,6 @@ export async function renameStyleTemplate(id: unknown, name: unknown): Promise<{
         };
     });
     if (!found) return { error: 'Template not found.' };
-    return { list: await persistTemplates(next) };
+    await persistTemplates(next);
+    return { list: await loadStyleTemplates(chartType) };
 }

@@ -126,6 +126,7 @@ export function selectType(type: string) {
 
     updateModeButtonState();
     goToStep(2);
+    parent.postMessage({ pluginMessage: { type: 'load_style_templates', chartType: state.chartType } }, '*');
 }
 
 export function resetData() {
