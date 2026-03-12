@@ -61,6 +61,7 @@ export type MarkInjectionStyle = {
     strokeColor?: string;
     lineBackgroundColor?: string;
     lineBackgroundOpacity?: number;
+    lineBackgroundVisible?: boolean;
     thickness?: number;
     strokeStyle?: 'solid' | 'dash';
 };

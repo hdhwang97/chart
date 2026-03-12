@@ -199,14 +199,16 @@ export function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
             ? clampOpacityPercent(lineBackgroundOpacityRaw * 100, 100)
             : clampOpacityPercent(lineBackgroundOpacityRaw, 100))
         : undefined;
+    const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean' ? source.lineBackgroundVisible : undefined;
     const thickness = Number.isFinite(Number(source.thickness)) ? clampThickness(source.thickness, DEFAULT_STYLE_INJECTION_DRAFT.mark.thickness) : undefined;
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && thickness === undefined && !strokeStyle) return null;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity: lineBackgroundOpacity !== undefined ? lineBackgroundOpacity / 100 : undefined,
+        lineBackgroundVisible,
         thickness,
         strokeStyle
     };
@@ -274,6 +276,7 @@ export function draftItemFromMarkStyle(style: MarkInjectionStyle | null, fallbac
             typeof style.lineBackgroundOpacity === 'number' ? style.lineBackgroundOpacity * 100 : undefined,
             fallback.lineBackgroundOpacity
         ),
+        lineBackgroundVisible: typeof style.lineBackgroundVisible === 'boolean' ? style.lineBackgroundVisible : fallback.lineBackgroundVisible,
         thickness: clampThickness(style.thickness, fallback.thickness),
         strokeStyle: style.strokeStyle === 'dash' ? 'dash' : 'solid'
     };
@@ -355,15 +358,17 @@ export function markStyleFromSnapshot(stroke: MarkInjectionStyle | null): MarkIn
     const lineBackgroundOpacity = typeof stroke.lineBackgroundOpacity === 'number'
         ? Math.max(0, Math.min(1, stroke.lineBackgroundOpacity))
         : undefined;
+    const lineBackgroundVisible = typeof stroke.lineBackgroundVisible === 'boolean' ? stroke.lineBackgroundVisible : undefined;
     const thickness = Number.isFinite(Number(stroke.thickness))
         ? clampThickness(stroke.thickness, DEFAULT_STYLE_INJECTION_DRAFT.mark.thickness)
         : undefined;
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && thickness === undefined) return null;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity,
+        lineBackgroundVisible,
         thickness,
         strokeStyle: stroke.strokeStyle === 'dash' ? 'dash' : 'solid'
     };
@@ -457,6 +462,7 @@ export function buildDraftFromPayload(
         strokeColor: item.strokeColor,
         lineBackgroundColor: item.lineBackgroundColor,
         lineBackgroundOpacity: Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)),
+        lineBackgroundVisible: item.lineBackgroundVisible,
         thickness: item.thickness,
         strokeStyle: item.strokeStyle
     }));
@@ -523,6 +529,7 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
             strokeColor: draft.mark.strokeColor,
             lineBackgroundColor: draft.mark.lineBackgroundColor,
             lineBackgroundOpacity: Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)),
+            lineBackgroundVisible: draft.mark.lineBackgroundVisible,
             thickness: draft.mark.thickness,
             strokeStyle: draft.mark.strokeStyle
         },
@@ -531,6 +538,7 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
             strokeColor: item.strokeColor,
             lineBackgroundColor: item.lineBackgroundColor,
             lineBackgroundOpacity: Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)),
+            lineBackgroundVisible: item.lineBackgroundVisible,
             thickness: item.thickness,
             strokeStyle: item.strokeStyle
         })),
@@ -683,6 +691,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
                 lineBackgroundOpacity: markLineBackgroundOpacityValid
                     ? Math.max(0, Math.min(100, Math.round(markLineBackgroundOpacityRaw)))
                     : draft.mark.lineBackgroundOpacity,
+                lineBackgroundVisible: ui.styleMarkLineBackgroundVisibleInput.checked,
                 thickness: markThicknessValid ? markThicknessRaw : clampThickness(markThicknessRaw, draft.mark.thickness),
                 strokeStyle: ui.styleMarkStrokeStyleInput.value === 'dash' ? 'dash' : 'solid'
             },
@@ -749,6 +758,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
                 strokeColor: draft.mark.strokeColor,
                 lineBackgroundColor: draft.mark.lineBackgroundColor,
                 lineBackgroundOpacity: Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)),
+                lineBackgroundVisible: draft.mark.lineBackgroundVisible,
                 thickness: draft.mark.thickness,
                 strokeStyle: draft.mark.strokeStyle
             },
@@ -757,6 +767,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
                 strokeColor: item.strokeColor,
                 lineBackgroundColor: item.lineBackgroundColor,
                 lineBackgroundOpacity: Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)),
+                lineBackgroundVisible: item.lineBackgroundVisible,
                 thickness: item.thickness,
                 strokeStyle: item.strokeStyle
             })),

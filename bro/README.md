@@ -195,7 +195,7 @@ bro/
 
 ## 8) 현재 운영 메모
 
-- manifest 이름: `Test 1.0.2`
+- manifest 이름: `Test 1.1.1`
 - allowedDomains:
   - `https://cdn.jsdelivr.net`
   - `https://cdn.tailwindcss.com`

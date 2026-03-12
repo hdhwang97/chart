@@ -322,6 +322,11 @@ function getMarkDraftStyle(seriesIndex: number) {
         lineBackgroundOpacity: Number.isFinite(Number(source.lineBackgroundOpacity))
             ? Math.max(0, Math.min(100, Number(source.lineBackgroundOpacity)))
             : Math.max(0, Math.min(100, Number((fallback as any).lineBackgroundOpacity ?? 100))),
+        lineBackgroundVisible: typeof source.lineBackgroundVisible === 'boolean'
+            ? source.lineBackgroundVisible
+            : (typeof (fallback as any).lineBackgroundVisible === 'boolean'
+                ? Boolean((fallback as any).lineBackgroundVisible)
+                : state.styleInjectionDraft.lineBackground.visible),
         thickness: Number.isFinite(Number(source.thickness)) ? Math.max(0, Number(source.thickness)) : Math.max(0, Number(fallback.thickness) || 1),
         strokeStyle: source.strokeStyle === 'dash' ? 'dash' : 'solid'
     };
@@ -904,7 +909,7 @@ function renderLinePreview(
             ? Math.max(1, styleMark.thickness)
             : activePathStroke;
         const areaColor = normalizeHexColorInput(styleMark.lineBackgroundColor) || normalizeHexColorInput(styleMark.strokeColor) || pathStrokeColor;
-        const areaVisible = true;
+        const areaVisible = styleMark.lineBackgroundVisible !== false;
         const yDomain = yScale.domain();
         const yBase = Array.isArray(yDomain) && Number.isFinite(Number(yDomain[0])) ? Number(yDomain[0]) : 0;
         const lineBgOpacityFactor = Math.max(0, Math.min(1, Number(styleMark.lineBackgroundOpacity) / 100));

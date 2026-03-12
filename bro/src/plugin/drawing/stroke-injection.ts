@@ -60,6 +60,7 @@ type NormalizedMarkStyle = {
     strokeColor?: string;
     lineBackgroundColor?: string;
     lineBackgroundOpacity?: number;
+    lineBackgroundVisible?: boolean;
     thickness?: number;
     strokeStyle?: 'solid' | 'dash';
 };
@@ -118,14 +119,16 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
     const lineBackgroundOpacity = Number.isFinite(lineBackgroundOpacityRaw)
         ? Math.max(0, Math.min(1, lineBackgroundOpacityRaw))
         : undefined;
+    const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean' ? source.lineBackgroundVisible : undefined;
     const thickness = normalizeThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && thickness === undefined && !strokeStyle) return null;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity,
+        lineBackgroundVisible,
         thickness,
         strokeStyle
     };
@@ -608,6 +611,7 @@ function applyLineBackgroundStyles(
             const markStyle = getMarkStyleBySeries(markStyles, seriesIndex);
             const color = markStyle?.lineBackgroundColor || markStyle?.fillColor || markStyle?.strokeColor || style?.color;
             const opacity = typeof markStyle?.lineBackgroundOpacity === 'number' ? markStyle.lineBackgroundOpacity : undefined;
+            const visible = typeof markStyle?.lineBackgroundVisible === 'boolean' ? markStyle.lineBackgroundVisible : style?.visible;
             const targets = [bundle.triNode, bundle.fillBot].filter((target): target is SceneNode => Boolean(target));
             if (targets.length === 0) return;
 
@@ -615,13 +619,13 @@ function applyLineBackgroundStyles(
                 result.candidates += 1;
                 try {
                     let applied = false;
-                    if (typeof style?.visible === 'boolean') {
-                        applied = setNodeFillVisibility(target, style.visible) || applied;
+                    if (typeof visible === 'boolean') {
+                        applied = setNodeFillVisibility(target, visible) || applied;
                     }
                     if (color) {
                         applied = tryApplyFill(target, color, opacity) || applied;
-                        if (typeof style?.visible === 'boolean') {
-                            applied = setNodeFillVisibility(target, style.visible) || applied;
+                        if (typeof visible === 'boolean') {
+                            applied = setNodeFillVisibility(target, visible) || applied;
                         }
                     }
                     if (applied) result.applied += 1;

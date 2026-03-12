@@ -43,6 +43,7 @@ export type MarkStyleInjectionDraftItem = {
     strokeColor: string;
     lineBackgroundColor: string;
     lineBackgroundOpacity: number;
+    lineBackgroundVisible: boolean;
     thickness: number;
     strokeStyle: 'solid' | 'dash';
 };
@@ -94,6 +95,7 @@ export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
         strokeColor: '#3B82F6',
         lineBackgroundColor: '#3B82F6',
         lineBackgroundOpacity: 100,
+        lineBackgroundVisible: true,
         thickness: 1,
         strokeStyle: 'solid'
     }
@@ -157,6 +159,7 @@ export const state = {
             strokeColor: '#3B82F6',
             lineBackgroundColor: '#3B82F6',
             lineBackgroundOpacity: 100,
+            lineBackgroundVisible: true,
             thickness: 1,
             strokeStyle: 'solid'
         }
@@ -167,6 +170,7 @@ export const state = {
         strokeColor: '#3B82F6',
         lineBackgroundColor: '#3B82F6',
         lineBackgroundOpacity: 100,
+        lineBackgroundVisible: true,
         thickness: 1,
         strokeStyle: 'solid'
     }] as MarkStyleInjectionDraftItem[],
@@ -447,10 +451,11 @@ function normalizeMarkStyleItem(
     const lineBackgroundColor = normalizeHexColorInput(input?.lineBackgroundColor) || strokeColor;
     const rawOpacity = Number(input?.lineBackgroundOpacity);
     const lineBackgroundOpacity = Number.isFinite(rawOpacity) ? Math.max(0, Math.min(100, Math.round(rawOpacity))) : 100;
+    const lineBackgroundVisible = typeof input?.lineBackgroundVisible === 'boolean' ? input.lineBackgroundVisible : true;
     const rawThickness = Number(input?.thickness);
     const thickness = Number.isFinite(rawThickness) ? Math.max(0, Math.round(rawThickness * 100) / 100) : 1;
     const strokeStyle = input?.strokeStyle === 'dash' ? 'dash' : 'solid';
-    return { fillColor, strokeColor, lineBackgroundColor, lineBackgroundOpacity, thickness, strokeStyle };
+    return { fillColor, strokeColor, lineBackgroundColor, lineBackgroundOpacity, lineBackgroundVisible, thickness, strokeStyle };
 }
 
 export function deriveRowColorsFromMarkStyles(
@@ -511,6 +516,7 @@ export function seedMarkStylesFromRowColorsIfNeeded(
             strokeColor: baseColor,
             lineBackgroundColor: baseColor,
             lineBackgroundOpacity: 100,
+            lineBackgroundVisible: true,
             thickness: 1,
             strokeStyle: 'solid'
         });

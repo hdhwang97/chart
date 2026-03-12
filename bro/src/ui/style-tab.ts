@@ -54,7 +54,7 @@ function bindStyleInjectionTabEvents() {
     if (tabButtons.length === 0) return;
 
     const activeTab = tabButtons.find((btn) => btn.classList.contains('is-active'))?.dataset.styleInjectionTab as StyleInjectionTabKey | undefined;
-    setActiveStyleInjectionTab(activeTab || 'plot-area');
+    setActiveStyleInjectionTab(activeTab || 'mark');
 
     stylePanel.addEventListener('click', (e) => {
         const target = e.target as HTMLElement | null;
@@ -274,6 +274,8 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleMarkStrokeColorInput.value = activeMark.strokeColor;
     ui.styleMarkLineBackgroundColorInput.value = activeMark.lineBackgroundColor;
     ui.styleMarkLineBackgroundOpacityInput.value = String(clampOpacityPercent(activeMark.lineBackgroundOpacity, 100));
+    ui.styleMarkLineBackgroundVisibleInput.checked = activeMark.lineBackgroundVisible;
+    ui.styleLineBackgroundVisibleInput.checked = activeMark.lineBackgroundVisible;
     ui.styleMarkStrokeStyleInput.value = activeMark.strokeStyle;
     ui.styleMarkThicknessInput.value = String(activeMark.thickness);
     ui.styleCellTopColorInput.value = draft.cellTop.color;
@@ -357,6 +359,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
                 typeof markNormalized.lineBackgroundOpacity === 'number' ? markNormalized.lineBackgroundOpacity * 100 : undefined,
                 state.styleInjectionDraft.mark.lineBackgroundOpacity
             ),
+            lineBackgroundVisible: ui.styleMarkLineBackgroundVisibleInput.checked,
             thickness: typeof markNormalized.thickness === 'number' ? markNormalized.thickness : state.styleInjectionDraft.mark.thickness,
             strokeStyle: markNormalized.strokeStyle === 'dash' ? 'dash' : 'solid'
         }
@@ -377,7 +380,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
         lineBackground: {
             color: normalizeHexColorInput(mark.lineBackgroundColor) || normalizeHexColorInput(mark.strokeColor) || state.styleInjectionDraft.lineBackground.color,
             opacity: Math.max(0, Math.min(1, mark.lineBackgroundOpacity / 100)),
-            visible: ui.styleMarkLineBackgroundVisibleInput.checked
+            visible: mark.lineBackgroundVisible
         },
         mark: { ...mark },
         cellTop,
@@ -494,6 +497,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
                 lineBackgroundOpacity: markLineBackgroundOpacityValid
                     ? Math.max(0, Math.min(100, Math.round(markLineBackgroundOpacityRaw)))
                     : draft.mark.lineBackgroundOpacity,
+                lineBackgroundVisible: ui.styleMarkLineBackgroundVisibleInput.checked,
                 thickness: markThicknessValid ? markThicknessRaw : clampThickness(markThicknessRaw, draft.mark.thickness),
                 strokeStyle: ui.styleMarkStrokeStyleInput.value === 'dash' ? 'dash' : 'solid'
             },
@@ -610,7 +614,8 @@ export function bindStyleTabEvents() {
         ui.styleMarkStrokeColorInput.value = active.strokeColor;
         ui.styleMarkLineBackgroundColorInput.value = active.lineBackgroundColor;
         ui.styleMarkLineBackgroundOpacityInput.value = String(clampOpacityPercent(active.lineBackgroundOpacity, 100));
-        ui.styleLineBackgroundVisibleInput.checked = ui.styleMarkLineBackgroundVisibleInput.checked;
+        ui.styleMarkLineBackgroundVisibleInput.checked = active.lineBackgroundVisible;
+        ui.styleLineBackgroundVisibleInput.checked = active.lineBackgroundVisible;
         ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
         ui.styleMarkThicknessInput.value = String(active.thickness);
         syncAllHexPreviewsFromDom();

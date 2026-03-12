@@ -332,14 +332,16 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
     const lineBackgroundOpacity = Number.isFinite(lineBackgroundOpacityRaw)
         ? Math.max(0, Math.min(1, lineBackgroundOpacityRaw))
         : undefined;
+    const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean' ? source.lineBackgroundVisible : undefined;
     const thickness = normalizeThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && thickness === undefined && !strokeStyle) return null;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity,
+        lineBackgroundVisible,
         thickness,
         strokeStyle
     };

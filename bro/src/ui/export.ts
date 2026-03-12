@@ -106,11 +106,16 @@ function getMarkDraftStyleFromState(seriesIndex: number) {
     const lineBackgroundOpacity = Number.isFinite(Number(source.lineBackgroundOpacity))
         ? Math.max(0, Math.min(100, Number(source.lineBackgroundOpacity)))
         : 100;
+    const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean'
+        ? source.lineBackgroundVisible
+        : (typeof (fallback as any).lineBackgroundVisible === 'boolean'
+            ? Boolean((fallback as any).lineBackgroundVisible)
+            : state.styleInjectionDraft.lineBackground.visible);
     const thickness = Number.isFinite(Number(source.thickness))
         ? Math.max(0, Number(source.thickness))
         : Math.max(0, Number(fallback.thickness) || 1);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : 'solid';
-    return { fillColor: fill, strokeColor: stroke, lineBackgroundColor: lineBackground, lineBackgroundOpacity, thickness, strokeStyle };
+    return { fillColor: fill, strokeColor: stroke, lineBackgroundColor: lineBackground, lineBackgroundOpacity, lineBackgroundVisible, thickness, strokeStyle };
 }
 
 function resolveSeriesStyleColor(rowColors: string[], rowIndex: number, chartType: string, role: 'fill' | 'stroke') {
@@ -518,9 +523,9 @@ function renderD3Preview(style: any) {
                 dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
             };
             const areaColor = normalizeHexColorInput(draftStyle.lineBackgroundColor) || normalizeHexColorInput(draftStyle.strokeColor) || baseColor;
-            const areaVisible = true;
+            const areaVisible = draftStyle.lineBackgroundVisible !== false;
             if (areaVisible) {
-                const areaOpacity = 0.24 * Math.max(0, Math.min(1, Number(draftStyle.lineBackgroundOpacity) / 100));
+                const areaOpacity = Math.max(0, Math.min(1, Number(draftStyle.lineBackgroundOpacity) / 100));
                 g.append('path')
                     .datum(lineData)
                     .attr('fill', areaColor)

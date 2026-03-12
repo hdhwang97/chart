@@ -890,6 +890,9 @@ export function applyMarkIndexFromPreview(seriesIndex: number) {
     ui.styleMarkFillColorInput.value = active.fillColor;
     ui.styleMarkStrokeColorInput.value = active.strokeColor;
     ui.styleMarkLineBackgroundColorInput.value = active.lineBackgroundColor;
+    ui.styleMarkLineBackgroundOpacityInput.value = String(active.lineBackgroundOpacity);
+    ui.styleMarkLineBackgroundVisibleInput.checked = active.lineBackgroundVisible;
+    ui.styleLineBackgroundVisibleInput.checked = active.lineBackgroundVisible;
     ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
     ui.styleMarkThicknessInput.value = String(active.thickness);
     syncAllHexPreviewsFromDom();
