@@ -1063,16 +1063,9 @@ function handlePluginMessage(msg: any) {
 
         if (msg.source === 'extract_style') {
             const wasDirty = state.styleInjectionDirty;
-            const syncApplied = state.isInstanceTarget
-                ? false
-                : syncStyleTabDraftFromExtracted(extractedDraftPayload);
-            if (syncApplied) {
-                syncAllHexPreviewsFromDom();
-                renderGrid();
-                renderPreview();
-                renderStylePreview();
-                refreshExportPreview();
-            }
+            // Export tab style extraction is for preview/code only.
+            // Do not mutate style/data tab draft state from this path.
+            const syncApplied = false;
             uiDebugLog('[ui][style-extracted]', {
                 source: msg.source,
                 dirty: wasDirty,
