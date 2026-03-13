@@ -9,7 +9,8 @@ import yMaxImg from '../assets/tooltips/y-max.svg';
 import thicknessImg from '../assets/tooltips/thickness.svg';
 
 type TooltipContent = {
-    imageSrc: string;
+    // Accepts static SVGs and animated WebP assets via Vite asset URLs.
+    mediaSrc: string;
     title: string;
     body: string;
 };
@@ -18,42 +19,42 @@ const TOOLTIP_ID = 'graph-setting-tooltip';
 
 const TOOLTIP_CONTENT_MAP: Record<string, TooltipContent> = {
     'graph-col': {
-        imageSrc: graphColImg,
+        mediaSrc: graphColImg,
         title: '그래프 열 수',
         body: '차트의 가로 데이터 열 개수를 조절합니다. Stacked에서는 그룹 개수로 동작합니다.'
     },
     'cell-count': {
-        imageSrc: cellCountImg,
+        mediaSrc: cellCountImg,
         title: '셀 개수',
         body: '데이터 입력 그리드의 세로 셀 개수를 지정합니다. 값이 바뀌면 입력 행 구조가 갱신됩니다.'
     },
     'mark-count': {
-        imageSrc: markCountImg,
+        mediaSrc: markCountImg,
         title: '마크 개수',
         body: '일반 차트에서 마크 개수(행 수)를 설정합니다. Stacked 모드에서는 Segments 설명으로 바뀝니다.'
     },
     segments: {
-        imageSrc: segmentsImg,
+        mediaSrc: segmentsImg,
         title: '세그먼트',
         body: 'Stacked Bar의 각 그룹 내부 바 개수입니다. 값을 바꾸면 모든 그룹에 동일하게 적용됩니다.'
     },
     'column-width-ratio': {
-        imageSrc: colWidthRatioImg,
+        mediaSrc: colWidthRatioImg,
         title: '컬럼 폭 비율',
         body: '막대가 차지하는 가로 폭 비율(%)입니다. 값이 클수록 막대가 넓어집니다.'
     },
     'y-min': {
-        imageSrc: yMinImg,
+        mediaSrc: yMinImg,
         title: 'Y 최소값',
         body: '미리보기와 출력에서 사용할 Y축 최소 기준값입니다. 모드/데이터 검증과 함께 적용됩니다.'
     },
     'y-max': {
-        imageSrc: yMaxImg,
+        mediaSrc: yMaxImg,
         title: 'Y 최대값',
         body: 'Y축 최대 기준값입니다. Raw 모드에서는 자동 계산 값을 사용할 수 있습니다.'
     },
     thickness: {
-        imageSrc: thicknessImg,
+        mediaSrc: thicknessImg,
         title: '두께',
         body: 'Line 차트에서 선 두께를 설정합니다. 다른 차트 타입에서는 항목이 숨겨질 수 있습니다.'
     }
@@ -111,7 +112,7 @@ function openTooltip(anchor: HTMLElement) {
     activeAnchor = anchor;
     activeAnchor.setAttribute('aria-describedby', TOOLTIP_ID);
 
-    ui.graphSettingTooltipImage.src = content.imageSrc;
+    ui.graphSettingTooltipImage.src = content.mediaSrc;
     ui.graphSettingTooltipImage.alt = content.title;
     ui.graphSettingTooltipTitle.textContent = content.title;
     ui.graphSettingTooltipBody.textContent = content.body;
