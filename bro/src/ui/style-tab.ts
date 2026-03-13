@@ -7,6 +7,7 @@ import {
     ensureMarkDraftSeriesCount,
     ensureMarkStrokeLinkStateCount,
     getActiveMarkDraft,
+    isActiveMarkStrokeLinked,
     normalizeMarkStyle,
     setActiveMarkStrokeLinked,
     toStrokeInjectionPayload,
@@ -42,9 +43,30 @@ function markLineBackgroundEnabled() {
     return chartTypeUsesMarkLineBackground(state.chartType);
 }
 
+function markStrokeToggleEnabled() {
+    return markFillEnabled();
+}
+
+function markStrokeCardEnabled() {
+    return !markStrokeToggleEnabled() || !isActiveMarkStrokeLinked();
+}
+
+function syncMarkStrokeCardState() {
+    const showToggle = markStrokeToggleEnabled();
+    const strokeEnabled = markStrokeCardEnabled();
+    ui.styleMarkStrokeToggleRow.classList.toggle('hidden', !showToggle);
+    ui.styleMarkStrokeToggle.checked = strokeEnabled;
+    ui.styleMarkStrokeCard.classList.toggle('is-disabled', !strokeEnabled);
+    ui.styleMarkStrokeCard.setAttribute('aria-disabled', strokeEnabled ? 'false' : 'true');
+    [ui.styleMarkStrokeColorInput, ui.styleMarkStrokeStyleInput, ui.styleMarkThicknessInput].forEach((input) => {
+        input.disabled = !strokeEnabled;
+    });
+}
+
 function syncMarkStyleCardVisibility() {
     ui.styleMarkFillCard.classList.toggle('hidden', !markFillEnabled());
     ui.styleMarkLineBackgroundCard.classList.toggle('hidden', !markLineBackgroundEnabled());
+    syncMarkStrokeCardState();
 }
 
 function setActiveStyleInjectionTab(tabKey: StyleInjectionTabKey) {
@@ -655,9 +677,43 @@ export function bindStyleTabEvents() {
         syncStyleDraftFromDomAndEmit();
     });
 
+    ui.styleMarkStrokeToggle.addEventListener('change', () => {
+        const strokeEnabled = ui.styleMarkStrokeToggle.checked;
+        setActiveMarkStrokeLinked(!strokeEnabled);
+        if (!strokeEnabled) {
+            const linkedStroke = normalizeHexColorInput(ui.styleMarkFillColorInput.value)
+                || state.styleInjectionDraft.mark.fillColor
+                || DEFAULT_STYLE_INJECTION_DRAFT.mark.fillColor;
+            ui.styleMarkStrokeColorInput.value = linkedStroke;
+            if (
+                styleItemPopoverOpen
+                && (
+                    styleItemPopoverSourceInput === ui.styleMarkStrokeColorInput
+                    || styleItemPopoverSourceInput === ui.styleMarkThicknessInput
+                    || styleItemPopoverSourceInput === ui.styleMarkStrokeStyleInput
+                )
+            ) {
+                forceCloseStyleColorPopover();
+            }
+            const focused = document.activeElement;
+            if (focused instanceof HTMLElement && ui.styleMarkStrokeCard.contains(focused)) {
+                focused.blur();
+            }
+        }
+        syncMarkStrokeCardState();
+        if (styleItemPopoverOpen && styleItemPopoverTarget === 'mark' && styleItemPopoverConfig) {
+            syncStyleItemPopoverFromConfig(styleItemPopoverConfig);
+        }
+        syncStyleDraftFromDomAndEmit();
+    });
+
     styleInputsFormContainer.addEventListener('click', (e) => {
         const target = e.target as HTMLInputElement;
         const colorInputs = getStyleColorInputs();
+        if (target instanceof HTMLElement && ui.styleMarkStrokeCard.contains(target) && !markStrokeCardEnabled()) {
+            e.preventDefault();
+            return;
+        }
         if (target instanceof HTMLInputElement && colorInputs.includes(target)) {
             openStyleColorPopover(target);
         }
@@ -665,6 +721,10 @@ export function bindStyleTabEvents() {
     styleInputsFormContainer.addEventListener('focusin', (e) => {
         const target = e.target as HTMLInputElement;
         const colorInputs = getStyleColorInputs();
+        if (target instanceof HTMLElement && ui.styleMarkStrokeCard.contains(target) && !markStrokeCardEnabled()) {
+            target.blur();
+            return;
+        }
         if (target instanceof HTMLInputElement && colorInputs.includes(target)) {
             openStyleColorPopover(target);
         }

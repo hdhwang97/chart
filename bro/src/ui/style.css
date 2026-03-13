@@ -495,6 +495,16 @@ input[type=number]::-webkit-outer-spin-button {
     scroll-snap-type: x proximity;
 }
 
+.style-injection-toggle-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    line-height: 1.2;
+    color: #6B7280;
+    user-select: none;
+}
+
 .style-injection-card {
     border: 1px solid #E5E7EB;
     border-radius: 8px;
@@ -506,6 +516,10 @@ input[type=number]::-webkit-outer-spin-button {
     gap: 8px;
     background: #FFFFFF;
     scroll-snap-align: start;
+}
+
+.style-injection-card.is-disabled {
+    opacity: 0.5;
 }
 
 .style-injection-card-header {
