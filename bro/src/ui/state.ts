@@ -247,6 +247,14 @@ export function getGridColsForChart(chartType: string, cols: number): number {
     return cols;
 }
 
+export function chartTypeUsesMarkFill(chartType: string): boolean {
+    return chartType !== 'line';
+}
+
+export function chartTypeUsesMarkLineBackground(chartType: string): boolean {
+    return chartType === 'line';
+}
+
 export function initData(rows: number, cols: number): string[][] {
     const newData: string[][] = [];
     for (let i = 0; i < rows; i++) {

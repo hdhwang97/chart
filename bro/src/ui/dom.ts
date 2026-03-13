@@ -201,6 +201,8 @@ export const ui = {
     get styleMarkThicknessInput() { return byId<HTMLInputElement>('style-mark-thickness'); },
     get styleMarkStrokeStyleInput() { return byId<HTMLSelectElement>('style-mark-stroke-style'); },
     get styleMarkIndexInput() { return byId<HTMLSelectElement>('style-mark-index'); },
+    get styleMarkFillCard() { return byId<HTMLElement>('style-mark-fill-card'); },
+    get styleMarkLineBackgroundCard() { return byId<HTMLElement>('style-mark-line-background-card'); },
     get styleCellFillColorInput() { return byId<HTMLInputElement>('style-cell-fill-color'); },
     get styleCellFillColorPreview() { return byId<HTMLElement>('style-cell-fill-color-preview'); },
     get styleCellTopColorPreview() { return byId<HTMLElement>('style-cell-top-color-preview'); },

@@ -1,4 +1,4 @@
-import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, deriveRowColorsFromMarkStyles, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, seedMarkStylesFromRowColorsIfNeeded, setLocalStyleOverrideField, state, type AssistLineStyleInjectionDraftItem, type GridStyleInjectionDraftItem, type LineBackgroundStyleInjectionDraftItem, type MarkStyleInjectionDraftItem, type StyleInjectionDraft, type StyleInjectionDraftItem } from './state';
+import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, chartTypeUsesMarkFill, chartTypeUsesMarkLineBackground, deriveRowColorsFromMarkStyles, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, seedMarkStylesFromRowColorsIfNeeded, setLocalStyleOverrideField, state, type AssistLineStyleInjectionDraftItem, type GridStyleInjectionDraftItem, type LineBackgroundStyleInjectionDraftItem, type MarkStyleInjectionDraftItem, type StyleInjectionDraft, type StyleInjectionDraftItem } from './state';
 import { setInputError, normalizeFromDom, normalizeColorThicknessFromDom } from './style-tab';
 import { ui } from './dom';
 
@@ -45,6 +45,14 @@ import type {
 
 const THICKNESS_MIN = 0;
 const THICKNESS_MAX = 20;
+
+function markFillEnabled() {
+    return chartTypeUsesMarkFill(state.chartType);
+}
+
+function markLineBackgroundEnabled() {
+    return chartTypeUsesMarkLineBackground(state.chartType);
+}
 
 export function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
@@ -509,6 +517,8 @@ export function buildDraftFromPayload(
 }
 
 export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInjectionPayload {
+    const allowMarkFill = markFillEnabled();
+    const allowLineBackground = markLineBackgroundEnabled();
     const totalCols = state.chartType === 'stackedBar'
         ? getTotalStackedCols()
         : getGridColsForChart(state.chartType, state.cols);
@@ -520,25 +530,27 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
         cellFillStyle: {
             color: draft.cellFill.color
         },
-        lineBackgroundStyle: {
-            color: draft.lineBackground.color,
-            visible: draft.lineBackground.visible
-        },
+        ...(allowLineBackground ? {
+            lineBackgroundStyle: {
+                color: draft.lineBackground.color,
+                visible: draft.lineBackground.visible
+            }
+        } : {}),
         markStyle: {
-            fillColor: draft.mark.fillColor,
+            fillColor: allowMarkFill ? draft.mark.fillColor : undefined,
             strokeColor: draft.mark.strokeColor,
-            lineBackgroundColor: draft.mark.lineBackgroundColor,
-            lineBackgroundOpacity: Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)),
-            lineBackgroundVisible: draft.mark.lineBackgroundVisible,
+            lineBackgroundColor: allowLineBackground ? draft.mark.lineBackgroundColor : undefined,
+            lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)) : undefined,
+            lineBackgroundVisible: allowLineBackground ? draft.mark.lineBackgroundVisible : undefined,
             thickness: draft.mark.thickness,
             strokeStyle: draft.mark.strokeStyle
         },
         markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item) => ({
-            fillColor: item.fillColor,
+            fillColor: allowMarkFill ? item.fillColor : undefined,
             strokeColor: item.strokeColor,
-            lineBackgroundColor: item.lineBackgroundColor,
-            lineBackgroundOpacity: Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)),
-            lineBackgroundVisible: item.lineBackgroundVisible,
+            lineBackgroundColor: allowLineBackground ? item.lineBackgroundColor : undefined,
+            lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)) : undefined,
+            lineBackgroundVisible: allowLineBackground ? item.lineBackgroundVisible : undefined,
             thickness: item.thickness,
             strokeStyle: item.strokeStyle
         })),
@@ -591,18 +603,17 @@ export function buildTemplatePayloadFromDraft(draft: StyleInjectionDraft): Style
 
 export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: StyleInjectionDraft; isValid: boolean } {
     const cellFillValid = Boolean(normalizeHexColorInput(ui.styleCellFillColorInput.value));
-    const lineStrokeOnly = state.chartType === 'line';
-    const markFillValid = lineStrokeOnly
-        ? Boolean(normalizeHexColorInput(ui.styleMarkStrokeColorInput.value))
-        : Boolean(normalizeHexColorInput(ui.styleMarkFillColorInput.value));
+    const allowMarkFill = markFillEnabled();
+    const allowLineBackground = markLineBackgroundEnabled();
+    const markFillValid = !allowMarkFill || Boolean(normalizeHexColorInput(ui.styleMarkFillColorInput.value));
     const markStrokeValid = Boolean(normalizeHexColorInput(ui.styleMarkStrokeColorInput.value));
-    const markLineBackgroundValid = lineStrokeOnly
-        ? Boolean(normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value))
-        : true;
+    const markLineBackgroundValid = !allowLineBackground || Boolean(normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value));
     const markLineBackgroundOpacityRaw = Number(ui.styleMarkLineBackgroundOpacityInput.value);
-    const markLineBackgroundOpacityValid = Number.isFinite(markLineBackgroundOpacityRaw)
+    const markLineBackgroundOpacityValid = !allowLineBackground || (
+        Number.isFinite(markLineBackgroundOpacityRaw)
         && markLineBackgroundOpacityRaw >= 0
-        && markLineBackgroundOpacityRaw <= 100;
+        && markLineBackgroundOpacityRaw <= 100
+    );
     const markThicknessRaw = Number(ui.styleMarkThicknessInput.value);
     const markThicknessValid = Number.isFinite(markThicknessRaw) && markThicknessRaw >= THICKNESS_MIN && markThicknessRaw <= THICKNESS_MAX;
     const cellTopNorm = normalizeFromDom(
@@ -643,10 +654,10 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     );
 
     setInputError(ui.styleCellFillColorInput, !cellFillValid);
-    setInputError(ui.styleMarkFillColorInput, !markFillValid && !lineStrokeOnly);
+    setInputError(ui.styleMarkFillColorInput, !markFillValid && allowMarkFill);
     setInputError(ui.styleMarkStrokeColorInput, !markStrokeValid);
-    setInputError(ui.styleMarkLineBackgroundColorInput, !markLineBackgroundValid && lineStrokeOnly);
-    setInputError(ui.styleMarkLineBackgroundOpacityInput, !markLineBackgroundOpacityValid && lineStrokeOnly);
+    setInputError(ui.styleMarkLineBackgroundColorInput, !markLineBackgroundValid && allowLineBackground);
+    setInputError(ui.styleMarkLineBackgroundOpacityInput, !markLineBackgroundOpacityValid && allowLineBackground);
     setInputError(ui.styleMarkThicknessInput, !markThicknessValid);
     setInputError(ui.styleCellTopColorInput, !cellTopNorm.colorValid);
     setInputError(ui.styleCellTopThicknessInput, !cellTopNorm.thicknessValid);
@@ -675,23 +686,29 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     return {
         draft: {
             cellFill: { color: normalizeHexColorInput(ui.styleCellFillColorInput.value) || draft.cellFill.color },
-            lineBackground: {
-                color: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor,
-                opacity: markLineBackgroundOpacityValid
-                    ? Math.max(0, Math.min(1, markLineBackgroundOpacityRaw / 100))
-                    : draft.lineBackground.opacity,
-                visible: ui.styleMarkLineBackgroundVisibleInput.checked
-            },
+            lineBackground: allowLineBackground
+                ? {
+                    color: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor,
+                    opacity: markLineBackgroundOpacityValid
+                        ? Math.max(0, Math.min(1, markLineBackgroundOpacityRaw / 100))
+                        : draft.lineBackground.opacity,
+                    visible: ui.styleMarkLineBackgroundVisibleInput.checked
+                }
+                : { ...draft.lineBackground },
             mark: {
-                fillColor: lineStrokeOnly
-                    ? (normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor)
-                    : (normalizeHexColorInput(ui.styleMarkFillColorInput.value) || draft.mark.fillColor),
+                fillColor: allowMarkFill
+                    ? (normalizeHexColorInput(ui.styleMarkFillColorInput.value) || draft.mark.fillColor)
+                    : draft.mark.fillColor,
                 strokeColor: normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor,
-                lineBackgroundColor: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.lineBackgroundColor,
-                lineBackgroundOpacity: markLineBackgroundOpacityValid
+                lineBackgroundColor: allowLineBackground
+                    ? (normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.lineBackgroundColor)
+                    : draft.mark.lineBackgroundColor,
+                lineBackgroundOpacity: allowLineBackground && markLineBackgroundOpacityValid
                     ? Math.max(0, Math.min(100, Math.round(markLineBackgroundOpacityRaw)))
                     : draft.mark.lineBackgroundOpacity,
-                lineBackgroundVisible: ui.styleMarkLineBackgroundVisibleInput.checked,
+                lineBackgroundVisible: allowLineBackground
+                    ? ui.styleMarkLineBackgroundVisibleInput.checked
+                    : draft.mark.lineBackgroundVisible,
                 thickness: markThicknessValid ? markThicknessRaw : clampThickness(markThicknessRaw, draft.mark.thickness),
                 strokeStyle: ui.styleMarkStrokeStyleInput.value === 'dash' ? 'dash' : 'solid'
             },
@@ -708,6 +725,8 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
     overrides: LocalStyleOverrides;
     mask: LocalStyleOverrideMask;
 } {
+    const allowMarkFill = markFillEnabled();
+    const allowLineBackground = markLineBackgroundEnabled();
     return {
         overrides: {
             rowColors: deriveRowColorsFromMarkStyles(
@@ -719,10 +738,12 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             cellFillStyle: {
                 color: draft.cellFill.color
             },
-            lineBackgroundStyle: {
-                color: draft.lineBackground.color,
-                visible: draft.lineBackground.visible
-            },
+            ...(allowLineBackground ? {
+                lineBackgroundStyle: {
+                    color: draft.lineBackground.color,
+                    visible: draft.lineBackground.visible
+                }
+            } : {}),
             cellTopStyle: {
                 color: draft.cellTop.color,
                 thickness: draft.cellTop.thickness,
@@ -754,20 +775,20 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
                 strokeStyle: draft.assistLine.strokeStyle
             },
             markStyle: {
-                fillColor: draft.mark.fillColor,
+                fillColor: allowMarkFill ? draft.mark.fillColor : undefined,
                 strokeColor: draft.mark.strokeColor,
-                lineBackgroundColor: draft.mark.lineBackgroundColor,
-                lineBackgroundOpacity: Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)),
-                lineBackgroundVisible: draft.mark.lineBackgroundVisible,
+                lineBackgroundColor: allowLineBackground ? draft.mark.lineBackgroundColor : undefined,
+                lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)) : undefined,
+                lineBackgroundVisible: allowLineBackground ? draft.mark.lineBackgroundVisible : undefined,
                 thickness: draft.mark.thickness,
                 strokeStyle: draft.mark.strokeStyle
             },
             markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item) => ({
-                fillColor: item.fillColor,
+                fillColor: allowMarkFill ? item.fillColor : undefined,
                 strokeColor: item.strokeColor,
-                lineBackgroundColor: item.lineBackgroundColor,
-                lineBackgroundOpacity: Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)),
-                lineBackgroundVisible: item.lineBackgroundVisible,
+                lineBackgroundColor: allowLineBackground ? item.lineBackgroundColor : undefined,
+                lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)) : undefined,
+                lineBackgroundVisible: allowLineBackground ? item.lineBackgroundVisible : undefined,
                 thickness: item.thickness,
                 strokeStyle: item.strokeStyle
             })),
@@ -793,7 +814,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             colPaintStyleIds: true,
             colColorEnabled: true,
             cellFillStyle: true,
-            lineBackgroundStyle: true,
+            lineBackgroundStyle: allowLineBackground,
             cellTopStyle: true,
             tabRightStyle: true,
             gridContainerStyle: true,
