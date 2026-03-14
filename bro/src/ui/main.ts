@@ -126,7 +126,7 @@ function normalizeIncomingLocalMask(value: unknown): LocalStyleOverrideMask {
         'colColors', 'colColorModes', 'colPaintStyleIds', 'colColorEnabled', 'markColorSource',
         'assistLineVisible', 'assistLineEnabled',
         'cellFillStyle', 'lineBackgroundStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
-        'assistLineStyle', 'markStyle', 'markStyles', 'markStrokeEnabledByIndex', 'rowStrokeStyles', 'colStrokeStyle'
+        'assistLineStyle', 'markStyle', 'markStyles', 'markStrokeEnabledByIndex', 'markStrokeSidesByIndex', 'rowStrokeStyles', 'colStrokeStyle'
     ];
     const next: LocalStyleOverrideMask = {};
     keys.forEach((key) => {
@@ -166,6 +166,17 @@ function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
     if (Array.isArray(source.markStyles)) next.markStyles = source.markStyles;
     if (Array.isArray(source.markStrokeEnabledByIndex)) {
         next.markStrokeEnabledByIndex = source.markStrokeEnabledByIndex.map((v) => Boolean(v));
+    }
+    if (Array.isArray(source.markStrokeSidesByIndex)) {
+        next.markStrokeSidesByIndex = source.markStrokeSidesByIndex
+            .map((item) => item && typeof item === 'object'
+                ? {
+                    top: (item as any).top !== false,
+                    left: (item as any).left !== false,
+                    right: (item as any).right !== false
+                }
+                : null)
+            .filter((item): item is { top: boolean; left: boolean; right: boolean } => Boolean(item));
     }
     if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
     if (source.colStrokeStyle) next.colStrokeStyle = source.colStrokeStyle;
@@ -1470,6 +1481,7 @@ function bindUiEvents() {
             if (fromDraft.mask.markStyle) setLocalStyleOverrideField('markStyle', fromDraft.overrides.markStyle);
             if (fromDraft.mask.markStyles) setLocalStyleOverrideField('markStyles', fromDraft.overrides.markStyles);
             if (fromDraft.mask.markStrokeEnabledByIndex) setLocalStyleOverrideField('markStrokeEnabledByIndex', fromDraft.overrides.markStrokeEnabledByIndex);
+            if (fromDraft.mask.markStrokeSidesByIndex) setLocalStyleOverrideField('markStrokeSidesByIndex', fromDraft.overrides.markStrokeSidesByIndex);
             if (fromDraft.mask.rowStrokeStyles) setLocalStyleOverrideField('rowStrokeStyles', fromDraft.overrides.rowStrokeStyles);
             if (fromDraft.mask.colStrokeStyle) setLocalStyleOverrideField('colStrokeStyle', fromDraft.overrides.colStrokeStyle);
             recomputeEffectiveStyleSnapshot();

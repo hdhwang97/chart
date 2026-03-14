@@ -7,6 +7,7 @@ import type {
     ColorMode,
     LocalStyleOverrideMask,
     LocalStyleOverrides,
+    MarkStrokeSides,
     RowStrokeStyle,
     StrokeStyleSnapshot,
     StyleTemplateItem
@@ -46,6 +47,12 @@ export type MarkStyleInjectionDraftItem = {
     lineBackgroundVisible: boolean;
     thickness: number;
     strokeStyle: 'solid' | 'dash';
+};
+
+export const DEFAULT_MARK_STROKE_SIDES: Required<MarkStrokeSides> = {
+    top: true,
+    left: true,
+    right: true
 };
 
 export type GridStyleInjectionDraftItem = StyleInjectionDraftItem & {
@@ -175,6 +182,7 @@ export const state = {
         strokeStyle: 'solid'
     }] as MarkStyleInjectionDraftItem[],
     markStrokeLinkByIndex: [true] as boolean[],
+    markStrokeSidesByIndex: [{ ...DEFAULT_MARK_STROKE_SIDES }] as Array<Required<MarkStrokeSides>>,
     activeMarkStyleIndex: 0,
     stylePopoverLinkedColIndex: null as number | null,
     styleTemplateMode: 'read' as 'read' | 'edit',

@@ -5,7 +5,9 @@ import {
     clampThickness,
     cloneDraft,
     ensureMarkDraftSeriesCount,
+    ensureMarkStrokeSidesStateCount,
     ensureMarkStrokeLinkStateCount,
+    getActiveMarkStrokeSides,
     getActiveMarkDraft,
     isActiveMarkStrokeLinked,
     normalizeMarkStyle,
@@ -68,7 +70,7 @@ function syncMarkStrokeCardState() {
     ui.styleMarkStrokeToggle.checked = strokeEnabled;
     ui.styleMarkStrokeCard.classList.toggle('is-disabled', !strokeEnabled);
     ui.styleMarkStrokeCard.setAttribute('aria-disabled', strokeEnabled ? 'false' : 'true');
-    [ui.styleMarkStrokeColorInput, ui.styleMarkStrokeStyleInput, ui.styleMarkThicknessInput].forEach((input) => {
+    [ui.styleMarkStrokeColorInput, ui.styleMarkStrokeStyleInput, ui.styleMarkThicknessInput, ui.styleMarkStrokeSidesTopInput, ui.styleMarkStrokeSidesLeftInput, ui.styleMarkStrokeSidesRightInput].forEach((input) => {
         input.disabled = !strokeEnabled;
     });
 }
@@ -129,6 +131,7 @@ function syncMarkIndexSelector() {
     const select = ui.styleMarkIndexInput;
     const count = Math.max(1, state.markStylesDraft.length);
     ensureMarkStrokeLinkStateCount(count);
+    ensureMarkStrokeSidesStateCount(count);
     const current = Math.max(0, Math.min(state.activeMarkStyleIndex, count - 1));
     select.innerHTML = Array.from({ length: count }, (_, i) => `<option value="${i}">Mark ${i + 1}</option>`).join('');
     select.value = String(current);
@@ -205,6 +208,9 @@ export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSe
         ui.styleMarkLineBackgroundOpacityInput,
         ui.styleMarkStrokeStyleInput,
         ui.styleMarkThicknessInput,
+        ui.styleMarkStrokeSidesTopInput,
+        ui.styleMarkStrokeSidesLeftInput,
+        ui.styleMarkStrokeSidesRightInput,
         ui.styleCellTopColorInput,
         ui.styleCellTopStrokeStyleInput,
         ui.styleCellTopThicknessInput,
@@ -324,6 +330,10 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleLineBackgroundVisibleInput.checked = activeMark.lineBackgroundVisible;
     ui.styleMarkStrokeStyleInput.value = activeMark.strokeStyle;
     ui.styleMarkThicknessInput.value = String(activeMark.thickness);
+    const activeSides = getActiveMarkStrokeSides();
+    ui.styleMarkStrokeSidesTopInput.checked = activeSides.top;
+    ui.styleMarkStrokeSidesLeftInput.checked = activeSides.left;
+    ui.styleMarkStrokeSidesRightInput.checked = activeSides.right;
     ui.styleCellTopColorInput.value = draft.cellTop.color;
     ui.styleCellTopStrokeStyleInput.value = draft.cellTop.strokeStyle;
     ui.styleCellTopThicknessInput.value = String(draft.cellTop.thickness);
@@ -422,8 +432,14 @@ export function readStyleTabDraft(): StyleInjectionDraft {
         : { ...state.styleInjectionDraft.mark };
 
     const styles = ensureMarkDraftSeriesCount(state.markStylesDraft);
+    const sidesByIndex = ensureMarkStrokeSidesStateCount(styles.length);
     const idx = Math.max(0, Math.min(state.activeMarkStyleIndex, styles.length - 1));
     styles[idx] = { ...mark };
+    sidesByIndex[idx] = {
+        top: ui.styleMarkStrokeSidesTopInput.checked,
+        left: ui.styleMarkStrokeSidesLeftInput.checked,
+        right: ui.styleMarkStrokeSidesRightInput.checked
+    };
     state.markStylesDraft = styles;
     state.activeMarkStyleIndex = idx;
 
@@ -582,6 +598,7 @@ export function syncMarkStylesFromHeaderColors(emit = true) {
     }
     syncRowColorsFromMarkStyles({ emitLocalOverride: emit });
     ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
+    ensureMarkStrokeSidesStateCount(state.markStylesDraft.length);
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, state.markStylesDraft.length - 1));
 
     const nextDraft: StyleInjectionDraft = {
@@ -677,6 +694,10 @@ export function bindStyleTabEvents() {
         ui.styleLineBackgroundVisibleInput.checked = active.lineBackgroundVisible;
         ui.styleMarkStrokeStyleInput.value = active.strokeStyle;
         ui.styleMarkThicknessInput.value = String(active.thickness);
+        const activeSides = getActiveMarkStrokeSides();
+        ui.styleMarkStrokeSidesTopInput.checked = activeSides.top;
+        ui.styleMarkStrokeSidesLeftInput.checked = activeSides.left;
+        ui.styleMarkStrokeSidesRightInput.checked = activeSides.right;
         syncMarkStyleCardVisibility();
         syncAllHexPreviewsFromDom();
         if (styleItemPopoverOpen && styleItemPopoverTarget === 'mark' && styleItemPopoverConfig) {
@@ -728,6 +749,12 @@ export function bindStyleTabEvents() {
             syncStyleItemPopoverFromConfig(styleItemPopoverConfig);
         }
         syncStyleDraftFromDomAndEmit();
+    });
+
+    [ui.styleMarkStrokeSidesTopInput, ui.styleMarkStrokeSidesLeftInput, ui.styleMarkStrokeSidesRightInput].forEach((input) => {
+        input.addEventListener('change', () => {
+            syncStyleDraftFromDomAndEmit();
+        });
     });
 
     styleInputsFormContainer.addEventListener('click', (e) => {

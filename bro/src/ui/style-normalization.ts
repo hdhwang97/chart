@@ -1,4 +1,4 @@
-import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, chartTypeUsesMarkFill, chartTypeUsesMarkLineBackground, deriveRowColorsFromMarkStyles, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, seedMarkStylesFromRowColorsIfNeeded, setLocalStyleOverrideField, state, type AssistLineStyleInjectionDraftItem, type GridStyleInjectionDraftItem, type LineBackgroundStyleInjectionDraftItem, type MarkStyleInjectionDraftItem, type StyleInjectionDraft, type StyleInjectionDraftItem } from './state';
+import { DEFAULT_MARK_STROKE_SIDES, DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, chartTypeUsesMarkFill, chartTypeUsesMarkLineBackground, deriveRowColorsFromMarkStyles, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, seedMarkStylesFromRowColorsIfNeeded, setLocalStyleOverrideField, state, type AssistLineStyleInjectionDraftItem, type GridStyleInjectionDraftItem, type LineBackgroundStyleInjectionDraftItem, type MarkStyleInjectionDraftItem, type StyleInjectionDraft, type StyleInjectionDraftItem } from './state';
 import { setInputError, normalizeFromDom, normalizeColorThicknessFromDom } from './style-tab';
 import { ui } from './dom';
 
@@ -34,6 +34,7 @@ import type {
     LocalStyleOverrideMask,
     LocalStyleOverrides,
     MarkInjectionStyle,
+    MarkStrokeSides,
     PaintStyleSelection,
     RowStrokeStyle,
     SideStrokeInjectionStyle,
@@ -210,7 +211,15 @@ export function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
     const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean' ? source.lineBackgroundVisible : undefined;
     const thickness = Number.isFinite(Number(source.thickness)) ? clampThickness(source.thickness, DEFAULT_STYLE_INJECTION_DRAFT.mark.thickness) : undefined;
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle) return null;
+    const enabled = typeof source.enabled === 'boolean' ? source.enabled : undefined;
+    const sides = source.sides && typeof source.sides === 'object'
+        ? {
+            top: source.sides.top !== false,
+            left: source.sides.left !== false,
+            right: source.sides.right !== false
+        }
+        : undefined;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
@@ -218,7 +227,9 @@ export function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
         lineBackgroundOpacity: lineBackgroundOpacity !== undefined ? lineBackgroundOpacity / 100 : undefined,
         lineBackgroundVisible,
         thickness,
-        strokeStyle
+        strokeStyle,
+        enabled,
+        sides
     };
 }
 
@@ -287,6 +298,18 @@ export function draftItemFromMarkStyle(style: MarkInjectionStyle | null, fallbac
         lineBackgroundVisible: typeof style.lineBackgroundVisible === 'boolean' ? style.lineBackgroundVisible : fallback.lineBackgroundVisible,
         thickness: clampThickness(style.thickness, fallback.thickness),
         strokeStyle: style.strokeStyle === 'dash' ? 'dash' : 'solid'
+    };
+}
+
+function normalizeMarkStrokeSides(value: unknown): Required<MarkStrokeSides> {
+    if (!value || typeof value !== 'object') {
+        return { ...DEFAULT_MARK_STROKE_SIDES };
+    }
+    const source = value as MarkStrokeSides;
+    return {
+        top: source.top !== false,
+        left: source.left !== false,
+        right: source.right !== false
     };
 }
 
@@ -370,7 +393,9 @@ export function markStyleFromSnapshot(stroke: MarkInjectionStyle | null): MarkIn
     const thickness = Number.isFinite(Number(stroke.thickness))
         ? clampThickness(stroke.thickness, DEFAULT_STYLE_INJECTION_DRAFT.mark.thickness)
         : undefined;
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined) return null;
+    const enabled = typeof stroke.enabled === 'boolean' ? stroke.enabled : undefined;
+    const sides = stroke.sides ? normalizeMarkStrokeSides(stroke.sides) : undefined;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
@@ -378,7 +403,9 @@ export function markStyleFromSnapshot(stroke: MarkInjectionStyle | null): MarkIn
         lineBackgroundOpacity,
         lineBackgroundVisible,
         thickness,
-        strokeStyle: stroke.strokeStyle === 'dash' ? 'dash' : 'solid'
+        strokeStyle: stroke.strokeStyle === 'dash' ? 'dash' : 'solid',
+        enabled,
+        sides
     };
 }
 
@@ -417,6 +444,22 @@ export function ensureMarkStrokeLinkStateCount(count: number) {
     }
     state.markStrokeLinkByIndex = next;
     return state.markStrokeLinkByIndex;
+}
+
+export function ensureMarkStrokeSidesStateCount(count: number) {
+    const target = Math.max(1, Math.floor(count));
+    const next: Array<Required<MarkStrokeSides>> = [];
+    for (let i = 0; i < target; i++) {
+        next.push(normalizeMarkStrokeSides(state.markStrokeSidesByIndex[i]));
+    }
+    state.markStrokeSidesByIndex = next;
+    return state.markStrokeSidesByIndex;
+}
+
+export function getActiveMarkStrokeSides(): Required<MarkStrokeSides> {
+    const sides = ensureMarkStrokeSidesStateCount(state.markStylesDraft.length);
+    const idx = Math.max(0, Math.min(state.activeMarkStyleIndex, sides.length - 1));
+    return sides[idx] || { ...DEFAULT_MARK_STROKE_SIDES };
 }
 
 export function getActiveMarkDraft(): MarkStyleInjectionDraftItem {
@@ -499,8 +542,24 @@ export function buildDraftFromPayload(
         savedRowColors.length > 0 ? savedRowColors : state.rowColors
     );
     ensureRowColorsLength(state.rows);
-    ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
-    if (Array.isArray(state.localStyleOverrides.markStrokeEnabledByIndex)) {
+    const links = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
+    const enabledSeed = resolvedMarkStylesRaw.map((item) => (typeof item?.enabled === 'boolean' ? item.enabled : undefined));
+    if (markFillEnabled()) {
+        for (let i = 0; i < links.length; i++) {
+            if (typeof enabledSeed[i] === 'boolean') {
+                links[i] = !Boolean(enabledSeed[i]);
+            }
+        }
+    }
+    ensureMarkStrokeSidesStateCount(state.markStylesDraft.length);
+    const sideSeed = resolvedMarkStylesRaw.map((item) => normalizeMarkStrokeSides((item as MarkInjectionStyle | null | undefined)?.sides));
+    if (sideSeed.length > 0) {
+        const sides = ensureMarkStrokeSidesStateCount(state.markStylesDraft.length);
+        for (let i = 0; i < sides.length; i++) {
+            if (sideSeed[i]) sides[i] = sideSeed[i];
+        }
+    }
+    if (markFillEnabled() && Array.isArray(state.localStyleOverrides.markStrokeEnabledByIndex)) {
         const savedEnabled = state.localStyleOverrides.markStrokeEnabledByIndex;
         const links = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
         for (let i = 0; i < links.length; i++) {
@@ -508,6 +567,13 @@ export function buildDraftFromPayload(
             if (typeof enabled === 'boolean') {
                 links[i] = !enabled;
             }
+        }
+    }
+    if (Array.isArray(state.localStyleOverrides.markStrokeSidesByIndex)) {
+        const savedSides = state.localStyleOverrides.markStrokeSidesByIndex;
+        const sides = ensureMarkStrokeSidesStateCount(state.markStylesDraft.length);
+        for (let i = 0; i < sides.length; i++) {
+            if (savedSides[i]) sides[i] = normalizeMarkStrokeSides(savedSides[i]);
         }
     }
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, resolvedMarkStyles.length - 1));
@@ -536,6 +602,13 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
     const normalizedColEnabled = ensureColHeaderColorEnabledLength(totalCols).slice(0, totalCols);
     const normalizedColModes = ensureColHeaderColorModesLength(totalCols).slice(0, totalCols);
     const normalizedColPaintStyleIds = ensureColHeaderPaintStyleIdsLength(totalCols).slice(0, totalCols);
+    const strokeLinks = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
+    const strokeSides = ensureMarkStrokeSidesStateCount(state.markStylesDraft.length);
+    const markStrokeEnabledAtIndex = (index: number) => (
+        markFillEnabled()
+            ? !(strokeLinks[index] ?? true)
+            : true
+    );
     return {
         cellFillStyle: {
             color: draft.cellFill.color
@@ -553,16 +626,20 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
             lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)) : undefined,
             lineBackgroundVisible: allowLineBackground ? draft.mark.lineBackgroundVisible : undefined,
             thickness: draft.mark.thickness,
-            strokeStyle: draft.mark.strokeStyle
+            strokeStyle: draft.mark.strokeStyle,
+            enabled: markStrokeEnabledAtIndex(Math.max(0, Math.min(state.activeMarkStyleIndex, Math.max(0, strokeLinks.length - 1)))),
+            sides: getActiveMarkStrokeSides()
         },
-        markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item) => ({
+        markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item, index) => ({
             fillColor: allowMarkFill ? item.fillColor : undefined,
             strokeColor: item.strokeColor,
             lineBackgroundColor: allowLineBackground ? item.lineBackgroundColor : undefined,
             lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)) : undefined,
             lineBackgroundVisible: allowLineBackground ? item.lineBackgroundVisible : undefined,
             thickness: item.thickness,
-            strokeStyle: item.strokeStyle
+            strokeStyle: item.strokeStyle,
+            enabled: markStrokeEnabledAtIndex(index),
+            sides: strokeSides[index] || { ...DEFAULT_MARK_STROKE_SIDES }
         })),
         rowColors: deriveRowColorsFromMarkStyles(
             state.chartType,
@@ -738,6 +815,12 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
     const allowMarkFill = markFillEnabled();
     const allowLineBackground = markLineBackgroundEnabled();
     const markStrokeEnabledByIndex = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length).map((linked) => !linked);
+    const markStrokeSidesByIndex = ensureMarkStrokeSidesStateCount(state.markStylesDraft.length).map((item) => ({ ...item }));
+    const markStrokeEnabledAtIndex = (index: number) => (
+        markFillEnabled()
+            ? Boolean(markStrokeEnabledByIndex[index] ?? false)
+            : true
+    );
     return {
         overrides: {
             rowColors: deriveRowColorsFromMarkStyles(
@@ -792,18 +875,23 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
                 lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)) : undefined,
                 lineBackgroundVisible: allowLineBackground ? draft.mark.lineBackgroundVisible : undefined,
                 thickness: draft.mark.thickness,
-                strokeStyle: draft.mark.strokeStyle
+                strokeStyle: draft.mark.strokeStyle,
+                enabled: markStrokeEnabledAtIndex(Math.max(0, Math.min(state.activeMarkStyleIndex, Math.max(0, markStrokeEnabledByIndex.length - 1)))),
+                sides: getActiveMarkStrokeSides()
             },
-            markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item) => ({
+            markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item, index) => ({
                 fillColor: allowMarkFill ? item.fillColor : undefined,
                 strokeColor: item.strokeColor,
                 lineBackgroundColor: allowLineBackground ? item.lineBackgroundColor : undefined,
                 lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)) : undefined,
                 lineBackgroundVisible: allowLineBackground ? item.lineBackgroundVisible : undefined,
                 thickness: item.thickness,
-                strokeStyle: item.strokeStyle
+                strokeStyle: item.strokeStyle,
+                enabled: markStrokeEnabledAtIndex(index),
+                sides: markStrokeSidesByIndex[index] || { ...DEFAULT_MARK_STROKE_SIDES }
             })),
             markStrokeEnabledByIndex,
+            markStrokeSidesByIndex,
             colColors: ensureColHeaderColorsLength(state.chartType === 'stackedBar'
                 ? getTotalStackedCols()
                 : getGridColsForChart(state.chartType, state.cols)).slice(),
@@ -834,6 +922,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             markStyle: true,
             markStyles: true,
             markStrokeEnabledByIndex: true,
+            markStrokeSidesByIndex: true,
             rowStrokeStyles: true,
             colStrokeStyle: true
         }

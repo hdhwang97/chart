@@ -56,6 +56,12 @@ export type AssistLineInjectionStyle = {
     strokeStyle?: 'solid' | 'dash';
 };
 
+export type MarkStrokeSides = {
+    top?: boolean;
+    left?: boolean;
+    right?: boolean;
+};
+
 export type MarkInjectionStyle = {
     fillColor?: string;
     strokeColor?: string;
@@ -64,6 +70,8 @@ export type MarkInjectionStyle = {
     lineBackgroundVisible?: boolean;
     thickness?: number;
     strokeStyle?: 'solid' | 'dash';
+    enabled?: boolean;
+    sides?: MarkStrokeSides;
 };
 
 export type GridStrokeInjectionStyle = {
@@ -120,6 +128,7 @@ export type LocalStyleOverrides = {
     markStyle?: MarkInjectionStyle;
     markStyles?: MarkInjectionStyle[];
     markStrokeEnabledByIndex?: boolean[];
+    markStrokeSidesByIndex?: MarkStrokeSides[];
     rowStrokeStyles?: RowStrokeStyle[];
     colStrokeStyle?: StrokeStyleSnapshot | null;
 };
@@ -144,6 +153,7 @@ export type LocalStyleOverrideMask = {
     markStyle?: boolean;
     markStyles?: boolean;
     markStrokeEnabledByIndex?: boolean;
+    markStrokeSidesByIndex?: boolean;
     rowStrokeStyles?: boolean;
     colStrokeStyle?: boolean;
 };

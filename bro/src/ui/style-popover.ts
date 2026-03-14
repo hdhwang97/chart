@@ -67,6 +67,7 @@ type PopoverSessionSnapshot = {
     colHeaderPaintStyleIds: Array<string | null>;
     activeMarkStyleIndex: number;
     markStrokeLinkByIndex: boolean[];
+    markStrokeSidesByIndex: Array<{ top: boolean; left: boolean; right: boolean }>;
 };
 
 function escapeHtml(value: string): string {
@@ -175,6 +176,14 @@ export function cloneMarkStrokeLinks(source: boolean[]) {
     return source.map((item) => Boolean(item));
 }
 
+export function cloneMarkStrokeSides(source: Array<{ top?: boolean; left?: boolean; right?: boolean }>) {
+    return source.map((item) => ({
+        top: item?.top !== false,
+        left: item?.left !== false,
+        right: item?.right !== false
+    }));
+}
+
 export function isBackgroundPopoverTarget(target: StyleItemPopoverTarget): target is BackgroundPopoverTarget {
     return target === 'cell-fill'
         || target === 'cell-top'
@@ -240,7 +249,8 @@ export function buildPopoverSessionSnapshot(): PopoverSessionSnapshot {
         colHeaderColorModes: state.colHeaderColorModes.slice(),
         colHeaderPaintStyleIds: state.colHeaderPaintStyleIds.slice(),
         activeMarkStyleIndex: state.activeMarkStyleIndex,
-        markStrokeLinkByIndex: cloneMarkStrokeLinks(state.markStrokeLinkByIndex)
+        markStrokeLinkByIndex: cloneMarkStrokeLinks(state.markStrokeLinkByIndex),
+        markStrokeSidesByIndex: cloneMarkStrokeSides(state.markStrokeSidesByIndex as Array<{ top?: boolean; left?: boolean; right?: boolean }>)
     };
 }
 
@@ -248,6 +258,7 @@ export function restorePopoverSessionSnapshot(snapshot: PopoverSessionSnapshot) 
     restoreStyleFormSnapshot(snapshot.styleFormSnapshot);
     state.markStylesDraft = cloneMarkStylesDraft(snapshot.markStylesDraft);
     state.markStrokeLinkByIndex = cloneMarkStrokeLinks(snapshot.markStrokeLinkByIndex);
+    state.markStrokeSidesByIndex = cloneMarkStrokeSides(snapshot.markStrokeSidesByIndex);
     state.activeMarkStyleIndex = Math.max(0, Math.min(snapshot.activeMarkStyleIndex, Math.max(0, state.markStylesDraft.length - 1)));
     state.rowColors = snapshot.rowColors.slice();
     state.colHeaderColors = snapshot.colHeaderColors.slice();

@@ -63,6 +63,12 @@ type NormalizedMarkStyle = {
     lineBackgroundVisible?: boolean;
     thickness?: number;
     strokeStyle?: 'solid' | 'dash';
+    enabled?: boolean;
+    sides?: {
+        top: boolean;
+        left: boolean;
+        right: boolean;
+    };
 };
 
 type NormalizedLineBackgroundStyle = {
@@ -122,7 +128,15 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
     const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean' ? source.lineBackgroundVisible : undefined;
     const thickness = normalizeThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle) return null;
+    const enabled = typeof source.enabled === 'boolean' ? source.enabled : undefined;
+    const sides = source.sides && typeof source.sides === 'object'
+        ? {
+            top: source.sides.top !== false,
+            left: source.sides.left !== false,
+            right: source.sides.right !== false
+        }
+        : undefined;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
@@ -130,7 +144,9 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
         lineBackgroundOpacity,
         lineBackgroundVisible,
         thickness,
-        strokeStyle
+        strokeStyle,
+        enabled,
+        sides
     };
 }
 
@@ -646,10 +662,48 @@ function applyMarkStyleToNode(
     options?: { skipFill?: boolean; skipStrokeColor?: boolean }
 ): boolean {
     let applied = false;
+    if (style.enabled === false) {
+        if ('strokes' in node) {
+            try {
+                const target = node as SceneNode & GeometryMixin;
+                if (Array.isArray(target.strokes)) {
+                    target.strokes = [];
+                    applied = true;
+                }
+            } catch {
+                // fall through to weight-zero fallback
+            }
+        }
+        if (hasIndividualStrokeWeights(node)) {
+            node.strokeTopWeight = 0;
+            node.strokeRightWeight = 0;
+            node.strokeBottomWeight = 0;
+            node.strokeLeftWeight = 0;
+            applied = true;
+        } else if (hasStrokeWeight(node)) {
+            node.strokeWeight = 0;
+            applied = true;
+        }
+        if (applyStrokeStyleMode(node, 'solid')) applied = true;
+        return applied;
+    }
+
     if (!options?.skipFill && style.fillColor && tryApplyFill(node, style.fillColor)) applied = true;
     if (!options?.skipStrokeColor && style.strokeColor && tryApplyStroke(node, style.strokeColor)) applied = true;
     if (applyStrokeStyleMode(node, style.strokeStyle)) applied = true;
-    if (typeof style.thickness === 'number' && hasStrokeWeight(node)) {
+    if (style.sides && hasIndividualStrokeToggle(node)) {
+        enableIndividualStrokeWeights(node);
+    }
+    if (style.sides && hasIndividualStrokeWeights(node)) {
+        const targetThickness = typeof style.thickness === 'number'
+            ? style.thickness
+            : (hasStrokeWeight(node) && typeof node.strokeWeight === 'number' ? node.strokeWeight : 0);
+        node.strokeTopWeight = style.sides.top ? targetThickness : 0;
+        node.strokeRightWeight = style.sides.right ? targetThickness : 0;
+        node.strokeLeftWeight = style.sides.left ? targetThickness : 0;
+        node.strokeBottomWeight = 0;
+        applied = true;
+    } else if (typeof style.thickness === 'number' && hasStrokeWeight(node)) {
         node.strokeWeight = style.thickness;
         applied = true;
     }
@@ -1025,6 +1079,7 @@ function shouldSkipMarkStyleApply(payload: StrokeInjectionRuntimePayload, markSt
         || Boolean(style.strokeColor)
         || typeof style.thickness === 'number'
         || Boolean(style.strokeStyle)
+        || style.enabled === false
     ));
     return !hasEffectiveStyle;
 }

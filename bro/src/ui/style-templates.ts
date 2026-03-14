@@ -142,6 +142,7 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
         setLocalStyleOverrideField('markStyle', draftOverrides.overrides.markStyle);
         setLocalStyleOverrideField('markStyles', draftOverrides.overrides.markStyles);
         setLocalStyleOverrideField('markStrokeEnabledByIndex', draftOverrides.overrides.markStrokeEnabledByIndex);
+        setLocalStyleOverrideField('markStrokeSidesByIndex', draftOverrides.overrides.markStrokeSidesByIndex);
         setLocalStyleOverrideField('rowStrokeStyles', draftOverrides.overrides.rowStrokeStyles);
         setLocalStyleOverrideField('colStrokeStyle', draftOverrides.overrides.colStrokeStyle);
         setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());

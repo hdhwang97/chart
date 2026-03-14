@@ -165,7 +165,7 @@ function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask
         'colColors', 'colColorModes', 'colPaintStyleIds', 'colColorEnabled', 'markColorSource',
         'assistLineVisible', 'assistLineEnabled',
         'cellFillStyle', 'lineBackgroundStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
-        'assistLineStyle', 'markStyle', 'markStyles', 'markStrokeEnabledByIndex', 'rowStrokeStyles', 'colStrokeStyle'
+        'assistLineStyle', 'markStyle', 'markStyles', 'markStrokeEnabledByIndex', 'markStrokeSidesByIndex', 'rowStrokeStyles', 'colStrokeStyle'
     ];
     keys.forEach((key) => {
         if (key in source) next[key] = Boolean(source[key]);
@@ -208,6 +208,17 @@ function normalizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
     if (Array.isArray(source.markStyles)) next.markStyles = source.markStyles;
     if (Array.isArray(source.markStrokeEnabledByIndex)) {
         next.markStrokeEnabledByIndex = source.markStrokeEnabledByIndex.map((v) => Boolean(v));
+    }
+    if (Array.isArray(source.markStrokeSidesByIndex)) {
+        next.markStrokeSidesByIndex = source.markStrokeSidesByIndex
+            .map((item) => item && typeof item === 'object'
+                ? {
+                    top: (item as any).top !== false,
+                    left: (item as any).left !== false,
+                    right: (item as any).right !== false
+                }
+                : null)
+            .filter((item): item is { top: boolean; left: boolean; right: boolean } => Boolean(item));
     }
     if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
     if (source.colStrokeStyle && typeof source.colStrokeStyle === 'object') next.colStrokeStyle = source.colStrokeStyle;

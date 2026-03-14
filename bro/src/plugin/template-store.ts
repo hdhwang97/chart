@@ -110,7 +110,15 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | undefined {
     const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean' ? source.lineBackgroundVisible : undefined;
     const thickness = clampThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle) return undefined;
+    const enabled = typeof source.enabled === 'boolean' ? source.enabled : undefined;
+    const sides = source.sides && typeof source.sides === 'object'
+        ? {
+            top: source.sides.top !== false,
+            left: source.sides.left !== false,
+            right: source.sides.right !== false
+        }
+        : undefined;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return undefined;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
@@ -118,7 +126,9 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | undefined {
         lineBackgroundOpacity,
         lineBackgroundVisible,
         thickness,
-        strokeStyle
+        strokeStyle,
+        enabled,
+        sides
     };
 }
 

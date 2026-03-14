@@ -152,6 +152,7 @@ function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask
         'markStyle',
         'markStyles',
         'markStrokeEnabledByIndex',
+        'markStrokeSidesByIndex',
         'rowStrokeStyles',
         'colStrokeStyle'
     ];
@@ -201,6 +202,17 @@ function sanitizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
     if (markStyles.length > 0) next.markStyles = markStyles;
     if (Array.isArray(source.markStrokeEnabledByIndex)) {
         next.markStrokeEnabledByIndex = source.markStrokeEnabledByIndex.map((v) => Boolean(v));
+    }
+    if (Array.isArray(source.markStrokeSidesByIndex)) {
+        next.markStrokeSidesByIndex = source.markStrokeSidesByIndex
+            .map((item) => item && typeof item === 'object'
+                ? {
+                    top: (item as any).top !== false,
+                    left: (item as any).left !== false,
+                    right: (item as any).right !== false
+                }
+                : null)
+            .filter((item): item is { top: boolean; left: boolean; right: boolean } => Boolean(item));
     }
     if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
     if (source.colStrokeStyle && typeof source.colStrokeStyle === 'object') next.colStrokeStyle = source.colStrokeStyle;
@@ -339,7 +351,15 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
     const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean' ? source.lineBackgroundVisible : undefined;
     const thickness = normalizeThickness(source.thickness);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : (source.strokeStyle === 'solid' ? 'solid' : undefined);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle) return null;
+    const enabled = typeof source.enabled === 'boolean' ? source.enabled : undefined;
+    const sides = source.sides && typeof source.sides === 'object'
+        ? {
+            top: source.sides.top !== false,
+            left: source.sides.left !== false,
+            right: source.sides.right !== false
+        }
+        : undefined;
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
@@ -347,7 +367,9 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
         lineBackgroundOpacity,
         lineBackgroundVisible,
         thickness,
-        strokeStyle
+        strokeStyle,
+        enabled,
+        sides
     };
 }
 
