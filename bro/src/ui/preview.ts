@@ -299,9 +299,23 @@ function getBarPreviewColor(rowIndex: number, colIndex: number): string {
     return resolveBarFillColor(rowIndex, colIndex);
 }
 
+function isStackedChartType(chartType: string) {
+    return chartType === 'stackedBar' || chartType === 'stacked';
+}
+
+function resolveStackedSharedStrokeSeriesIndex(seriesIndex: number, chartType: string): number {
+    const safeSeries = Math.max(0, Math.floor(seriesIndex));
+    if (!isStackedChartType(chartType)) return safeSeries;
+    const styles = Array.isArray(state.markStylesDraft) ? state.markStylesDraft : [];
+    if (styles.length === 0) return safeSeries;
+    return Math.max(0, Math.min(state.activeMarkStyleIndex, styles.length - 1));
+}
+
 function resolveSeriesStyleColor(seriesIndex: number, chartType: string, role: 'fill' | 'stroke') {
     const styles = Array.isArray(state.markStylesDraft) ? state.markStylesDraft : [];
-    const idx = Math.max(0, Math.floor(seriesIndex));
+    const idx = role === 'stroke'
+        ? resolveStackedSharedStrokeSeriesIndex(seriesIndex, chartType)
+        : Math.max(0, Math.floor(seriesIndex));
     const draft = styles[idx];
     if (draft) {
         const fromDraft = normalizeHexColorInput(role === 'stroke' ? draft.strokeColor : draft.fillColor);
@@ -345,10 +359,11 @@ function drawTabBackgroundLayer(g: any, w: number, h: number, mode: PreviewInter
 }
 
 function getMarkDraftStroke(seriesIndex: number): StrokeStyleSnapshot {
-    const mark = getMarkDraftStyle(seriesIndex);
+    const strokeSeriesIndex = resolveStackedSharedStrokeSeriesIndex(seriesIndex, state.chartType);
+    const mark = getMarkDraftStyle(strokeSeriesIndex);
     const markFillChart = chartTypeUsesMarkFill(state.chartType);
     const links = Array.isArray(state.markStrokeLinkByIndex) ? state.markStrokeLinkByIndex : [];
-    const safeIdx = Math.max(0, Math.min(seriesIndex, Math.max(0, links.length - 1)));
+    const safeIdx = Math.max(0, Math.min(strokeSeriesIndex, Math.max(0, links.length - 1)));
     const linked = markFillChart ? Boolean(links[safeIdx] ?? true) : false;
     const strokeEnabled = !linked;
     const weight = strokeEnabled
@@ -1113,9 +1128,8 @@ function renderStackedPreview(
                 }
 
                 const seriesIndex = Math.max(0, r - startRow);
-                const resolvedStrokeColor = resolveSeriesStyleColor(seriesIndex, 'stackedBar', 'stroke');
                 const draftStroke = getMarkDraftStroke(seriesIndex);
-                applyStroke(rect, { ...draftStroke, color: resolvedStrokeColor }, resolvedStrokeColor, 0);
+                applyStroke(rect, draftStroke, draftStroke.color || 'none', 0);
                 if (mode === 'style') {
                     // Capture final stroke attrs after applyStroke so style hover reset won't erase them.
                     markStyleTarget(rect, 'mark', mode);

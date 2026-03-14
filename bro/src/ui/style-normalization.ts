@@ -55,6 +55,28 @@ function markLineBackgroundEnabled() {
     return chartTypeUsesMarkLineBackground(state.chartType);
 }
 
+function isStackedChartType(chartType: string = state.chartType) {
+    return chartType === 'stackedBar' || chartType === 'stacked';
+}
+
+function resolveStackedStrokeSourceIndex(length: number) {
+    if (length <= 0) return 0;
+    return Math.max(0, Math.min(state.activeMarkStyleIndex, length - 1));
+}
+
+function resolveStackedSharedStrokeState(
+    markStyles: MarkStyleInjectionDraftItem[],
+    strokeLinks: boolean[],
+    strokeSides: Array<Required<MarkStrokeSides>>
+) {
+    if (!isStackedChartType() || markStyles.length === 0) return null;
+    const sourceIndex = resolveStackedStrokeSourceIndex(markStyles.length);
+    const sourceStyle = markStyles[sourceIndex] || markStyles[0] || { ...DEFAULT_STYLE_INJECTION_DRAFT.mark };
+    const sourceLinked = Boolean(strokeLinks[sourceIndex] ?? strokeLinks[0] ?? true);
+    const sourceSides = strokeSides[sourceIndex] || strokeSides[0] || { ...DEFAULT_MARK_STROKE_SIDES };
+    return { sourceIndex, sourceStyle, sourceLinked, sourceSides };
+}
+
 export function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
     if (!rgb) return null;
@@ -476,6 +498,12 @@ export function isActiveMarkStrokeLinked() {
 
 export function setActiveMarkStrokeLinked(next: boolean) {
     const links = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
+    if (isStackedChartType()) {
+        for (let i = 0; i < links.length; i++) {
+            links[i] = Boolean(next);
+        }
+        return;
+    }
     const idx = Math.max(0, Math.min(state.activeMarkStyleIndex, links.length - 1));
     links[idx] = Boolean(next);
 }
@@ -576,6 +604,29 @@ export function buildDraftFromPayload(
             if (savedSides[i]) sides[i] = normalizeMarkStrokeSides(savedSides[i]);
         }
     }
+    if (isStackedChartType()) {
+        const stackedStyles = ensureMarkDraftSeriesCount(state.markStylesDraft);
+        const stackedLinks = ensureMarkStrokeLinkStateCount(stackedStyles.length);
+        const stackedSides = ensureMarkStrokeSidesStateCount(stackedStyles.length);
+        const sharedStackedStroke = resolveStackedSharedStrokeState(stackedStyles, stackedLinks, stackedSides);
+        if (sharedStackedStroke) {
+            for (let i = 0; i < stackedStyles.length; i++) {
+                stackedStyles[i] = {
+                    ...stackedStyles[i],
+                    strokeColor: sharedStackedStroke.sourceStyle.strokeColor,
+                    thickness: sharedStackedStroke.sourceStyle.thickness,
+                    strokeStyle: sharedStackedStroke.sourceStyle.strokeStyle
+                };
+            }
+            for (let i = 0; i < stackedLinks.length; i++) {
+                stackedLinks[i] = sharedStackedStroke.sourceLinked;
+            }
+            for (let i = 0; i < stackedSides.length; i++) {
+                stackedSides[i] = { ...sharedStackedStroke.sourceSides };
+            }
+            state.markStylesDraft = stackedStyles;
+        }
+    }
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, resolvedMarkStyles.length - 1));
 
     return {
@@ -602,13 +653,25 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
     const normalizedColEnabled = ensureColHeaderColorEnabledLength(totalCols).slice(0, totalCols);
     const normalizedColModes = ensureColHeaderColorModesLength(totalCols).slice(0, totalCols);
     const normalizedColPaintStyleIds = ensureColHeaderPaintStyleIdsLength(totalCols).slice(0, totalCols);
-    const strokeLinks = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
-    const strokeSides = ensureMarkStrokeSidesStateCount(state.markStylesDraft.length);
+    const normalizedMarkStyles = ensureMarkDraftSeriesCount(state.markStylesDraft);
+    const strokeLinks = ensureMarkStrokeLinkStateCount(normalizedMarkStyles.length);
+    const strokeSides = ensureMarkStrokeSidesStateCount(normalizedMarkStyles.length);
+    const sharedStackedStroke = resolveStackedSharedStrokeState(normalizedMarkStyles, strokeLinks, strokeSides);
     const markStrokeEnabledAtIndex = (index: number) => (
         markFillEnabled()
-            ? !(strokeLinks[index] ?? true)
+            ? !(sharedStackedStroke
+                ? sharedStackedStroke.sourceLinked
+                : (strokeLinks[index] ?? true))
             : true
     );
+    const resolveStrokeSidesAtIndex = (index: number) => (
+        sharedStackedStroke
+            ? sharedStackedStroke.sourceSides
+            : (strokeSides[index] || { ...DEFAULT_MARK_STROKE_SIDES })
+    );
+    const activeStrokeSource = sharedStackedStroke
+        ? sharedStackedStroke.sourceStyle
+        : draft.mark;
     return {
         cellFillStyle: {
             color: draft.cellFill.color
@@ -621,25 +684,25 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
         } : {}),
         markStyle: {
             fillColor: allowMarkFill ? draft.mark.fillColor : undefined,
-            strokeColor: draft.mark.strokeColor,
+            strokeColor: activeStrokeSource.strokeColor,
             lineBackgroundColor: allowLineBackground ? draft.mark.lineBackgroundColor : undefined,
             lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)) : undefined,
             lineBackgroundVisible: allowLineBackground ? draft.mark.lineBackgroundVisible : undefined,
-            thickness: draft.mark.thickness,
-            strokeStyle: draft.mark.strokeStyle,
+            thickness: activeStrokeSource.thickness,
+            strokeStyle: activeStrokeSource.strokeStyle,
             enabled: markStrokeEnabledAtIndex(Math.max(0, Math.min(state.activeMarkStyleIndex, Math.max(0, strokeLinks.length - 1)))),
-            sides: getActiveMarkStrokeSides()
+            sides: sharedStackedStroke ? sharedStackedStroke.sourceSides : getActiveMarkStrokeSides()
         },
-        markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item, index) => ({
+        markStyles: normalizedMarkStyles.map((item, index) => ({
             fillColor: allowMarkFill ? item.fillColor : undefined,
-            strokeColor: item.strokeColor,
+            strokeColor: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeColor : item.strokeColor,
             lineBackgroundColor: allowLineBackground ? item.lineBackgroundColor : undefined,
             lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)) : undefined,
             lineBackgroundVisible: allowLineBackground ? item.lineBackgroundVisible : undefined,
-            thickness: item.thickness,
-            strokeStyle: item.strokeStyle,
+            thickness: sharedStackedStroke ? sharedStackedStroke.sourceStyle.thickness : item.thickness,
+            strokeStyle: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeStyle : item.strokeStyle,
             enabled: markStrokeEnabledAtIndex(index),
-            sides: strokeSides[index] || { ...DEFAULT_MARK_STROKE_SIDES }
+            sides: resolveStrokeSidesAtIndex(index)
         })),
         rowColors: deriveRowColorsFromMarkStyles(
             state.chartType,
@@ -814,11 +877,31 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
 } {
     const allowMarkFill = markFillEnabled();
     const allowLineBackground = markLineBackgroundEnabled();
-    const markStrokeEnabledByIndex = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length).map((linked) => !linked);
-    const markStrokeSidesByIndex = ensureMarkStrokeSidesStateCount(state.markStylesDraft.length).map((item) => ({ ...item }));
+    const normalizedMarkStyles = ensureMarkDraftSeriesCount(state.markStylesDraft);
+    const markStrokeEnabledByIndex = ensureMarkStrokeLinkStateCount(normalizedMarkStyles.length).map((linked) => !linked);
+    const markStrokeSidesByIndex = ensureMarkStrokeSidesStateCount(normalizedMarkStyles.length).map((item) => ({ ...item }));
+    const sharedStackedStroke = resolveStackedSharedStrokeState(
+        normalizedMarkStyles,
+        markStrokeEnabledByIndex.map((enabled) => !enabled),
+        markStrokeSidesByIndex.map((item) => ({
+            top: item.top !== false,
+            left: item.left !== false,
+            right: item.right !== false
+        }))
+    );
+    if (sharedStackedStroke) {
+        for (let i = 0; i < markStrokeEnabledByIndex.length; i++) {
+            markStrokeEnabledByIndex[i] = !sharedStackedStroke.sourceLinked;
+        }
+        for (let i = 0; i < markStrokeSidesByIndex.length; i++) {
+            markStrokeSidesByIndex[i] = { ...sharedStackedStroke.sourceSides };
+        }
+    }
     const markStrokeEnabledAtIndex = (index: number) => (
         markFillEnabled()
-            ? Boolean(markStrokeEnabledByIndex[index] ?? false)
+            ? Boolean(sharedStackedStroke
+                ? !sharedStackedStroke.sourceLinked
+                : (markStrokeEnabledByIndex[index] ?? false))
             : true
     );
     return {
@@ -870,25 +953,27 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             },
             markStyle: {
                 fillColor: allowMarkFill ? draft.mark.fillColor : undefined,
-                strokeColor: draft.mark.strokeColor,
+                strokeColor: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeColor : draft.mark.strokeColor,
                 lineBackgroundColor: allowLineBackground ? draft.mark.lineBackgroundColor : undefined,
                 lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)) : undefined,
                 lineBackgroundVisible: allowLineBackground ? draft.mark.lineBackgroundVisible : undefined,
-                thickness: draft.mark.thickness,
-                strokeStyle: draft.mark.strokeStyle,
+                thickness: sharedStackedStroke ? sharedStackedStroke.sourceStyle.thickness : draft.mark.thickness,
+                strokeStyle: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeStyle : draft.mark.strokeStyle,
                 enabled: markStrokeEnabledAtIndex(Math.max(0, Math.min(state.activeMarkStyleIndex, Math.max(0, markStrokeEnabledByIndex.length - 1)))),
-                sides: getActiveMarkStrokeSides()
+                sides: sharedStackedStroke ? sharedStackedStroke.sourceSides : getActiveMarkStrokeSides()
             },
-            markStyles: ensureMarkDraftSeriesCount(state.markStylesDraft).map((item, index) => ({
+            markStyles: normalizedMarkStyles.map((item, index) => ({
                 fillColor: allowMarkFill ? item.fillColor : undefined,
-                strokeColor: item.strokeColor,
+                strokeColor: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeColor : item.strokeColor,
                 lineBackgroundColor: allowLineBackground ? item.lineBackgroundColor : undefined,
                 lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)) : undefined,
                 lineBackgroundVisible: allowLineBackground ? item.lineBackgroundVisible : undefined,
-                thickness: item.thickness,
-                strokeStyle: item.strokeStyle,
+                thickness: sharedStackedStroke ? sharedStackedStroke.sourceStyle.thickness : item.thickness,
+                strokeStyle: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeStyle : item.strokeStyle,
                 enabled: markStrokeEnabledAtIndex(index),
-                sides: markStrokeSidesByIndex[index] || { ...DEFAULT_MARK_STROKE_SIDES }
+                sides: sharedStackedStroke
+                    ? sharedStackedStroke.sourceSides
+                    : (markStrokeSidesByIndex[index] || { ...DEFAULT_MARK_STROKE_SIDES })
             })),
             markStrokeEnabledByIndex,
             markStrokeSidesByIndex,

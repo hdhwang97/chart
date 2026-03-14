@@ -95,6 +95,18 @@ function getSeriesColor(rowColors: string[], rowIndex: number, chartType: string
     return rowColors[rowIndex] || getRowColor(rowIndex);
 }
 
+function isStackedChartType(chartType: string) {
+    return chartType === 'stackedBar' || chartType === 'stacked';
+}
+
+function resolveStackedSharedStrokeSeriesIndex(seriesIndex: number, chartType: string): number {
+    const safeSeries = Math.max(0, Math.floor(seriesIndex));
+    if (!isStackedChartType(chartType)) return safeSeries;
+    const styles = Array.isArray(state.markStylesDraft) ? state.markStylesDraft : [];
+    if (styles.length === 0) return safeSeries;
+    return Math.max(0, Math.min(state.activeMarkStyleIndex, styles.length - 1));
+}
+
 function getMarkDraftStyleFromState(seriesIndex: number) {
     const styles = Array.isArray(state.markStylesDraft) ? state.markStylesDraft : [];
     const idx = Math.max(0, Math.floor(seriesIndex));
@@ -121,19 +133,21 @@ function getMarkDraftStyleFromState(seriesIndex: number) {
 function isMarkStrokeEnabled(seriesIndex: number): boolean {
     if (!chartTypeUsesMarkFill(state.chartType)) return true;
     const links = Array.isArray(state.markStrokeLinkByIndex) ? state.markStrokeLinkByIndex : [];
-    const safeIdx = Math.max(0, Math.min(seriesIndex, Math.max(0, links.length - 1)));
+    const strokeSeriesIndex = resolveStackedSharedStrokeSeriesIndex(seriesIndex, state.chartType);
+    const safeIdx = Math.max(0, Math.min(strokeSeriesIndex, Math.max(0, links.length - 1)));
     const linked = Boolean(links[safeIdx] ?? true);
     return !linked;
 }
 
 function getDraftMarkStrokeFromState(seriesIndex: number, chartType: string, rowColors: string[]): StrokeStyleSnapshot {
-    const draftStyle = getMarkDraftStyleFromState(seriesIndex);
+    const strokeSeriesIndex = resolveStackedSharedStrokeSeriesIndex(seriesIndex, chartType);
+    const draftStyle = getMarkDraftStyleFromState(strokeSeriesIndex);
     const strokeEnabled = isMarkStrokeEnabled(seriesIndex);
     const weight = strokeEnabled
         ? Math.max(1, draftStyle.thickness)
         : 0;
     return {
-        color: resolveSeriesStyleColor(rowColors, seriesIndex, chartType, 'stroke'),
+        color: resolveSeriesStyleColor(rowColors, strokeSeriesIndex, chartType, 'stroke'),
         weight,
         dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
     };

@@ -53,6 +53,42 @@ function markStrokeCardEnabled() {
     return !markStrokeToggleEnabled() || !isActiveMarkStrokeLinked();
 }
 
+function isStackedChartType() {
+    return state.chartType === 'stackedBar' || state.chartType === 'stacked';
+}
+
+function syncStackedStrokeAcrossSeries(
+    styles: MarkStyleInjectionDraftItem[],
+    links: boolean[],
+    sidesByIndex: Array<{ top: boolean; left: boolean; right: boolean }>,
+    sourceIndex: number
+) {
+    if (!isStackedChartType() || styles.length === 0) return;
+    const safeSource = Math.max(0, Math.min(sourceIndex, styles.length - 1));
+    const sourceStyle = styles[safeSource] || styles[0];
+    const sourceLinked = Boolean(links[safeSource] ?? true);
+    const sourceSides = sidesByIndex[safeSource] || { top: true, left: true, right: true };
+
+    for (let i = 0; i < styles.length; i++) {
+        styles[i] = {
+            ...styles[i],
+            strokeColor: sourceStyle.strokeColor,
+            thickness: sourceStyle.thickness,
+            strokeStyle: sourceStyle.strokeStyle
+        };
+    }
+    for (let i = 0; i < links.length; i++) {
+        links[i] = sourceLinked;
+    }
+    for (let i = 0; i < sidesByIndex.length; i++) {
+        sidesByIndex[i] = {
+            top: sourceSides.top !== false,
+            left: sourceSides.left !== false,
+            right: sourceSides.right !== false
+        };
+    }
+}
+
 function deriveContrastingStrokeColor(fillColor: string): string {
     const normalized = normalizeHexColorInput(fillColor) || '#3B82F6';
     const hex = normalized.slice(1);
@@ -433,6 +469,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
 
     const styles = ensureMarkDraftSeriesCount(state.markStylesDraft);
     const sidesByIndex = ensureMarkStrokeSidesStateCount(styles.length);
+    const strokeLinks = ensureMarkStrokeLinkStateCount(styles.length);
     const idx = Math.max(0, Math.min(state.activeMarkStyleIndex, styles.length - 1));
     styles[idx] = { ...mark };
     sidesByIndex[idx] = {
@@ -440,6 +477,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
         left: ui.styleMarkStrokeSidesLeftInput.checked,
         right: ui.styleMarkStrokeSidesRightInput.checked
     };
+    syncStackedStrokeAcrossSeries(styles, strokeLinks, sidesByIndex, idx);
     state.markStylesDraft = styles;
     state.activeMarkStyleIndex = idx;
 

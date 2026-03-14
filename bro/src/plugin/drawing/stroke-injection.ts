@@ -513,6 +513,29 @@ function isBarLikeMarkName(name: string): boolean {
     );
 }
 
+function isStackedChartType(chartType?: string): boolean {
+    return chartType === 'stackedBar' || chartType === 'stacked';
+}
+
+function isStackedSubInstanceNode(node: SceneNode): boolean {
+    if (!MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(node.name)) return false;
+    if (!('children' in node)) return false;
+    const children = (node as SceneNode & ChildrenMixin).children;
+    return children.some((child) => MARK_NAME_PATTERNS.STACKED_SEGMENT.test(child.name));
+}
+
+function resolveStackedSharedMarkStyle(styles: NormalizedMarkStyle[]): NormalizedMarkStyle | null {
+    if (styles.length === 0) return null;
+    const explicit = styles.find((style) => (
+        style.enabled === false
+        || Boolean(style.strokeColor)
+        || typeof style.thickness === 'number'
+        || Boolean(style.strokeStyle)
+        || Boolean(style.sides)
+    ));
+    return explicit || styles[0] || null;
+}
+
 function parseMarkSeriesIndex(name: string): number | null {
     const barMulti = MARK_NAME_PATTERNS.BAR_ITEM_MULTI.exec(name);
     if (barMulti) {
@@ -717,6 +740,23 @@ function applyMarkStyles(
 ): ScopeResult {
     const result = createScopeResult();
     if (styles.length === 0) return result;
+    if (isStackedChartType(options?.chartType)) {
+        const sharedStyle = resolveStackedSharedMarkStyle(styles);
+        if (!sharedStyle) return result;
+        columns.forEach((col) => {
+            traverse(col.node, (node) => {
+                if (!node.visible || !isStackedSubInstanceNode(node)) return;
+                result.candidates += 1;
+                try {
+                    if (applyMarkStyleToNode(node, sharedStyle, { skipFill: true })) result.applied += 1;
+                    else result.skipped += 1;
+                } catch {
+                    result.errors += 1;
+                }
+            });
+        });
+        return result;
+    }
     columns.forEach((col) => {
         const colIndex = Math.max(0, col.index - 1);
         const skipColorForColumn = options?.chartType === 'bar' && Boolean(options?.colColorEnabled?.[colIndex]);
@@ -1072,13 +1112,14 @@ function applyGridContainerStroke(graph: SceneNode, style: NormalizedGridStyle):
 
 function shouldSkipMarkStyleApply(payload: StrokeInjectionRuntimePayload, markStyles: NormalizedMarkStyle[]): boolean {
     if (markStyles.length === 0) return true;
-    const isStacked = payload.chartType === 'stackedBar' || payload.chartType === 'stacked';
+    const isStacked = isStackedChartType(payload.chartType);
     if (!isStacked) return false;
     const hasEffectiveStyle = markStyles.some((style) => (
         Boolean(style.fillColor)
         || Boolean(style.strokeColor)
         || typeof style.thickness === 'number'
         || Boolean(style.strokeStyle)
+        || Boolean(style.sides)
         || style.enabled === false
     ));
     return !hasEffectiveStyle;

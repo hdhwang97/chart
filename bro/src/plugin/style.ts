@@ -314,12 +314,22 @@ function getSolidStrokeColor(node: SceneNode): string | null {
     return rgbToHex(first.color.r, first.color.g, first.color.b);
 }
 
-function parseMarkSeriesIndex(name: string): number | null {
+function parseMarkSeriesIndex(node: SceneNode): number | null {
+    const name = node.name;
     if (MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(name)) return 1;
     const barMulti = MARK_NAME_PATTERNS.BAR_ITEM_MULTI.exec(name);
     if (barMulti) {
         const idx = Number(barMulti[1]);
         return Number.isFinite(idx) && idx > 0 ? idx : null;
+    }
+    if (MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(name) && 'children' in node) {
+        const children = (node as SceneNode & ChildrenMixin).children;
+        const hasSegmentChild = children.some((child) => MARK_NAME_PATTERNS.STACKED_SEGMENT.test(child.name));
+        if (hasSegmentChild) {
+            const subMatch = name.match(/(\d+)/);
+            const idx = Number(subMatch?.[1]);
+            return Number.isFinite(idx) && idx > 0 ? idx : null;
+        }
     }
     const stackedSeg = MARK_NAME_PATTERNS.STACKED_SEGMENT.exec(name);
     if (stackedSeg) {
@@ -377,7 +387,7 @@ export function extractMarkStyles(graph: SceneNode, precomputedCols?: ColRef[]):
         });
         traverse(col.node, (node) => {
             if (!node.visible) return;
-            const idx = parseMarkSeriesIndex(node.name);
+            const idx = parseMarkSeriesIndex(node);
             if (!idx || byIndex.has(idx)) return;
 
             if (node.type === 'INSTANCE' && MARK_NAME_PATTERNS.LINE.test(node.name)) {
