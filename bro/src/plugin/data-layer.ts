@@ -151,6 +151,7 @@ function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask
         'assistLineStyle',
         'markStyle',
         'markStyles',
+        'markStrokeEnabledByIndex',
         'rowStrokeStyles',
         'colStrokeStyle'
     ];
@@ -198,6 +199,9 @@ function sanitizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
     if (markStyle) next.markStyle = markStyle;
     const markStyles = normalizeMarkStyles(source.markStyles);
     if (markStyles.length > 0) next.markStyles = markStyles;
+    if (Array.isArray(source.markStrokeEnabledByIndex)) {
+        next.markStrokeEnabledByIndex = source.markStrokeEnabledByIndex.map((v) => Boolean(v));
+    }
     if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
     if (source.colStrokeStyle && typeof source.colStrokeStyle === 'object') next.colStrokeStyle = source.colStrokeStyle;
 

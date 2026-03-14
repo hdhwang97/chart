@@ -51,6 +51,16 @@ function markStrokeCardEnabled() {
     return !markStrokeToggleEnabled() || !isActiveMarkStrokeLinked();
 }
 
+function deriveContrastingStrokeColor(fillColor: string): string {
+    const normalized = normalizeHexColorInput(fillColor) || '#3B82F6';
+    const hex = normalized.slice(1);
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    const luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+    return luminance > 160 ? '#111827' : '#FFFFFF';
+}
+
 function syncMarkStrokeCardState() {
     const showToggle = markStrokeToggleEnabled();
     const strokeEnabled = markStrokeCardEnabled();
@@ -680,7 +690,20 @@ export function bindStyleTabEvents() {
     ui.styleMarkStrokeToggle.addEventListener('change', () => {
         const strokeEnabled = ui.styleMarkStrokeToggle.checked;
         setActiveMarkStrokeLinked(!strokeEnabled);
-        if (!strokeEnabled) {
+        if (strokeEnabled) {
+            const fillColor = normalizeHexColorInput(ui.styleMarkFillColorInput.value)
+                || state.styleInjectionDraft.mark.fillColor
+                || DEFAULT_STYLE_INJECTION_DRAFT.mark.fillColor;
+            const strokeColor = normalizeHexColorInput(ui.styleMarkStrokeColorInput.value)
+                || fillColor;
+            if (strokeColor === fillColor) {
+                ui.styleMarkStrokeColorInput.value = deriveContrastingStrokeColor(fillColor);
+            }
+            const thicknessRaw = Number(ui.styleMarkThicknessInput.value);
+            if (!Number.isFinite(thicknessRaw) || thicknessRaw <= 0) {
+                ui.styleMarkThicknessInput.value = '1';
+            }
+        } else {
             const linkedStroke = normalizeHexColorInput(ui.styleMarkFillColorInput.value)
                 || state.styleInjectionDraft.mark.fillColor
                 || DEFAULT_STYLE_INJECTION_DRAFT.mark.fillColor;

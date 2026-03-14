@@ -1,4 +1,4 @@
-import { state, getTotalStackedCols, getRowColor, getGridColsForChart, normalizeHexColorInput, resolveBarFillColor } from './state';
+import { state, chartTypeUsesMarkFill, getTotalStackedCols, getRowColor, getGridColsForChart, normalizeHexColorInput, resolveBarFillColor } from './state';
 import { ui } from './dom';
 import type { StrokeStyleSnapshot } from '../shared/style-types';
 import type { YLabelFormatMode } from '../shared/y-label-format';
@@ -346,9 +346,17 @@ function drawTabBackgroundLayer(g: any, w: number, h: number, mode: PreviewInter
 
 function getMarkDraftStroke(seriesIndex: number): StrokeStyleSnapshot {
     const mark = getMarkDraftStyle(seriesIndex);
+    const markFillChart = chartTypeUsesMarkFill(state.chartType);
+    const links = Array.isArray(state.markStrokeLinkByIndex) ? state.markStrokeLinkByIndex : [];
+    const safeIdx = Math.max(0, Math.min(seriesIndex, Math.max(0, links.length - 1)));
+    const linked = markFillChart ? Boolean(links[safeIdx] ?? true) : false;
+    const strokeEnabled = !linked;
+    const weight = strokeEnabled
+        ? (markFillChart ? Math.max(1, mark.thickness) : mark.thickness)
+        : 0;
     return {
         color: mark.strokeColor,
-        weight: mark.thickness,
+        weight,
         dashPattern: mark.strokeStyle === 'dash' ? [4, 2] : []
     };
 }

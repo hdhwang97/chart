@@ -119,6 +119,7 @@ export type LocalStyleOverrides = {
     assistLineStyle?: AssistLineInjectionStyle;
     markStyle?: MarkInjectionStyle;
     markStyles?: MarkInjectionStyle[];
+    markStrokeEnabledByIndex?: boolean[];
     rowStrokeStyles?: RowStrokeStyle[];
     colStrokeStyle?: StrokeStyleSnapshot | null;
 };
@@ -142,6 +143,7 @@ export type LocalStyleOverrideMask = {
     assistLineStyle?: boolean;
     markStyle?: boolean;
     markStyles?: boolean;
+    markStrokeEnabledByIndex?: boolean;
     rowStrokeStyles?: boolean;
     colStrokeStyle?: boolean;
 };

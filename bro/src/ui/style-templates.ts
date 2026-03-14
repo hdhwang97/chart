@@ -141,6 +141,7 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
         setLocalStyleOverrideField('assistLineStyle', draftOverrides.overrides.assistLineStyle);
         setLocalStyleOverrideField('markStyle', draftOverrides.overrides.markStyle);
         setLocalStyleOverrideField('markStyles', draftOverrides.overrides.markStyles);
+        setLocalStyleOverrideField('markStrokeEnabledByIndex', draftOverrides.overrides.markStrokeEnabledByIndex);
         setLocalStyleOverrideField('rowStrokeStyles', draftOverrides.overrides.rowStrokeStyles);
         setLocalStyleOverrideField('colStrokeStyle', draftOverrides.overrides.colStrokeStyle);
         setLocalStyleOverrideField('colColors', ensureColHeaderColorsLength(totalCols).slice());

@@ -126,7 +126,7 @@ function normalizeIncomingLocalMask(value: unknown): LocalStyleOverrideMask {
         'colColors', 'colColorModes', 'colPaintStyleIds', 'colColorEnabled', 'markColorSource',
         'assistLineVisible', 'assistLineEnabled',
         'cellFillStyle', 'lineBackgroundStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
-        'assistLineStyle', 'markStyle', 'markStyles', 'rowStrokeStyles', 'colStrokeStyle'
+        'assistLineStyle', 'markStyle', 'markStyles', 'markStrokeEnabledByIndex', 'rowStrokeStyles', 'colStrokeStyle'
     ];
     const next: LocalStyleOverrideMask = {};
     keys.forEach((key) => {
@@ -164,6 +164,9 @@ function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
     if (source.assistLineStyle) next.assistLineStyle = source.assistLineStyle;
     if (source.markStyle) next.markStyle = source.markStyle;
     if (Array.isArray(source.markStyles)) next.markStyles = source.markStyles;
+    if (Array.isArray(source.markStrokeEnabledByIndex)) {
+        next.markStrokeEnabledByIndex = source.markStrokeEnabledByIndex.map((v) => Boolean(v));
+    }
     if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
     if (source.colStrokeStyle) next.colStrokeStyle = source.colStrokeStyle;
     return next;
@@ -1466,6 +1469,7 @@ function bindUiEvents() {
             if (fromDraft.mask.assistLineStyle) setLocalStyleOverrideField('assistLineStyle', fromDraft.overrides.assistLineStyle);
             if (fromDraft.mask.markStyle) setLocalStyleOverrideField('markStyle', fromDraft.overrides.markStyle);
             if (fromDraft.mask.markStyles) setLocalStyleOverrideField('markStyles', fromDraft.overrides.markStyles);
+            if (fromDraft.mask.markStrokeEnabledByIndex) setLocalStyleOverrideField('markStrokeEnabledByIndex', fromDraft.overrides.markStrokeEnabledByIndex);
             if (fromDraft.mask.rowStrokeStyles) setLocalStyleOverrideField('rowStrokeStyles', fromDraft.overrides.rowStrokeStyles);
             if (fromDraft.mask.colStrokeStyle) setLocalStyleOverrideField('colStrokeStyle', fromDraft.overrides.colStrokeStyle);
             recomputeEffectiveStyleSnapshot();

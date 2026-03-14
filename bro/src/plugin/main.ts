@@ -165,7 +165,7 @@ function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask
         'colColors', 'colColorModes', 'colPaintStyleIds', 'colColorEnabled', 'markColorSource',
         'assistLineVisible', 'assistLineEnabled',
         'cellFillStyle', 'lineBackgroundStyle', 'cellTopStyle', 'tabRightStyle', 'gridContainerStyle',
-        'assistLineStyle', 'markStyle', 'markStyles', 'rowStrokeStyles', 'colStrokeStyle'
+        'assistLineStyle', 'markStyle', 'markStyles', 'markStrokeEnabledByIndex', 'rowStrokeStyles', 'colStrokeStyle'
     ];
     keys.forEach((key) => {
         if (key in source) next[key] = Boolean(source[key]);
@@ -206,6 +206,9 @@ function normalizeLocalStyleOverrides(value: unknown): LocalStyleOverrides {
     if (source.assistLineStyle && typeof source.assistLineStyle === 'object') next.assistLineStyle = source.assistLineStyle;
     if (source.markStyle && typeof source.markStyle === 'object') next.markStyle = source.markStyle;
     if (Array.isArray(source.markStyles)) next.markStyles = source.markStyles;
+    if (Array.isArray(source.markStrokeEnabledByIndex)) {
+        next.markStrokeEnabledByIndex = source.markStrokeEnabledByIndex.map((v) => Boolean(v));
+    }
     if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
     if (source.colStrokeStyle && typeof source.colStrokeStyle === 'object') next.colStrokeStyle = source.colStrokeStyle;
     return next;

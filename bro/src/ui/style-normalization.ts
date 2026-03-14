@@ -500,6 +500,16 @@ export function buildDraftFromPayload(
     );
     ensureRowColorsLength(state.rows);
     ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
+    if (Array.isArray(state.localStyleOverrides.markStrokeEnabledByIndex)) {
+        const savedEnabled = state.localStyleOverrides.markStrokeEnabledByIndex;
+        const links = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length);
+        for (let i = 0; i < links.length; i++) {
+            const enabled = savedEnabled[i];
+            if (typeof enabled === 'boolean') {
+                links[i] = !enabled;
+            }
+        }
+    }
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, resolvedMarkStyles.length - 1));
 
     return {
@@ -727,6 +737,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
 } {
     const allowMarkFill = markFillEnabled();
     const allowLineBackground = markLineBackgroundEnabled();
+    const markStrokeEnabledByIndex = ensureMarkStrokeLinkStateCount(state.markStylesDraft.length).map((linked) => !linked);
     return {
         overrides: {
             rowColors: deriveRowColorsFromMarkStyles(
@@ -792,6 +803,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
                 thickness: item.thickness,
                 strokeStyle: item.strokeStyle
             })),
+            markStrokeEnabledByIndex,
             colColors: ensureColHeaderColorsLength(state.chartType === 'stackedBar'
                 ? getTotalStackedCols()
                 : getGridColsForChart(state.chartType, state.cols)).slice(),
@@ -821,6 +833,7 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             assistLineStyle: true,
             markStyle: true,
             markStyles: true,
+            markStrokeEnabledByIndex: true,
             rowStrokeStyles: true,
             colStrokeStyle: true
         }

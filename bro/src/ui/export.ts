@@ -1,5 +1,5 @@
 import { ui } from './dom';
-import { state, getRowColor, normalizeHexColorInput, getGridColsForChart, resolveBarFillColor } from './state';
+import { state, chartTypeUsesMarkFill, getRowColor, normalizeHexColorInput, getGridColsForChart, resolveBarFillColor } from './state';
 import type { RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 import type { YLabelFormatMode } from '../shared/y-label-format';
 import { formatYLabelValue } from '../shared/y-label-format';
@@ -116,6 +116,27 @@ function getMarkDraftStyleFromState(seriesIndex: number) {
         : Math.max(0, Number(fallback.thickness) || 1);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : 'solid';
     return { fillColor: fill, strokeColor: stroke, lineBackgroundColor: lineBackground, lineBackgroundOpacity, lineBackgroundVisible, thickness, strokeStyle };
+}
+
+function isMarkStrokeEnabled(seriesIndex: number): boolean {
+    if (!chartTypeUsesMarkFill(state.chartType)) return true;
+    const links = Array.isArray(state.markStrokeLinkByIndex) ? state.markStrokeLinkByIndex : [];
+    const safeIdx = Math.max(0, Math.min(seriesIndex, Math.max(0, links.length - 1)));
+    const linked = Boolean(links[safeIdx] ?? true);
+    return !linked;
+}
+
+function getDraftMarkStrokeFromState(seriesIndex: number, chartType: string, rowColors: string[]): StrokeStyleSnapshot {
+    const draftStyle = getMarkDraftStyleFromState(seriesIndex);
+    const strokeEnabled = isMarkStrokeEnabled(seriesIndex);
+    const weight = strokeEnabled
+        ? Math.max(1, draftStyle.thickness)
+        : 0;
+    return {
+        color: resolveSeriesStyleColor(rowColors, seriesIndex, chartType, 'stroke'),
+        weight,
+        dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
+    };
 }
 
 function resolveSeriesStyleColor(rowColors: string[], rowIndex: number, chartType: string, role: 'fill' | 'stroke') {
@@ -495,10 +516,8 @@ function renderD3Preview(style: any) {
                     .attr('height', h - yScale(val))
                     .attr('fill', getBarSeriesColor(r, c))
                     .attr('rx', cornerRadius);
-                const resolvedStrokeColor = resolveSeriesStyleColor(rowColors, r, 'bar', 'stroke');
-                const rowStroke = getRowStroke(r, rowStrokeStyles) || colStrokeStyle;
-                const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedStrokeColor } : { color: resolvedStrokeColor, weight: 1 };
-                applyStroke(rect, syncedStroke, resolvedStrokeColor, 1);
+                const draftStroke = getDraftMarkStrokeFromState(r, 'bar', rowColors);
+                applyStroke(rect, draftStroke, draftStroke.color || '#3B82F6', 0);
             }
         }
     } else if (chartType === 'line') {
@@ -576,12 +595,7 @@ function renderD3Preview(style: any) {
                         .attr('height', barH)
                         .attr('fill', resolveSeriesStyleColor(rowColors, r - startRow, 'stackedBar', 'fill'))
                         .attr('rx', cornerRadius);
-                    const draftStyle = getMarkDraftStyleFromState(Math.max(0, r - startRow));
-                    const draftStroke: StrokeStyleSnapshot = {
-                        color: resolveSeriesStyleColor(rowColors, r - startRow, 'stackedBar', 'stroke'),
-                        weight: Math.max(0, draftStyle.thickness),
-                        dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
-                    };
+                    const draftStroke = getDraftMarkStrokeFromState(Math.max(0, r - startRow), 'stackedBar', rowColors);
                     applyStroke(rect, draftStroke, 'none', 0);
                     yOffset -= barH;
                 }
