@@ -861,13 +861,13 @@ function renderBarPreview(
             }
 
             const resolvedStrokeColor = resolveSeriesStyleColor(r, 'bar', 'stroke');
+            const draftStroke = getMarkDraftStroke(r);
+            applyStroke(rect, { ...draftStroke, color: resolvedStrokeColor }, resolvedStrokeColor, 0);
             if (mode === 'style') {
-                const draftStroke = getMarkDraftStroke(r);
-                applyStroke(rect, { ...draftStroke, color: resolvedStrokeColor }, resolvedStrokeColor, 1);
-            } else {
-                const rowStroke = getRowStroke(r) || state.colStrokeStyle;
-                const syncedStroke = rowStroke ? { ...rowStroke, color: resolvedStrokeColor } : { color: resolvedStrokeColor, weight: 1 };
-                applyStroke(rect, syncedStroke, resolvedStrokeColor, 1);
+                // Capture final stroke attrs after applyStroke so style hover reset won't erase them.
+                markStyleTarget(rect, 'mark', mode);
+                markStyleTargetSeries(rect, r, mode);
+                markStyleTargetColumn(rect, c, mode);
             }
         }
     }
@@ -1112,12 +1112,15 @@ function renderStackedPreview(
                     markStyleTargetSeries(rect, Math.max(0, r - startRow), mode);
                 }
 
-                applyStroke(
-                    rect,
-                    mode === 'style' ? getMarkDraftStroke(Math.max(0, r - startRow)) : (getRowStroke(r) || state.colStrokeStyle),
-                    'none',
-                    0
-                );
+                const seriesIndex = Math.max(0, r - startRow);
+                const resolvedStrokeColor = resolveSeriesStyleColor(seriesIndex, 'stackedBar', 'stroke');
+                const draftStroke = getMarkDraftStroke(seriesIndex);
+                applyStroke(rect, { ...draftStroke, color: resolvedStrokeColor }, resolvedStrokeColor, 0);
+                if (mode === 'style') {
+                    // Capture final stroke attrs after applyStroke so style hover reset won't erase them.
+                    markStyleTarget(rect, 'mark', mode);
+                    markStyleTargetSeries(rect, seriesIndex, mode);
+                }
                 yOffset -= barH;
             }
             flatIdx++;
