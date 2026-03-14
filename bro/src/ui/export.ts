@@ -455,18 +455,36 @@ function renderD3Preview(style: any) {
     const colCount = style.colCount || 5;
     const markNum = style.markNum || 1;
     const yCount = style.yCount || 4;
-    const chartType = style.chartType || 'bar';
+    const chartTypeRaw = style.chartType || 'bar';
+    const chartType = chartTypeRaw === 'stacked' ? 'stackedBar' : chartTypeRaw;
     const cornerRadius = style.cornerRadius || 0;
     const strokeWidth = style.strokeWidth || state.strokeWidth || 2;
     const colStrokeStyle: StrokeStyleSnapshot | null = style.colStrokeStyle || null;
     const rowStrokeStyles: RowStrokeStyle[] = style.rowStrokeStyles || [];
-    const groups = chartType === 'stackedBar'
-        ? (Array.isArray(markNum) ? markNum : [colCount])
+    const normalizeGroupValue = (value: unknown) => {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) return 0;
+        return Math.max(0, Math.floor(parsed));
+    };
+    const fallbackGroups = Array.isArray(state.groupStructure)
+        ? state.groupStructure.map((value) => normalizeGroupValue(value))
         : [];
+    let groups = chartType === 'stackedBar'
+        ? (Array.isArray(markNum) ? markNum.map((value: unknown) => normalizeGroupValue(value)) : [Math.max(1, Math.floor(colCount))])
+        : [];
+    if (chartType === 'stackedBar' && colCount > 0 && groups.length !== colCount) {
+        if (groups.length > colCount) {
+            groups = groups.slice(0, colCount);
+        } else if (fallbackGroups.length === colCount) {
+            groups = fallbackGroups.slice(0, colCount);
+        }
+    }
 
-    const flatCols = Array.isArray(markNum)
-        ? markNum.reduce((a: number, b: number) => a + b, 0)
-        : (chartType === 'line' ? getGridColsForChart('line', colCount) : colCount);
+    const flatCols = chartType === 'stackedBar'
+        ? groups.reduce((a: number, b: number) => a + b, 0)
+        : (Array.isArray(markNum)
+            ? markNum.reduce((a: number, b: number) => a + b, 0)
+            : (chartType === 'line' ? getGridColsForChart('line', colCount) : colCount));
     const axisCols = chartType === 'stackedBar' ? groups.length : flatCols;
     const stateData = buildStateNumericData(chartType, flatCols);
     const hasStateData = stateData.length > 0 && stateData.some(row => row.some(v => Number.isFinite(v)));
@@ -474,7 +492,9 @@ function renderD3Preview(style: any) {
     // fallback data when UI state is empty
     let sampleData: number[][] = stateData;
     if (!hasStateData) {
-        const fallbackRows = Array.isArray(markNum) ? Math.max(2, markNum.length + 1) : (typeof markNum === 'number' ? markNum : 1);
+        const fallbackRows = chartType === 'stackedBar'
+            ? Math.max(2, groups.length + 1)
+            : (Array.isArray(markNum) ? Math.max(2, markNum.length + 1) : (typeof markNum === 'number' ? markNum : 1));
         sampleData = [];
         for (let r = 0; r < fallbackRows; r++) {
             const row = [];

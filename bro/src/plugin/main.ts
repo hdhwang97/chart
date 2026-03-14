@@ -1,4 +1,4 @@
-import { VARIANT_MAPPING, PLUGIN_DATA_KEYS } from './constants';
+import { VARIANT_MAPPING, PLUGIN_DATA_KEYS, MARK_NAME_PATTERNS } from './constants';
 import { loadChartData, loadLocalStyleOverrides, saveChartData, saveLocalStyleOverrides } from './data-layer';
 import { extractStyleFromNode } from './style';
 import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, getChartLegendHeight, getGraphHeight, getXEmptyHeight, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
@@ -1075,7 +1075,28 @@ figma.ui.onmessage = async (msg) => {
         // 숨겨진 레이어 제외하고 카운트 (Visible Column Only)
         const cols = collectColumns(node);
         const visibleCols = cols.filter(c => c.node.visible);
-        const colCount = visibleCols.length > 0 ? visibleCols.length : 5;
+        const stackedGroupStructure = (chartType === 'stackedBar' || chartType === 'stacked')
+            ? (visibleCols.length > 0 ? visibleCols : cols).map((colObj) => {
+                let parent: SceneNode = colObj.node;
+                if ('children' in colObj.node) {
+                    const tab = (colObj.node as SceneNode & ChildrenMixin).children.find((n: SceneNode) => n.name === 'tab');
+                    if (tab) parent = tab;
+                }
+                if (!('children' in parent)) return 0;
+                const group = (parent as SceneNode & ChildrenMixin).children.find((n: SceneNode) => MARK_NAME_PATTERNS.STACKED_GROUP.test(n.name));
+                if (!group || !('children' in group)) return 0;
+                const visibleBars = (group as SceneNode & ChildrenMixin).children.filter(
+                    (n: SceneNode) => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name) && n.visible
+                );
+                return visibleBars.length;
+            })
+            : null;
+        const extractedMarkNum = stackedGroupStructure || structure.markNum;
+        const colCount = visibleCols.length > 0
+            ? visibleCols.length
+            : (Array.isArray(extractedMarkNum)
+                ? Math.max(1, extractedMarkNum.length)
+                : (cols.length > 0 ? cols.length : 5));
 
         const styleInfo = extractStyleFromNode(node, chartType, { columns: cols });
         const markRatioForUi = resolveMarkRatioFromNode(node, styleInfo.markRatio);
@@ -1089,9 +1110,9 @@ figma.ui.onmessage = async (msg) => {
         }
         if (!savedValuesRaw) {
             if (chartType === 'stackedBar' || chartType === 'stacked') {
-                rowCount = Array.isArray(structure.markNum) ? Math.max(1, Math.max(...structure.markNum) + 1) : 1;
+                rowCount = Array.isArray(extractedMarkNum) ? Math.max(1, Math.max(...extractedMarkNum) + 1) : 1;
             } else {
-                rowCount = typeof structure.markNum === 'number' ? Math.max(1, structure.markNum) : 1;
+                rowCount = typeof extractedMarkNum === 'number' ? Math.max(1, extractedMarkNum) : 1;
             }
         }
         const isInstanceTarget = node.type === 'INSTANCE';
@@ -1162,7 +1183,7 @@ figma.ui.onmessage = async (msg) => {
 
         const payload = {
             chartType: chartType,
-            markNum: structure.markNum,
+            markNum: extractedMarkNum,
             yCount: structure.cellCount || 4,
             colCount: colCount,
 
