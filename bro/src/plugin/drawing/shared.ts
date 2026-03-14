@@ -192,6 +192,88 @@ function findColumnXEmptyInstance(colNode: SceneNode): InstanceNode | null {
     return target;
 }
 
+function normalizeLabel(raw: unknown): string {
+    return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function resolveLabelWithFallback(labels: string[], primaryIndex: number, fallbackIndex: number): string {
+    const primary = normalizeLabel(labels[primaryIndex]);
+    if (primary) return primary;
+    if (fallbackIndex === primaryIndex) return '';
+    return normalizeLabel(labels[fallbackIndex]);
+}
+
+function findXEmptyTypePropKey(props: InstanceNode['componentProperties']): string | null {
+    return findActualPropKey(props, 'type')
+        || findActualPropKey(props, 'Type');
+}
+
+function findXEmptyZrPropKey(props: InstanceNode['componentProperties']): string | null {
+    return findActualPropKey(props, 'zr')
+        || findActualPropKey(props, 'ZR');
+}
+
+function findXEmptyLabelPropKey(props: InstanceNode['componentProperties']): string | null {
+    return findActualPropKey(props, 'x-label')
+        || findActualPropKey(props, 'x_label')
+        || findActualPropKey(props, 'X-label')
+        || findActualPropKey(props, 'X_label');
+}
+
+function isStartTypeXEmpty(target: InstanceNode): boolean {
+    try {
+        const props = target.componentProperties;
+        const typeKey = findXEmptyTypePropKey(props);
+        if (!typeKey) return false;
+        return String(props[typeKey]?.value || '').trim().toLowerCase() === 'start';
+    } catch {
+        return false;
+    }
+}
+
+function resolveZrMode(columns: ColRef[]): boolean {
+    const firstCol = columns.find((col) => col.index === 1) || columns[0];
+    if (!firstCol) return false;
+    const firstXEmpty = findColumnXEmptyInstance(firstCol.node);
+    if (!firstXEmpty) return false;
+    return isStartTypeXEmpty(firstXEmpty);
+}
+
+function resolveXLabelForColumn(labels: string[], colIndex: number, zrMode: boolean): string {
+    if (!zrMode) return resolveLabelWithFallback(labels, colIndex, colIndex);
+    return resolveLabelWithFallback(labels, colIndex + 1, colIndex);
+}
+
+function resolveLegendFallbackLabel(labels: string[], colIndex: number, zrMode: boolean): string {
+    if (!zrMode) return resolveLabelWithFallback(labels, colIndex, colIndex);
+    if (colIndex === 0) {
+        return resolveLabelWithFallback(labels, 0, 1);
+    }
+    return resolveLabelWithFallback(labels, colIndex + 1, colIndex);
+}
+
+function readLegendLabelFromXEmpty(
+    target: InstanceNode,
+    colIndex: number,
+    labels: string[],
+    zrMode: boolean
+): string {
+    try {
+        const props = target.componentProperties;
+        if (zrMode && colIndex === 0) {
+            const zrKey = findXEmptyZrPropKey(props);
+            const zrLabel = zrKey ? normalizeLabel(props[zrKey]?.value) : '';
+            if (zrLabel) return zrLabel;
+        }
+        const xLabelKey = findXEmptyLabelPropKey(props);
+        const xLabel = xLabelKey ? normalizeLabel(props[xLabelKey]?.value) : '';
+        if (xLabel) return xLabel;
+    } catch {
+        // Keep fallback chain below.
+    }
+    return resolveLegendFallbackLabel(labels, colIndex, zrMode);
+}
+
 export function applyColumnXEmptyLabels(graph: SceneNode, labels: string[], precomputedCols?: ColRef[]) {
     const columns = precomputedCols ?? collectColumns(graph);
     const result = { candidates: columns.length, applied: 0, skipped: 0 };
@@ -201,30 +283,47 @@ export function applyColumnXEmptyLabels(graph: SceneNode, labels: string[], prec
         return result;
     }
 
+    const zrMode = resolveZrMode(columns);
+
     columns.forEach((col, colIndex) => {
         const target = findColumnXEmptyInstance(col.node);
-        const rawLabel = labels[colIndex];
-        const label = typeof rawLabel === 'string' ? rawLabel.trim() : '';
-
-        if (!target || !label) {
+        if (!target) {
             result.skipped += 1;
             return;
         }
 
         try {
             const props = target.componentProperties;
-            const propKey =
-                findActualPropKey(props, 'x-label')
-                || findActualPropKey(props, 'x_label')
-                || findActualPropKey(props, 'X-label')
-                || findActualPropKey(props, 'X_label');
-            if (!propKey) {
+            const updates: Record<string, string> = {};
+            let hasWritableValue = false;
+
+            if (zrMode && colIndex === 0) {
+                const zrKey = findXEmptyZrPropKey(props);
+                const zrLabel = normalizeLabel(labels[0]);
+                if (zrKey && zrLabel) {
+                    hasWritableValue = true;
+                    if (normalizeLabel(props[zrKey]?.value) !== zrLabel) {
+                        updates[zrKey] = zrLabel;
+                    }
+                }
+            }
+
+            const xLabelKey = findXEmptyLabelPropKey(props);
+            const xLabel = resolveXLabelForColumn(labels, colIndex, zrMode);
+            if (xLabelKey && xLabel) {
+                hasWritableValue = true;
+                if (normalizeLabel(props[xLabelKey]?.value) !== xLabel) {
+                    updates[xLabelKey] = xLabel;
+                }
+            }
+
+            if (!hasWritableValue) {
                 result.skipped += 1;
                 return;
             }
 
-            if (props[propKey].value !== label) {
-                target.setProperties({ [propKey]: label });
+            if (Object.keys(updates).length > 0) {
+                target.setProperties(updates);
                 result.applied += 1;
             } else {
                 result.skipped += 1;
@@ -290,28 +389,16 @@ export function applyLegendLabelsFromRowHeaders(
     }
 
     if (chartType === 'bar') {
+        const zrMode = resolveZrMode(columns);
         visibleColIndices.forEach((colIndex) => {
             if (!colColorEnabled[colIndex]) return;
             const colRef = columns.find((col) => col.index - 1 === colIndex);
             const xEmptyTarget = colRef ? findColumnXEmptyInstance(colRef.node) : null;
-            let xEmptyLabel = '';
-            if (xEmptyTarget && xEmptyTarget.type === 'INSTANCE') {
-                try {
-                    const props = xEmptyTarget.componentProperties;
-                    const propKey =
-                        findActualPropKey(props, 'x-label')
-                        || findActualPropKey(props, 'x_label')
-                        || findActualPropKey(props, 'X-label')
-                        || findActualPropKey(props, 'X_label');
-                    xEmptyLabel = propKey ? String(props[propKey]?.value || '').trim() : '';
-                } catch {
-                    // Keep fallback chain (xAxis label -> Cn) when x-label read fails.
-                }
-            }
-            const explicitLabel = Array.isArray(options.xAxisLabels)
-                ? String(options.xAxisLabels[colIndex] || '').trim()
-                : '';
-            resolvedLabels.push(xEmptyLabel || explicitLabel || `C${colIndex + 1}`);
+            const sourceLabels = Array.isArray(options.xAxisLabels) ? options.xAxisLabels : [];
+            const xEmptyLabel = xEmptyTarget
+                ? readLegendLabelFromXEmpty(xEmptyTarget, colIndex, sourceLabels, zrMode)
+                : resolveLegendFallbackLabel(sourceLabels, colIndex, zrMode);
+            resolvedLabels.push(xEmptyLabel || `C${colIndex + 1}`);
         });
     }
 
