@@ -1063,13 +1063,9 @@ export function bindStylePopoverEvents() {
     ui.styleItemLinkToggle.addEventListener('change', () => {
         if (!styleItemPopoverOpen || styleItemPopoverTarget !== 'mark') return;
         const strokeEnabled = ui.styleItemLinkToggle.checked;
-        setActiveMarkStrokeLinked(!strokeEnabled);
-        syncMarkLinkUiState();
-        if (!strokeEnabled) {
-            const linkedStroke = normalizeHexColorInput(ui.styleItemPrimaryColorInput.value) || DEFAULT_STYLE_INJECTION_DRAFT.mark.fillColor;
-            ui.styleItemSecondaryColorInput.value = linkedStroke;
-            applyStylePopoverHexInputValue(ui.styleItemSecondaryColorInput);
-        }
+        // Route through the Mark-tab toggle handler so both state and UI stay in sync.
+        ui.styleMarkStrokeToggle.checked = strokeEnabled;
+        ui.styleMarkStrokeToggle.dispatchEvent(new Event('change', { bubbles: true }));
     });
     ui.styleItemPrimaryColorInput.addEventListener('focus', () => {
         styleItemPopoverActiveColorField = 'primary';
