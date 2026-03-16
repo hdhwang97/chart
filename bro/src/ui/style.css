@@ -793,7 +793,7 @@ input[type=number]::-webkit-outer-spin-button {
 
 .style-injection-layout {
     border: 1px solid #E5E7EB;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 10px;
     display: flex;
     flex-direction: column;

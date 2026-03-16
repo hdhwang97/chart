@@ -168,7 +168,8 @@ function bindStyleInjectionTabEvents() {
             const sectionKey = sectionToggle.dataset.styleSectionToggle as StyleSectionKey | undefined;
             if (!sectionKey) return;
             const isExpanded = sectionToggle.getAttribute('aria-expanded') === 'true';
-            setExpandedStyleSection(isExpanded ? null : sectionKey);
+            const nextSection = sectionKey === 'templates' ? 'injection' : 'templates';
+            setExpandedStyleSection(isExpanded ? nextSection : sectionKey);
             return;
         }
 
