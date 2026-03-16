@@ -15,6 +15,7 @@ const TEMPLATE_MARK_FILL_FALLBACK = ['#3B82F6', '#60A5FA', '#A3E635', '#FBBF24']
 const TEMPLATE_MARK_STROKE_FALLBACK = '#111827';
 const TEMPLATE_PLOT_AREA_FALLBACK = ['#FFFFFF', '#111827', '#E5E7EB', '#111827'];
 const TEMPLATE_THUMBNAIL_BAR_HEIGHTS = [44, 68, 32, 80];
+type ColorChipDescriptor = { color: string; label: string };
 let templateRenameBlurTimer: ReturnType<typeof setTimeout> | null = null;
 
 function normalizeTemplateChartType(value: unknown): StyleTemplateChartType {
@@ -184,7 +185,7 @@ function resolveTemplateChartLabel(item: StyleTemplateItem): string {
     return CHART_TYPE_LABELS[normalizeTemplateChartType(item.chartType)];
 }
 
-function buildMarkSummaryColors(payload: StyleTemplatePayload): string[] {
+function buildMarkSummaryDescriptors(payload: StyleTemplatePayload): ColorChipDescriptor[] {
     const rowColors = uniqueColors(Array.isArray(payload.rowColors) ? payload.rowColors : []);
     const markStyleFillColors = uniqueColors(
         Array.isArray(payload.markStyles)
@@ -197,29 +198,55 @@ function buildMarkSummaryColors(payload: StyleTemplatePayload): string[] {
             ? markStyleFillColors
             : uniqueColors([payload.markStyle?.fillColor || '', ...TEMPLATE_MARK_FILL_FALLBACK]));
     const strokeColor = normalizeHexColorInput(payload.markStyle?.strokeColor) || TEMPLATE_MARK_STROKE_FALLBACK;
-    return [...fillColors.slice(0, 4), strokeColor];
-}
-
-function buildPlotAreaSummaryColors(payload: StyleTemplatePayload): string[] {
-    const resolved = [
-        normalizeHexColorInput(payload.cellFillStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[0],
-        normalizeHexColorInput(payload.gridContainerStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[1],
-        normalizeHexColorInput(payload.cellTopStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[2],
-        normalizeHexColorInput(payload.tabRightStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[3]
+    return [
+        ...fillColors.slice(0, 4).map((color, index) => ({
+            color,
+            label: `Mark Fill ${index + 1}`
+        })),
+        {
+            color: strokeColor,
+            label: 'Mark Stroke'
+        }
     ];
-    return resolved;
 }
 
-function renderColorChips(colors: string[], chipClass = 'style-template-color-chip'): string {
-    return colors.map((color) => (
-        `<span class="${chipClass}" style="background:${escapeHtml(color)}"></span>`
+function buildPlotAreaSummaryDescriptors(payload: StyleTemplatePayload): ColorChipDescriptor[] {
+    return [
+        {
+            color: normalizeHexColorInput(payload.cellFillStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[0],
+            label: 'Background'
+        },
+        {
+            color: normalizeHexColorInput(payload.gridContainerStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[1],
+            label: 'Plot Area'
+        },
+        {
+            color: normalizeHexColorInput(payload.cellTopStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[2],
+            label: 'Y-axis line'
+        },
+        {
+            color: normalizeHexColorInput(payload.tabRightStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[3],
+            label: 'X-axis line'
+        }
+    ];
+}
+
+function renderColorChips(chips: ColorChipDescriptor[], chipClass = 'style-template-color-chip'): string {
+    return chips.map(({ color, label }) => (
+        `<span class="style-template-color-chip-wrap" aria-label="${escapeHtml(`${label}: ${color}`)}">
+            <span class="${chipClass}" style="background:${escapeHtml(color)}"></span>
+            <span class="style-template-color-chip-tooltip">${escapeHtml(`${label}: ${color}`)}</span>
+        </span>`
     )).join('');
 }
 
-function renderTemplateThumbnail(item: StyleTemplateItem, markColors: string[], plotAreaColors: string[]): string {
+function renderTemplateThumbnail(item: StyleTemplateItem, markChips: ColorChipDescriptor[], plotAreaChips: ColorChipDescriptor[]): string {
     if (item.thumbnailDataUrl) {
         return `<img class="style-template-thumbnail-image" src="${escapeHtml(item.thumbnailDataUrl)}" alt="${escapeHtml(item.name)} thumbnail" />`;
     }
+
+    const markColors = markChips.map((chip) => chip.color);
+    const plotAreaColors = plotAreaChips.map((chip) => chip.color);
 
     return `
 <div class="style-template-thumbnail-fallback" style="background:${escapeHtml(plotAreaColors[0])}">
@@ -315,8 +342,8 @@ export function renderTemplateCard(item: StyleTemplateItem): string {
     const isOverwritePending = state.styleTemplateOverwritePendingId === item.id;
     const editing = state.editingTemplateId === item.id;
     const chartLabel = resolveTemplateChartLabel(item);
-    const markColors = buildMarkSummaryColors(payload);
-    const plotAreaColors = buildPlotAreaSummaryColors(payload);
+    const markChips = buildMarkSummaryDescriptors(payload);
+    const plotAreaChips = buildPlotAreaSummaryDescriptors(payload);
     const escapedName = escapeHtml(item.name);
 
     return `
@@ -334,21 +361,21 @@ export function renderTemplateCard(item: StyleTemplateItem): string {
     <button class="style-template-card-close" data-template-delete-id="${item.id}" type="button" aria-label="Delete template">×</button>
   </div>
   <div class="style-template-thumbnail">
-    ${renderTemplateThumbnail(item, markColors, plotAreaColors)}
+    ${renderTemplateThumbnail(item, markChips, plotAreaChips)}
   </div>
   <div class="style-template-card-section-title">Color</div>
   <div class="style-template-card-color-panel">
     <div class="style-template-card-color-row">
       <span class="style-template-card-color-label">Mark</span>
       <div class="style-template-card-color-chips">
-        ${renderColorChips(markColors)}
+        ${renderColorChips(markChips)}
       </div>
     </div>
     <div class="style-template-card-color-divider"></div>
     <div class="style-template-card-color-row">
       <span class="style-template-card-color-label">Plot Area</span>
       <div class="style-template-card-color-chips">
-        ${renderColorChips(plotAreaColors)}
+        ${renderColorChips(plotAreaChips)}
       </div>
     </div>
   </div>
