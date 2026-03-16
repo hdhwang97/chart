@@ -47,7 +47,7 @@ declare const iro: any;
 
 let uiInitialized = false;
 const pendingMessages: any[] = [];
-let assistLinePopoverOpen = false;
+let previewAssistLinePopoverOpen = false;
 let styleAssistLinePopoverOpen = false;
 let rowColorPopoverOpen = false;
 let activeColorTarget: { type: 'row' | 'col'; index: number } | null = null;
@@ -564,8 +564,7 @@ function applyColorHex(target: { type: 'row' | 'col'; index: number }, rawHex: s
 function openColorPopover(target: { type: 'row' | 'col'; index: number }, anchorRect: { left: number; top: number; right: number; bottom: number }) {
     if (state.mode === 'read') return;
     if (target.type === 'row' && isRowColorDisabledByColOverrides()) return;
-    if (assistLinePopoverOpen) closeAssistLinePopover();
-    if (styleAssistLinePopoverOpen) closeStyleAssistLinePopover();
+    closeAllAssistLinePopovers();
     ensureRowColorsLength(state.rows);
     ensureRowColorModesLength(state.rows);
     ensureRowPaintStyleIdsLength(state.rows);
@@ -677,14 +676,14 @@ function updateTemplateModeBanner() {
     ui.templateModeBanner.classList.toggle('hidden', !state.isTemplateMasterTarget);
 }
 
-function closeAssistLinePopover() {
-    assistLinePopoverOpen = false;
-    ui.assistLinePopover.classList.add('hidden');
+function closePreviewAssistLinePopover() {
+    previewAssistLinePopoverOpen = false;
+    ui.previewAssistLinePopover.classList.add('hidden');
 }
 
-function openAssistLinePopover() {
-    assistLinePopoverOpen = true;
-    ui.assistLinePopover.classList.remove('hidden');
+function openPreviewAssistLinePopover() {
+    previewAssistLinePopoverOpen = true;
+    ui.previewAssistLinePopover.classList.remove('hidden');
 }
 
 function closeStyleAssistLinePopover() {
@@ -697,23 +696,63 @@ function openStyleAssistLinePopover() {
     ui.styleAssistLinePopover.classList.remove('hidden');
 }
 
+function closeAllAssistLinePopovers() {
+    closePreviewAssistLinePopover();
+    closeStyleAssistLinePopover();
+}
+
+function updateYLabelFormatUi() {
+    const current = normalizeYLabelFormatMode(state.yLabelFormat);
+    const isDecimal = current === 'decimal';
+    ui.settingYLabelFormat.value = current;
+    ui.yLabelFormatToggleBtn.textContent = isDecimal ? 'ON' : 'OFF';
+    ui.yLabelFormatToggleBtn.className = isDecimal
+        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
+        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+}
+
+function setYLabelFormat(mode: string) {
+    state.yLabelFormat = normalizeYLabelFormatMode(mode);
+    updateYLabelFormatUi();
+    renderPreview();
+    renderStylePreview();
+    refreshExportPreview();
+}
+
 function updateAssistLineToggleUi() {
-    ui.assistLineToggleBtn.textContent = state.assistLineVisible ? 'ON' : 'OFF';
-    ui.assistLineToggleBtn.className = state.assistLineVisible
-        ? 'px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
-        : 'px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
-    ui.assistLineMinCheck.checked = state.assistLineEnabled.min;
-    ui.assistLineMaxCheck.checked = state.assistLineEnabled.max;
-    ui.assistLineAvgCheck.checked = state.assistLineEnabled.avg;
-    ui.assistLineCtrCheck.checked = state.assistLineEnabled.ctr;
-    ui.styleAssistLineToggleBtn.textContent = state.assistLineVisible ? 'ON' : 'OFF';
-    ui.styleAssistLineToggleBtn.className = state.assistLineVisible
-        ? 'px-2 py-0.5 text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
-        : 'px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
-    ui.styleAssistLineMinCheck.checked = state.assistLineEnabled.min;
-    ui.styleAssistLineMaxCheck.checked = state.assistLineEnabled.max;
-    ui.styleAssistLineAvgCheck.checked = state.assistLineEnabled.avg;
-    ui.styleAssistLineCtrCheck.checked = state.assistLineEnabled.ctr;
+    const toggleClass = state.assistLineVisible
+        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
+        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+    const toggleLabel = state.assistLineVisible ? 'ON' : 'OFF';
+    const syncAssistLineControl = (
+        toggleBtn: HTMLButtonElement,
+        minCheck: HTMLInputElement,
+        maxCheck: HTMLInputElement,
+        avgCheck: HTMLInputElement,
+        ctrCheck: HTMLInputElement
+    ) => {
+        toggleBtn.textContent = toggleLabel;
+        toggleBtn.className = toggleClass;
+        minCheck.checked = state.assistLineEnabled.min;
+        maxCheck.checked = state.assistLineEnabled.max;
+        avgCheck.checked = state.assistLineEnabled.avg;
+        ctrCheck.checked = state.assistLineEnabled.ctr;
+    };
+
+    syncAssistLineControl(
+        ui.previewAssistLineToggleBtn,
+        ui.previewAssistLineMinCheck,
+        ui.previewAssistLineMaxCheck,
+        ui.previewAssistLineAvgCheck,
+        ui.previewAssistLineCtrCheck
+    );
+    syncAssistLineControl(
+        ui.styleAssistLineToggleBtn,
+        ui.styleAssistLineMinCheck,
+        ui.styleAssistLineMaxCheck,
+        ui.styleAssistLineAvgCheck,
+        ui.styleAssistLineCtrCheck
+    );
 }
 
 function renderStylePreview() {
@@ -810,7 +849,7 @@ function handlePluginMessage(msg: any) {
     if (msg.type === 'init') {
         forceCloseStyleColorPopover();
         closeRowColorPopover();
-        closeStyleAssistLinePopover();
+        closeAllAssistLinePopovers();
         if (!msg.chartType) {
             // No selection
             state.uiMode = 'create';
@@ -835,9 +874,8 @@ function handlePluginMessage(msg: any) {
             ui.settingMarkRatioInput.value = '80';
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
-            ui.settingYLabelFormat.value = state.yLabelFormat;
-            closeAssistLinePopover();
-            closeStyleAssistLinePopover();
+            updateYLabelFormatUi();
+            closeAllAssistLinePopovers();
             closeRowColorPopover();
             updateAssistLineToggleUi();
             state.colStrokeStyle = null;
@@ -969,7 +1007,7 @@ function handlePluginMessage(msg: any) {
         state.yLabelFormat = normalizeYLabelFormatMode(msg.lastYLabelFormat);
         ui.settingYMin.value = msg.lastYMin !== undefined ? String(msg.lastYMin) : '0';
         ui.settingYMax.value = msg.lastYMax !== undefined ? String(msg.lastYMax) : ((msg.lastMode || 'raw') === 'raw' ? '' : '100');
-        ui.settingYLabelFormat.value = state.yLabelFormat;
+        updateYLabelFormatUi();
         if (msg.lastStrokeWidth !== undefined) {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
@@ -978,7 +1016,7 @@ function handlePluginMessage(msg: any) {
         state.assistLineVisible = normalizeAssistLineVisibleInput(msg.assistLineVisible);
         state.assistLineEnabled = normalizeAssistLineEnabledInput(msg.assistLineEnabled);
         ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
-        closeAssistLinePopover();
+        closeAllAssistLinePopovers();
         updateAssistLineToggleUi();
         state.colStrokeStyle = msg.colStrokeStyle || null;
         state.cellStrokeStyles = msg.cellStrokeStyles || [];
@@ -1274,36 +1312,39 @@ function bindUiEvents() {
         renderPreview();
         renderStylePreview();
     });
-    ui.assistLineLabelBtn.addEventListener('click', (e) => {
+    ui.previewAssistLineLabelBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (assistLinePopoverOpen) closeAssistLinePopover();
-        else openAssistLinePopover();
+        if (previewAssistLinePopoverOpen) closePreviewAssistLinePopover();
+        else openPreviewAssistLinePopover();
+    });
+    ui.yLabelFormatToggleBtn.addEventListener('click', () => {
+        setYLabelFormat(state.yLabelFormat === 'decimal' ? 'integer' : 'decimal');
     });
     ui.styleAssistLineLabelBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (styleAssistLinePopoverOpen) closeStyleAssistLinePopover();
         else openStyleAssistLinePopover();
     });
-    ui.assistLineToggleBtn.addEventListener('click', () => {
+    ui.previewAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);
     });
     ui.styleAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);
     });
-    ui.assistLineMinCheck.addEventListener('change', () => {
-        setAssistLineEnabledKey('min', ui.assistLineMinCheck.checked);
+    ui.previewAssistLineMinCheck.addEventListener('change', () => {
+        setAssistLineEnabledKey('min', ui.previewAssistLineMinCheck.checked);
         updateAssistLineToggleUi();
     });
-    ui.assistLineMaxCheck.addEventListener('change', () => {
-        setAssistLineEnabledKey('max', ui.assistLineMaxCheck.checked);
+    ui.previewAssistLineMaxCheck.addEventListener('change', () => {
+        setAssistLineEnabledKey('max', ui.previewAssistLineMaxCheck.checked);
         updateAssistLineToggleUi();
     });
-    ui.assistLineAvgCheck.addEventListener('change', () => {
-        setAssistLineEnabledKey('avg', ui.assistLineAvgCheck.checked);
+    ui.previewAssistLineAvgCheck.addEventListener('change', () => {
+        setAssistLineEnabledKey('avg', ui.previewAssistLineAvgCheck.checked);
         updateAssistLineToggleUi();
     });
-    ui.assistLineCtrCheck.addEventListener('change', () => {
-        setAssistLineEnabledKey('ctr', ui.assistLineCtrCheck.checked);
+    ui.previewAssistLineCtrCheck.addEventListener('change', () => {
+        setAssistLineEnabledKey('ctr', ui.previewAssistLineCtrCheck.checked);
         updateAssistLineToggleUi();
     });
     ui.styleAssistLineMinCheck.addEventListener('change', () => {
@@ -1322,8 +1363,8 @@ function bindUiEvents() {
         setAssistLineEnabledKey('ctr', ui.styleAssistLineCtrCheck.checked);
         updateAssistLineToggleUi();
     });
-    ui.assistLinePopover.addEventListener('click', (e) => e.stopPropagation());
-    ui.assistLineControl.addEventListener('click', (e) => e.stopPropagation());
+    ui.previewAssistLinePopover.addEventListener('click', (e) => e.stopPropagation());
+    ui.previewAssistLineControl.addEventListener('click', (e) => e.stopPropagation());
     ui.styleAssistLinePopover.addEventListener('click', (e) => e.stopPropagation());
     ui.styleAssistLineControl.addEventListener('click', (e) => e.stopPropagation());
     ui.rowColorPopover.addEventListener('click', (e) => e.stopPropagation());
@@ -1332,8 +1373,7 @@ function bindUiEvents() {
         if (!custom.detail || typeof custom.detail.row !== 'number') return;
         if (state.chartType === 'stackedBar' && custom.detail.row === 0) return;
         if (rowColorPopoverOpen) closeRowColorPopover();
-        if (assistLinePopoverOpen) closeAssistLinePopover();
-        if (styleAssistLinePopoverOpen) closeStyleAssistLinePopover();
+        closeAllAssistLinePopovers();
         const seriesIndex = getSeriesIndexForRow(state.chartType, custom.detail.row);
         openStyleItemPopoverWithMeta('mark', custom.detail.anchorRect, { seriesIndex });
     }) as EventListener);
@@ -1342,8 +1382,7 @@ function bindUiEvents() {
         if (!custom.detail || typeof custom.detail.col !== 'number') return;
         if (state.chartType !== 'bar') return;
         if (rowColorPopoverOpen) closeRowColorPopover();
-        if (assistLinePopoverOpen) closeAssistLinePopover();
-        if (styleAssistLinePopoverOpen) closeStyleAssistLinePopover();
+        closeAllAssistLinePopovers();
         openStyleItemPopoverWithMeta('column', custom.detail.anchorRect, { colIndex: custom.detail.col });
     }) as EventListener);
     const switchColorMode = (mode: ColorMode) => {
@@ -1450,19 +1489,15 @@ function bindUiEvents() {
         updateColorPopoverUi(activeColorTarget, getRowColor(0));
     });
     document.addEventListener('click', () => {
-        if (assistLinePopoverOpen) closeAssistLinePopover();
-        if (styleAssistLinePopoverOpen) closeStyleAssistLinePopover();
+        closeAllAssistLinePopovers();
         if (rowColorPopoverOpen) closeRowColorPopover();
     });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && rowColorPopoverOpen) {
             closeRowColorPopover();
         }
-        if (e.key === 'Escape' && assistLinePopoverOpen) {
-            closeAssistLinePopover();
-        }
-        if (e.key === 'Escape' && styleAssistLinePopoverOpen) {
-            closeStyleAssistLinePopover();
+        if (e.key === 'Escape' && (previewAssistLinePopoverOpen || styleAssistLinePopoverOpen)) {
+            closeAllAssistLinePopovers();
         }
     });
     document.addEventListener('request-paint-style-list', () => {
@@ -1491,10 +1526,7 @@ function bindUiEvents() {
         checkCtaValidation();
     });
     ui.settingYLabelFormat.addEventListener('change', () => {
-        state.yLabelFormat = normalizeYLabelFormatMode(ui.settingYLabelFormat.value);
-        renderPreview();
-        renderStylePreview();
-        refreshExportPreview();
+        setYLabelFormat(ui.settingYLabelFormat.value);
     });
 
     // CSV

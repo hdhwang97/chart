@@ -113,15 +113,17 @@ export function applyModeLocks() {
         ui.settingYMin,
         ui.settingYMax,
         ui.settingYLabelFormat,
+        ui.yLabelFormatToggleBtn,
         ui.settingMarkRatioInput,
         ui.settingStrokeInput,
         ui.modeRawBtn,
         ui.modePercentBtn,
-        ui.assistLineLabelBtn,
-        ui.assistLineToggleBtn,
-        ui.assistLineMinCheck,
-        ui.assistLineMaxCheck,
-        ui.assistLineAvgCheck
+        ui.previewAssistLineLabelBtn,
+        ui.previewAssistLineToggleBtn,
+        ui.previewAssistLineMinCheck,
+        ui.previewAssistLineMaxCheck,
+        ui.previewAssistLineAvgCheck,
+        ui.previewAssistLineCtrCheck
     ];
     graphInputs.forEach((el) => { el.disabled = isRead; });
 

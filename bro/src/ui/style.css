@@ -693,34 +693,6 @@ input[type=number]::-webkit-outer-spin-button {
     height: 1px;
 }
 
-.style-template-thumbnail-fallback--line {
-    overflow: hidden;
-}
-
-.style-template-thumbnail-line-grid {
-    position: absolute;
-    left: 22px;
-    right: 14px;
-    top: 14px;
-    bottom: 16px;
-    opacity: 0.14;
-}
-
-.style-template-thumbnail-lines {
-    position: absolute;
-    left: 20px;
-    right: 12px;
-    top: 10px;
-    bottom: 12px;
-}
-
-.style-template-thumbnail-line-layer {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-}
-
 .style-template-card-section-title {
     font-size: 10px;
     line-height: 1.2;
@@ -757,11 +729,9 @@ input[type=number]::-webkit-outer-spin-button {
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    flex-wrap: wrap;
     gap: 4px;
     min-width: 0;
     flex: 1 1 auto;
-    max-width: 80px;
 }
 
 .style-template-color-chip {
@@ -773,29 +743,12 @@ input[type=number]::-webkit-outer-spin-button {
     flex: 0 0 auto;
 }
 
-.style-template-color-chip--line {
-    position: relative;
-    background: #FFFFFF;
-    overflow: hidden;
-}
-
-.style-template-color-chip-line-fill {
-    position: absolute;
-    inset: 3px;
-    border-radius: 999px;
-    display: block;
-}
-
 .style-template-color-chip-wrap {
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    border: 0;
-    background: transparent;
-    padding: 0;
-    cursor: pointer;
 }
 
 .style-template-color-chip-tooltip {

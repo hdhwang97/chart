@@ -213,14 +213,6 @@
                         <input type="number" id="setting-y-max" value="100"
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors">
                     </div>
-                    <div class="flex flex-col gap-1 flex-1">
-                        <label id="label-y-label-format" class="text-xxs font-medium text-text-sub">Y Label</label>
-                        <select id="setting-y-label-format"
-                            class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none appearance-none bg-white cursor-pointer hover:border-text-sub transition-colors">
-                            <option value="integer" selected>Integer</option>
-                            <option value="decimal">Decimal</option>
-                        </select>
-                    </div>
                     <div id="container-stroke-width" class="flex flex-col gap-1 flex-1 hidden">
                         <label id="label-thickness" class="text-xxs font-medium text-text-sub gs-tooltip-anchor"
                             data-tooltip-key="thickness" tabindex="0">Thickness</label>
@@ -237,9 +229,48 @@
             <div class="flex flex-col gap-2 h-full">
                 <div id="preview-section"
                     class="bg-white border border-border rounded-md p-2 shadow-sm shrink-0 flex flex-col gap-2">
-                    <div class="flex items-center justify-between">
+                    <div class="flex items-center justify-between gap-3">
                         <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
-                        <span class="text-xxs text-text-sub">* Hover grid headers to highlight</span>
+                        <div class="flex items-center gap-3">
+                            <div id="y-label-format-control" class="flex items-center gap-1.5">
+                                <span id="y-label-format-label"
+                                    class="text-xxs font-semibold text-text-sub whitespace-nowrap">소수점 표시</span>
+                                <button id="y-label-format-toggle"
+                                    class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
+                                    type="button">OFF</button>
+                                <select id="setting-y-label-format" class="hidden" aria-hidden="true" tabindex="-1">
+                                    <option value="integer" selected>Integer</option>
+                                    <option value="decimal">Decimal</option>
+                                </select>
+                            </div>
+                            <div id="preview-assist-line-control" class="relative flex items-center gap-1.5">
+                                <button id="preview-assist-line-label-btn"
+                                    class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2"
+                                    type="button">보조선</button>
+                                <button id="preview-assist-line-toggle"
+                                    class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
+                                    type="button">OFF</button>
+                                <div id="preview-assist-line-popover"
+                                    class="hidden absolute top-6 right-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-assist-line-min-check" type="checkbox" class="cursor-pointer">
+                                        <span>min</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-assist-line-max-check" type="checkbox" class="cursor-pointer">
+                                        <span>max</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-assist-line-avg-check" type="checkbox" class="cursor-pointer">
+                                        <span>avg</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-assist-line-ctr-check" type="checkbox" class="cursor-pointer">
+                                        <span>ctr</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div id="chart-preview-container"
                         class="w-full h-52 bg-surface rounded border border-border flex items-center justify-center overflow-hidden relative">
@@ -282,33 +313,6 @@
                             초기화
                         </button>
                         <div class="flex items-center gap-1.5">
-                            <div id="assist-line-control" class="relative flex items-center gap-1.5">
-                                <button id="assist-line-label-btn"
-                                    class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer"
-                                    type="button">보조선</button>
-                                <button id="assist-line-toggle"
-                                    class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
-                                    type="button">OFF</button>
-                                <div id="assist-line-popover"
-                                    class="hidden absolute top-6 left-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">
-                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
-                                        <input id="assist-line-min-check" type="checkbox" class="cursor-pointer">
-                                        <span>min</span>
-                                    </label>
-                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
-                                        <input id="assist-line-max-check" type="checkbox" class="cursor-pointer">
-                                        <span>max</span>
-                                    </label>
-                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
-                                        <input id="assist-line-avg-check" type="checkbox" class="cursor-pointer">
-                                        <span>avg</span>
-                                    </label>
-                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
-                                        <input id="assist-line-ctr-check" type="checkbox" class="cursor-pointer">
-                                        <span>ctr</span>
-                                    </label>
-                                </div>
-                            </div>
                             <div id="mode-toggle-container"
                                 class="flex bg-surface rounded p-0.5 border border-border relative transition-colors duration-200">
                                 <button id="mode-raw"
@@ -382,10 +386,10 @@
                 <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
                 <div id="style-assist-line-control" class="relative flex items-center gap-1.5">
                     <button id="style-assist-line-label-btn"
-                        class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer"
+                        class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2"
                         type="button">보조선</button>
                     <button id="style-assist-line-toggle"
-                        class="px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
+                        class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
                         type="button">OFF</button>
                     <div id="style-assist-line-popover"
                         class="hidden absolute top-6 right-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">

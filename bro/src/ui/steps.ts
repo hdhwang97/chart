@@ -152,6 +152,10 @@ export function updateSettingInputs() {
     ui.settingCellInput.value = String(state.cellCount);
     ui.settingStrokeInput.value = String(state.strokeWidth);
     ui.settingYLabelFormat.value = state.yLabelFormat;
+    ui.yLabelFormatToggleBtn.textContent = state.yLabelFormat === 'decimal' ? 'ON' : 'OFF';
+    ui.yLabelFormatToggleBtn.className = state.yLabelFormat === 'decimal'
+        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
+        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
     state.markRatio = normalizeMarkRatio(state.markRatio);
     ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
     ui.containerMarkNormal.classList.remove('hidden');
