@@ -815,3 +815,386 @@ input[type=number]::-webkit-outer-spin-button {
     line-height: 1.5;
     color: #4B5563;
 }
+
+/* macOS window chrome retheme */
+:root {
+    --mac-bg: #ECEFF4;
+    --mac-surface: #F3F4F7;
+    --mac-panel: rgba(255, 255, 255, 0.92);
+    --mac-panel-strong: #FFFFFF;
+    --mac-panel-tint: #F6F7FA;
+    --mac-border: #D9DEE7;
+    --mac-border-strong: #C6CDD8;
+    --mac-divider: rgba(105, 114, 129, 0.16);
+    --mac-text: #1F2328;
+    --mac-text-sub: #697281;
+    --mac-text-faint: #8F96A3;
+    --mac-accent: #0A84FF;
+    --mac-accent-hover: #0070F2;
+    --mac-accent-soft: #E7F1FF;
+    --mac-accent-softer: #F4F8FF;
+    --mac-danger: #FF3B30;
+    --mac-shadow: 0 10px 28px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --mac-shadow-soft: 0 3px 10px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
+    --mac-segment-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 0.5px rgba(198, 205, 216, 0.8);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    background: linear-gradient(180deg, #F4F6FA 0%, var(--mac-bg) 100%);
+    color: var(--mac-text);
+    letter-spacing: -0.01em;
+}
+
+header {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 249, 251, 0.96) 100%);
+    border-bottom-color: var(--mac-border) !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.88), 0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+#step-2,
+#step-style,
+#step-export {
+    background: linear-gradient(180deg, #F3F5F9 0%, #ECEFF4 100%) !important;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #C9CFDA;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #B8C0CD;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+[class*="tracking-wider"] {
+    text-transform: none !important;
+    letter-spacing: 0.02em !important;
+}
+
+#step-1 > div,
+#graph-setting-panel,
+#preview-section,
+#csv-panel,
+#editor-card,
+#style-preview-card,
+#style-panel > .border,
+#export-preview-panel,
+#export-code-panel,
+#row-color-popover,
+#style-item-popover,
+#assist-line-popover,
+#style-assist-line-popover,
+.gs-tooltip {
+    background: var(--mac-panel) !important;
+    border-color: var(--mac-border) !important;
+    border-radius: 14px !important;
+    box-shadow: var(--mac-shadow) !important;
+}
+
+#editor-card,
+#preview-section,
+#graph-setting-panel,
+#style-preview-card,
+#style-panel > .border,
+#export-preview-panel,
+#export-code-panel {
+    overflow: hidden;
+}
+
+#template-mode-banner {
+    background: #FFF7DE !important;
+    border-color: #E9D6A4 !important;
+    color: #7C6120 !important;
+}
+
+#chart-preview-container,
+#style-preview-container,
+#d3-preview-container,
+#row-color-style-input-box,
+.style-template-thumbnail,
+.style-template-card-color-panel,
+.style-injection-layout,
+.style-injection-card,
+.row-color-style-main,
+.row-color-style-caret-btn,
+.row-color-style-menu,
+.style-item-color-input-readonly {
+    background: var(--mac-panel-tint) !important;
+    border-color: var(--mac-border) !important;
+}
+
+#grid-container-wrapper,
+#grid-container-wrapper > div:first-child,
+#grid-container-wrapper > div:last-child,
+#header-corner-tl,
+#header-corner-tr,
+#row-header-container {
+    background: #F4F6FA !important;
+}
+
+#grid-container-wrapper > div:last-child,
+#grid-container-wrapper > div:first-child,
+#editor-card > div:first-child,
+#editor-card > div:last-child,
+#csv-panel,
+#graph-setting-panel,
+#preview-section,
+#style-preview-card,
+#style-panel > .border,
+#export-preview-panel,
+#export-code-panel {
+    border-color: var(--mac-border) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+    border-color: var(--mac-border-strong) !important;
+    border-radius: 10px !important;
+    background: #FFFFFF !important;
+    color: var(--mac-text) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+    border-color: rgba(10, 132, 255, 0.58) !important;
+    box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.14) !important;
+    outline: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--mac-text-faint);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--mac-accent);
+}
+
+div[class*="bg-surface rounded p-0.5 border border-border"] {
+    background: linear-gradient(180deg, rgba(240, 242, 246, 0.96) 0%, rgba(234, 237, 242, 0.96) 100%) !important;
+    border-color: var(--mac-border-strong) !important;
+    border-radius: 11px !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+div[class*="bg-surface rounded p-0.5 border border-border"] > button {
+    border-radius: 9px !important;
+}
+
+div[class*="bg-surface rounded p-0.5 border border-border"] > button[class*="bg-white"] {
+    color: var(--mac-text) !important;
+    box-shadow: var(--mac-segment-shadow) !important;
+}
+
+button[class*="border border-border"],
+label[class*="border border-border"] {
+    border-color: var(--mac-border-strong) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 247, 250, 0.96) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+button[class*="hover:bg-gray-50"]:hover,
+label[class*="hover:bg-gray-50"]:hover,
+button[class*="hover:bg-surface"]:hover {
+    background: #F2F4F7 !important;
+}
+
+button[class*="hover:bg-blue-50"]:hover,
+label[class*="hover:bg-blue-50"]:hover {
+    background: var(--mac-accent-softer) !important;
+}
+
+button[class*="hover:border-primary"]:hover,
+label[class*="hover:border-primary"]:hover {
+    border-color: rgba(10, 132, 255, 0.4) !important;
+}
+
+button[class*="hover:text-primary"]:hover,
+label[class*="hover:text-primary"]:hover {
+    color: var(--mac-accent-hover) !important;
+}
+
+#main-cta {
+    background: linear-gradient(180deg, #2292FF 0%, var(--mac-accent) 100%) !important;
+    color: #FFFFFF !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 20px rgba(10, 132, 255, 0.18) !important;
+}
+
+#main-cta:hover {
+    background: linear-gradient(180deg, #1A88FF 0%, var(--mac-accent-hover) 100%) !important;
+}
+
+#main-cta:disabled {
+    background: linear-gradient(180deg, #F4F5F7 0%, #ECEEF2 100%) !important;
+    color: var(--mac-text-faint) !important;
+    border: 1px solid var(--mac-border) !important;
+    box-shadow: none !important;
+}
+
+#edit-mode-btn,
+#csv-export-btn,
+#back-btn,
+#toast-yes-btn {
+    color: var(--mac-accent) !important;
+}
+
+.tooltip-content,
+#restore-toast,
+#error-toast {
+    border-radius: 14px !important;
+    box-shadow: var(--mac-shadow) !important;
+}
+
+.tooltip-content {
+    background: rgba(34, 39, 46, 0.94) !important;
+}
+
+#restore-toast {
+    background: rgba(255, 255, 255, 0.98) !important;
+    color: var(--mac-text) !important;
+    border: 1px solid var(--mac-border);
+}
+
+#toast-close-btn {
+    color: var(--mac-text-faint) !important;
+}
+
+#toast-close-btn:hover {
+    color: var(--mac-text) !important;
+}
+
+#error-toast {
+    background: rgba(122, 39, 34, 0.96) !important;
+}
+
+.header-hover,
+.grid-cell-mark-hover,
+.grid-cell-self-hover {
+    background-color: var(--mac-accent-soft) !important;
+    color: var(--mac-accent-hover) !important;
+}
+
+.col-header.style-grid-linked-col {
+    background-color: var(--mac-accent-softer) !important;
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.28);
+}
+
+.col-color-swatch.style-grid-linked-col,
+.row-color-swatch:hover {
+    box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.26);
+}
+
+.grid-cell-stacked-overflow,
+.row-color-hex-error,
+.style-input-error,
+.style-color-hex-error {
+    background-color: #FFF1F0 !important;
+    border-color: rgba(255, 59, 48, 0.5) !important;
+}
+
+.row-color-mode-tab,
+.style-item-segment-btn,
+.style-injection-tab {
+    border-color: var(--mac-border) !important;
+    border-radius: 999px !important;
+    background: linear-gradient(180deg, rgba(244, 246, 249, 0.98) 0%, rgba(235, 238, 243, 0.98) 100%) !important;
+    color: var(--mac-text-sub) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.row-color-mode-tab.is-active,
+.style-item-segment-btn.is-active,
+.style-injection-tab.is-active {
+    border-color: rgba(10, 132, 255, 0.18) !important;
+    background: #FFFFFF !important;
+    color: var(--mac-text) !important;
+    box-shadow: var(--mac-segment-shadow) !important;
+}
+
+.style-item-step-btn,
+.style-item-close-btn,
+.style-template-card-action,
+.row-color-style-chip-close {
+    color: var(--mac-text-sub);
+}
+
+.style-item-step-btn,
+.style-item-close-btn,
+.row-color-style-caret-btn {
+    border-color: var(--mac-border) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 246, 249, 0.98) 100%) !important;
+}
+
+.style-template-card,
+.style-injection-card,
+.style-injection-layout {
+    border-color: var(--mac-border) !important;
+    box-shadow: var(--mac-shadow-soft);
+}
+
+.style-template-card:hover {
+    border-color: rgba(10, 132, 255, 0.3) !important;
+    box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.12), var(--mac-shadow-soft) !important;
+}
+
+.style-template-card.selected {
+    border-color: rgba(10, 132, 255, 0.34) !important;
+    background: #F9FBFF !important;
+    box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.14), var(--mac-shadow-soft) !important;
+}
+
+.style-template-card-action--primary {
+    color: var(--mac-accent) !important;
+}
+
+.style-template-card-action--danger:hover {
+    color: var(--mac-danger) !important;
+}
+
+.style-template-empty {
+    background: rgba(255, 255, 255, 0.66);
+    border-color: var(--mac-border) !important;
+    color: var(--mac-text-faint);
+}
+
+.style-injection-card-title,
+.style-template-card-title,
+.style-template-card-section-title,
+.gs-tooltip-title {
+    color: var(--mac-text) !important;
+}
+
+.style-template-card-subtitle,
+.style-template-card-color-label,
+.style-injection-toggle-row,
+.style-injection-visible-toggle,
+.style-item-nav-label,
+.gs-tooltip-body {
+    color: var(--mac-text-sub) !important;
+}
+
+.style-template-card-color-divider,
+.gs-tooltip-image {
+    border-color: var(--mac-border) !important;
+}
