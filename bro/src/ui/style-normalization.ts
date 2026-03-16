@@ -575,7 +575,7 @@ export function buildDraftFromPayload(
     if (markFillEnabled()) {
         for (let i = 0; i < links.length; i++) {
             if (typeof enabledSeed[i] === 'boolean') {
-                links[i] = !Boolean(enabledSeed[i]);
+                links[i] = !enabledSeed[i];
             }
         }
     }

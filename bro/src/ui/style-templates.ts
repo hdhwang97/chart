@@ -6,6 +6,15 @@ import { emitStyleDraftUpdated, hydrateStyleTab, markStyleInjectionDirty, setSty
 import type { StyleTemplateChartType, StyleTemplateItem, StyleTemplatePayload, StyleTemplateStoredPayload } from '../shared/style-types';
 
 const MAX_STYLE_TEMPLATES = 20;
+const CHART_TYPE_LABELS: Record<StyleTemplateChartType, string> = {
+    bar: 'Bar graph',
+    line: 'Line graph',
+    stackedBar: 'Stacked bar'
+};
+const TEMPLATE_MARK_FILL_FALLBACK = ['#3B82F6', '#60A5FA', '#A3E635', '#FBBF24'];
+const TEMPLATE_MARK_STROKE_FALLBACK = '#111827';
+const TEMPLATE_PLOT_AREA_FALLBACK = ['#FFFFFF', '#111827', '#E5E7EB', '#111827'];
+const TEMPLATE_THUMBNAIL_BAR_HEIGHTS = [44, 68, 32, 80];
 
 function normalizeTemplateChartType(value: unknown): StyleTemplateChartType {
     if (value === 'line') return 'line';
@@ -81,6 +90,71 @@ export function estimateNextTemplateName(): string {
         if (!names.has(candidate)) return candidate;
     }
     return `Template ${Date.now()}`;
+}
+
+function uniqueColors(colors: string[]): string[] {
+    const seen = new Set<string>();
+    const next: string[] = [];
+    colors.forEach((color) => {
+        const normalized = normalizeHexColorInput(color);
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        next.push(normalized);
+    });
+    return next;
+}
+
+function resolveTemplateChartLabel(item: StyleTemplateItem): string {
+    return CHART_TYPE_LABELS[normalizeTemplateChartType(item.chartType)];
+}
+
+function buildMarkSummaryColors(payload: StyleTemplatePayload): string[] {
+    const rowColors = uniqueColors(Array.isArray(payload.rowColors) ? payload.rowColors : []);
+    const markStyleFillColors = uniqueColors(
+        Array.isArray(payload.markStyles)
+            ? payload.markStyles.map((style) => style.fillColor || '')
+            : []
+    );
+    const fillColors = rowColors.length > 0
+        ? rowColors
+        : (markStyleFillColors.length > 0
+            ? markStyleFillColors
+            : uniqueColors([payload.markStyle?.fillColor || '', ...TEMPLATE_MARK_FILL_FALLBACK]));
+    const strokeColor = normalizeHexColorInput(payload.markStyle?.strokeColor) || TEMPLATE_MARK_STROKE_FALLBACK;
+    return [...fillColors.slice(0, 4), strokeColor];
+}
+
+function buildPlotAreaSummaryColors(payload: StyleTemplatePayload): string[] {
+    const resolved = [
+        normalizeHexColorInput(payload.cellFillStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[0],
+        normalizeHexColorInput(payload.gridContainerStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[1],
+        normalizeHexColorInput(payload.cellTopStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[2],
+        normalizeHexColorInput(payload.tabRightStyle?.color) || TEMPLATE_PLOT_AREA_FALLBACK[3]
+    ];
+    return resolved;
+}
+
+function renderColorChips(colors: string[], chipClass = 'style-template-color-chip'): string {
+    return colors.map((color) => (
+        `<span class="${chipClass}" style="background:${escapeHtml(color)}"></span>`
+    )).join('');
+}
+
+function renderTemplateThumbnail(item: StyleTemplateItem, markColors: string[], plotAreaColors: string[]): string {
+    if (item.thumbnailDataUrl) {
+        return `<img class="style-template-thumbnail-image" src="${escapeHtml(item.thumbnailDataUrl)}" alt="${escapeHtml(item.name)} thumbnail" />`;
+    }
+
+    return `
+<div class="style-template-thumbnail-fallback" style="background:${escapeHtml(plotAreaColors[0])}">
+  <div class="style-template-thumbnail-axis style-template-thumbnail-axis--y" style="background:${escapeHtml(plotAreaColors[2])}"></div>
+  <div class="style-template-thumbnail-axis style-template-thumbnail-axis--x" style="background:${escapeHtml(plotAreaColors[3])}"></div>
+  <div class="style-template-thumbnail-bars">
+    ${markColors.slice(0, 4).map((color, index) => (
+        `<span class="style-template-thumbnail-bar" style="height:${TEMPLATE_THUMBNAIL_BAR_HEIGHTS[index]}%;background:${escapeHtml(color)};border-color:${escapeHtml(plotAreaColors[1])}"></span>`
+    )).join('')}
+  </div>
+</div>`;
 }
 
 export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
@@ -163,42 +237,52 @@ export function renderTemplateCard(item: StyleTemplateItem): string {
     const selectedClass = state.selectedStyleTemplateId === item.id ? ' selected' : '';
     const inEdit = state.styleTemplateMode === 'edit';
     const editing = inEdit && state.editingTemplateId === item.id;
-    const swatches = [
-        payload.cellFillStyle?.color || '#FFFFFF',
-        payload.markStyle?.lineBackgroundColor || payload.markStyle?.strokeColor || payload.markStyle?.fillColor || '#3B82F6',
-        payload.markStyle?.fillColor || payload.markStyle?.strokeColor || '#3B82F6',
-        payload.cellTopStyle?.color || '#E5E7EB',
-        payload.tabRightStyle?.color || '#E5E7EB',
-        payload.gridContainerStyle?.color || '#E5E7EB',
-        payload.assistLineStyle?.color || '#E5E7EB'
-    ];
+    const chartLabel = resolveTemplateChartLabel(item);
+    const markColors = buildMarkSummaryColors(payload);
+    const plotAreaColors = buildPlotAreaSummaryColors(payload);
     const escapedName = escapeHtml(item.name);
 
     return `
 <div class="style-template-card${selectedClass}" data-template-id="${item.id}">
-  <div class="style-template-preview">
-    ${swatches.map((color) => `<span class="style-template-swatch" style="background:${escapeHtml(color || '#E5E7EB')}"></span>`).join('')}
-  </div>
-  <div class="flex items-start justify-between gap-2">
-    <div class="min-w-0">
+  <div class="style-template-card-header">
+    <div class="style-template-card-header-copy">
       ${editing
-            ? `<input class="w-full px-1.5 py-0.5 border border-border rounded text-xxs" data-template-rename-input-id="${item.id}" value="${escapeHtml(state.editingTemplateName || item.name)}" maxlength="40" />`
-            : `<div class="text-xxs font-semibold text-text truncate">${escapedName}</div>`
+            ? `<input class="style-template-card-title-input" data-template-rename-input-id="${item.id}" value="${escapeHtml(state.editingTemplateName || item.name)}" maxlength="40" />`
+            : `<div class="style-template-card-title">${escapedName}</div>`
         }
-      <div class="text-[10px] text-text-sub">Updated ${formatTemplateTime(item.updatedAt)}</div>
+      <div class="style-template-card-subtitle">${escapeHtml(chartLabel)}</div>
     </div>
     ${inEdit
             ? editing
-                ? `<div class="flex gap-1">
-                    <button class="text-[10px] px-1.5 py-0.5 rounded border border-border text-primary hover:bg-blue-50 cursor-pointer" data-template-rename-save-id="${item.id}" type="button">Save</button>
-                    <button class="text-[10px] px-1.5 py-0.5 rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer" data-template-rename-cancel-id="${item.id}" type="button">Cancel</button>
+                ? `<div class="style-template-card-actions">
+                    <button class="style-template-card-action style-template-card-action--primary" data-template-rename-save-id="${item.id}" type="button">Save</button>
+                    <button class="style-template-card-action" data-template-rename-cancel-id="${item.id}" type="button">Cancel</button>
                    </div>`
-                : `<div class="flex gap-1">
-                    <button class="text-[10px] px-1.5 py-0.5 rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer" data-template-rename-id="${item.id}" type="button">Rename</button>
-                    <button class="text-[10px] px-1.5 py-0.5 rounded border border-border text-danger hover:bg-red-50 cursor-pointer style-template-delete-btn" data-template-delete-id="${item.id}" type="button">Delete</button>
+                : `<div class="style-template-card-actions">
+                    <button class="style-template-card-action" data-template-rename-id="${item.id}" type="button">Rename</button>
+                    <button class="style-template-card-action style-template-card-action--danger" data-template-delete-id="${item.id}" type="button">Delete</button>
                    </div>`
             : ''
         }
+  </div>
+  <div class="style-template-thumbnail">
+    ${renderTemplateThumbnail(item, markColors, plotAreaColors)}
+  </div>
+  <div class="style-template-card-section-title">Color</div>
+  <div class="style-template-card-color-panel">
+    <div class="style-template-card-color-row">
+      <span class="style-template-card-color-label">Mark</span>
+      <div class="style-template-card-color-chips">
+        ${renderColorChips(markColors)}
+      </div>
+    </div>
+    <div class="style-template-card-color-divider"></div>
+    <div class="style-template-card-color-row">
+      <span class="style-template-card-color-label">Plot Area</span>
+      <div class="style-template-card-color-chips">
+        ${renderColorChips(plotAreaColors)}
+      </div>
+    </div>
   </div>
 </div>`;
 }

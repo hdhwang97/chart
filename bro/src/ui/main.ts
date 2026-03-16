@@ -726,6 +726,63 @@ function renderStylePreview() {
     });
 }
 
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Failed to load style preview image.'));
+        image.src = src;
+    });
+}
+
+async function captureStylePreviewThumbnail(): Promise<string | undefined> {
+    const svg = ui.stylePreviewContainer.querySelector<SVGSVGElement>('svg');
+    if (!svg) return undefined;
+
+    const serializer = new XMLSerializer();
+    let svgMarkup = serializer.serializeToString(svg);
+    if (!svgMarkup.includes('xmlns=')) {
+        svgMarkup = svgMarkup.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+
+    const sourceWidth = Number(svg.getAttribute('width')) || svg.viewBox.baseVal.width || svg.clientWidth || ui.stylePreviewContainer.clientWidth || 306;
+    const sourceHeight = Number(svg.getAttribute('height')) || svg.viewBox.baseVal.height || svg.clientHeight || ui.stylePreviewContainer.clientHeight || 118;
+    const canvasWidth = 260;
+    const canvasHeight = 100;
+    const padding = 6;
+    const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(svgBlob);
+
+    try {
+        const image = await loadImageElement(objectUrl);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return undefined;
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        const scale = Math.min(
+            (canvasWidth - (padding * 2)) / Math.max(1, sourceWidth),
+            (canvasHeight - (padding * 2)) / Math.max(1, sourceHeight)
+        );
+        const drawWidth = sourceWidth * scale;
+        const drawHeight = sourceHeight * scale;
+        const offsetX = (canvasWidth - drawWidth) / 2;
+        const offsetY = (canvasHeight - drawHeight) / 2;
+
+        ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+        return canvas.toDataURL('image/png');
+    } catch {
+        return undefined;
+    } finally {
+        URL.revokeObjectURL(objectUrl);
+    }
+}
+
 function setAssistLineVisible(next: boolean) {
     state.assistLineVisible = next;
     if (state.isInstanceTarget) {
@@ -1451,7 +1508,7 @@ function bindUiEvents() {
 
     bindStyleTabEvents();
     setStyleTemplateMode('read');
-    ui.styleTemplateAddBtn.addEventListener('click', () => {
+    ui.styleTemplateAddBtn.addEventListener('click', async () => {
         const name = requestNewTemplateName();
         const draft = readStyleTabDraft();
         const validated = validateStyleTabDraft(draft);
@@ -1461,7 +1518,8 @@ function bindUiEvents() {
             return;
         }
         const payload = buildTemplatePayloadFromDraft(validated.draft);
-        parent.postMessage({ pluginMessage: { type: 'save_style_template', name, payload, chartType: state.chartType } }, '*');
+        const thumbnailDataUrl = await captureStylePreviewThumbnail();
+        parent.postMessage({ pluginMessage: { type: 'save_style_template', name, payload, chartType: state.chartType, thumbnailDataUrl } }, '*');
     });
     document.addEventListener('style-draft-updated', () => {
         if (state.isInstanceTarget) {

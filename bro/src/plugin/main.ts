@@ -1302,7 +1302,7 @@ figma.ui.onmessage = async (msg) => {
         figma.ui.postMessage({ type: 'style_templates_loaded', list });
     }
     else if (msg.type === 'save_style_template') {
-        const result = await saveStyleTemplate(msg.name, msg.payload, msg.chartType);
+        const result = await saveStyleTemplate(msg.name, msg.payload, msg.chartType, msg.thumbnailDataUrl);
         if (result.error) {
             figma.ui.postMessage({ type: 'style_template_error', reason: result.error });
             return;

@@ -289,6 +289,13 @@ function normalizeTemplateName(name: unknown): string | null {
     return trimmed;
 }
 
+function normalizeThumbnailDataUrl(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    if (!trimmed || !trimmed.startsWith('data:image/')) return undefined;
+    return trimmed;
+}
+
 function sortTemplates(items: StyleTemplateItem[]): StyleTemplateItem[] {
     return [...items].sort((a, b) => b.updatedAt - a.updatedAt);
 }
@@ -300,6 +307,7 @@ function normalizeTemplateItem(value: unknown): StyleTemplateItem | null {
     const name = normalizeTemplateName(source.name);
     const chartType = normalizeTemplateChartType((source as any).chartType);
     const payload = normalizeStructuredPayload(source.payload, chartType);
+    const thumbnailDataUrl = normalizeThumbnailDataUrl(source.thumbnailDataUrl);
     const createdAt = Number(source.createdAt);
     const updatedAt = Number(source.updatedAt);
 
@@ -311,6 +319,7 @@ function normalizeTemplateItem(value: unknown): StyleTemplateItem | null {
         name,
         chartType,
         payload,
+        thumbnailDataUrl,
         createdAt,
         updatedAt
     };
@@ -342,7 +351,8 @@ async function persistTemplates(items: StyleTemplateItem[]) {
 export async function saveStyleTemplate(
     name: unknown,
     payloadInput: unknown,
-    chartTypeInput?: unknown
+    chartTypeInput?: unknown,
+    thumbnailDataUrlInput?: unknown
 ): Promise<{ list?: StyleTemplateItem[]; error?: string }> {
     const normalizedName = normalizeTemplateName(name);
     if (!normalizedName) return { error: 'Template name must be 1-40 chars.' };
@@ -350,6 +360,7 @@ export async function saveStyleTemplate(
 
     const payload = normalizeStructuredPayload(payloadInput, chartType);
     if (!payload) return { error: 'Template payload is empty or invalid.' };
+    const thumbnailDataUrl = normalizeThumbnailDataUrl(thumbnailDataUrlInput);
 
     const list = await loadAllStyleTemplates();
     const sameChartTypeCount = list.filter((item) => normalizeTemplateChartType((item as any).chartType) === chartType).length;
@@ -363,6 +374,7 @@ export async function saveStyleTemplate(
         name: normalizedName,
         chartType,
         payload,
+        thumbnailDataUrl,
         createdAt: now,
         updatedAt: now
     };

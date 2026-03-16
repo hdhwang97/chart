@@ -176,6 +176,7 @@ export type StyleTemplateItem = {
     name: string;
     chartType?: string;
     payload: StyleTemplatePayload | StyleTemplateStoredPayload;
+    thumbnailDataUrl?: string;
     createdAt: number;
     updatedAt: number;
 };
