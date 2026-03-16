@@ -197,7 +197,7 @@ export function getBackgroundTargetLabel(target: BackgroundPopoverTarget): strin
     if (target === 'cell-top') return 'Y-axis line';
     if (target === 'tab-right') return 'X-axis line';
     if (target === 'grid') return 'Plot area';
-    return 'Assist line';
+    return 'guide line';
 }
 
 export function getBackgroundTargetIndex(target: BackgroundPopoverTarget): number {
@@ -436,7 +436,7 @@ export function getStylePopoverConfigForTarget(
     }
     if (target === 'assist-line') {
         return {
-            title: 'Assist line',
+            title: 'guide line',
             primaryLabel: 'Color (HEX)',
             primaryInput: ui.styleAssistLineColorInput,
             strokeStyleInput: ui.styleAssistLineStrokeStyleInput,

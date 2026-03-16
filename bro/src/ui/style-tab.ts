@@ -35,7 +35,7 @@ function debounce<F extends (...args: any[]) => void>(func: F, wait: number): F 
     } as F;
 }
 
-type StyleInjectionTabKey = 'plot-area' | 'mark' | 'assist-line';
+type StyleInjectionTabKey = 'plot-area' | 'mark';
 type StyleSectionKey = 'templates' | 'injection';
 
 function markFillEnabled() {
@@ -116,6 +116,30 @@ function syncMarkStyleCardVisibility() {
     ui.styleMarkFillCard.classList.toggle('hidden', !markFillEnabled());
     ui.styleMarkLineBackgroundCard.classList.toggle('hidden', !markLineBackgroundEnabled());
     syncMarkStrokeCardState();
+}
+
+function syncVisibleControlledStyleCards() {
+    const visibleInputs = [
+        ui.styleLineBackgroundVisibleInput,
+        ui.styleCellTopVisibleInput,
+        ui.styleTabRightVisibleInput,
+        ui.styleGridVisibleInput,
+        ui.styleAssistLineVisibleInput,
+        ui.styleMarkLineBackgroundVisibleInput
+    ];
+
+    visibleInputs.forEach((visibleInput) => {
+        const card = visibleInput.closest<HTMLElement>('.style-injection-card');
+        if (!card) return;
+        const enabled = visibleInput.checked;
+        card.classList.toggle('is-disabled', !enabled);
+        card.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+        card.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>('input, select, textarea, button')
+            .forEach((control) => {
+                if (control === visibleInput) return;
+                control.disabled = !enabled;
+            });
+    });
 }
 
 function setActiveStyleInjectionTab(tabKey: StyleInjectionTabKey) {
@@ -221,7 +245,7 @@ export function resolveStyleColorLabel(input: HTMLInputElement): string {
     if (input === ui.styleCellTopColorInput) return 'Y-axis line';
     if (input === ui.styleTabRightColorInput) return 'X-axis line';
     if (input === ui.styleGridColorInput) return 'Plot area';
-    if (input === ui.styleAssistLineColorInput) return 'Assist Line';
+    if (input === ui.styleAssistLineColorInput) return 'guide line';
     return 'Style Color';
 }
 
@@ -422,9 +446,11 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleGridSideBottomInput.checked = draft.gridContainer.sides.bottom;
     ui.styleGridSideLeftInput.checked = draft.gridContainer.sides.left;
 
+    ui.styleAssistLineVisibleInput.checked = state.assistLineVisible;
     ui.styleAssistLineColorInput.value = draft.assistLine.color;
     ui.styleAssistLineStrokeStyleInput.value = draft.assistLine.strokeStyle;
     ui.styleAssistLineThicknessInput.value = String(draft.assistLine.thickness);
+    syncVisibleControlledStyleCards();
 
     if (styleItemPopoverOpen && styleItemPopoverConfig) {
         syncStyleItemPopoverFromConfig(styleItemPopoverConfig);
@@ -718,8 +744,21 @@ export function syncStyleTabDraftFromExtracted(extracted: ExtractedStylePayload)
 export function bindStyleTabEvents() {
     bindStyleInjectionTabEvents();
 
+    const syncLineBackgroundVisibility = (checked: boolean) => {
+        ui.styleMarkLineBackgroundVisibleInput.checked = checked;
+        ui.styleLineBackgroundVisibleInput.checked = checked;
+        syncVisibleControlledStyleCards();
+    };
     ui.styleMarkLineBackgroundVisibleInput.addEventListener('change', () => {
-        ui.styleLineBackgroundVisibleInput.checked = ui.styleMarkLineBackgroundVisibleInput.checked;
+        syncLineBackgroundVisibility(ui.styleMarkLineBackgroundVisibleInput.checked);
+    });
+    ui.styleLineBackgroundVisibleInput.addEventListener('change', () => {
+        syncLineBackgroundVisibility(ui.styleLineBackgroundVisibleInput.checked);
+    });
+    [ui.styleCellTopVisibleInput, ui.styleTabRightVisibleInput, ui.styleGridVisibleInput, ui.styleAssistLineVisibleInput].forEach((input) => {
+        input.addEventListener('change', () => {
+            syncVisibleControlledStyleCards();
+        });
     });
 
     const handleChange = debounce(() => {
@@ -770,6 +809,7 @@ export function bindStyleTabEvents() {
         ui.styleMarkStrokeSidesLeftInput.checked = activeSides.left;
         ui.styleMarkStrokeSidesRightInput.checked = activeSides.right;
         syncMarkStyleCardVisibility();
+        syncVisibleControlledStyleCards();
         syncAllHexPreviewsFromDom();
         if (styleItemPopoverOpen && styleItemPopoverTarget === 'mark' && styleItemPopoverConfig) {
             syncStyleItemPopoverFromConfig(styleItemPopoverConfig);

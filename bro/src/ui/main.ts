@@ -753,6 +753,7 @@ function updateAssistLineToggleUi() {
         ui.styleAssistLineAvgCheck,
         ui.styleAssistLineCtrCheck
     );
+    ui.styleAssistLineVisibleInput.checked = state.assistLineVisible;
 }
 
 function renderStylePreview() {
@@ -1330,6 +1331,9 @@ function bindUiEvents() {
     });
     ui.styleAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);
+    });
+    ui.styleAssistLineVisibleInput.addEventListener('change', () => {
+        setAssistLineVisible(ui.styleAssistLineVisibleInput.checked);
     });
     ui.previewAssistLineMinCheck.addEventListener('change', () => {
         setAssistLineEnabledKey('min', ui.previewAssistLineMinCheck.checked);

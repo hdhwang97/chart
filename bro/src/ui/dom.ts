@@ -188,6 +188,7 @@ export const ui = {
     get styleGridSideRightInput() { return byId<HTMLInputElement>('style-grid-side-right'); },
     get styleGridSideBottomInput() { return byId<HTMLInputElement>('style-grid-side-bottom'); },
     get styleGridSideLeftInput() { return byId<HTMLInputElement>('style-grid-side-left'); },
+    get styleAssistLineVisibleInput() { return byId<HTMLInputElement>('style-assist-line-visible'); },
     get styleAssistLineColorInput() { return byId<HTMLInputElement>('style-assist-line-color'); },
     get styleAssistLineThicknessInput() { return byId<HTMLInputElement>('style-assist-line-thickness'); },
     get styleAssistLineStrokeStyleInput() { return byId<HTMLSelectElement>('style-assist-line-stroke-style'); },

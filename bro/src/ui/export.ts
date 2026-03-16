@@ -310,7 +310,9 @@ function renderAxes(
 
     const yAxisGroup = g.append('g').call(yAxis);
     yAxisGroup.selectAll('.tick line').remove();
-    yAxisGroup.selectAll('text').attr('font-size', 9);
+    yAxisGroup.selectAll('text')
+        .attr('font-size', 9)
+        .attr('font-family', 'Inter, sans-serif');
 
     const xAxis = d3.axisBottom(xScale)
         .tickSizeOuter(0)
@@ -323,7 +325,9 @@ function renderAxes(
         .attr('transform', `translate(0,${h})`)
         .call(xAxis);
     xAxisGroup.selectAll('.tick line').remove();
-    xAxisGroup.selectAll('text').attr('font-size', 9);
+    xAxisGroup.selectAll('text')
+        .attr('font-size', 9)
+        .attr('font-family', 'Inter, sans-serif');
 }
 
 function drawGuides(g: any, w: number, h: number, colCount: number, yCellCount: number, colStroke: StrokeStyleSnapshot | null, rowStrokes: RowStrokeStyle[], xGuidePositions?: number[]) {
