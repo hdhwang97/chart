@@ -413,12 +413,12 @@
                 <span class="text-text-sub text-xs">Generating Preview...</span>
             </div>
         </div>
-        <div id="style-panel" class="style-panel-scroll-area flex flex-col gap-4 overflow-auto">
-            <div class="border border-border rounded-md p-2 flex flex-col gap-2">
-                <div class="flex items-center justify-between gap-2">
+        <div id="style-panel" class="style-panel-scroll-area flex flex-col gap-4 overflow-hidden flex-1 min-h-0">
+            <div class="style-section-shell is-collapsed border border-border rounded-md p-2 flex flex-col gap-2 min-h-0" data-style-section="templates">
+                <div class="style-section-header flex items-center justify-between gap-2 shrink-0">
                     <h2 class="text-xs font-semibold text-text-sub m-0">Templates</h2>
-                    <div class="flex items-center gap-2">
-                        <div class="flex bg-surface rounded p-0.5 border border-border">
+                    <div class="style-template-header-actions flex items-center gap-2">
+                        <div class="style-template-mode-switch flex bg-surface rounded p-0.5 border border-border">
                             <button id="style-template-mode-read"
                                 class="px-2 py-0.5 text-xxs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer"
                                 type="button">Read</button>
@@ -429,26 +429,34 @@
                         <button id="style-template-add-btn"
                             class="px-2 py-1 text-xxs font-semibold rounded border border-border bg-white hover:border-primary hover:text-primary transition-colors cursor-pointer"
                             type="button">+ 템플릿 추가</button>
+                        <button class="style-section-toggle" type="button" data-style-section-toggle="templates" aria-expanded="false" aria-label="Toggle templates section">
+                            <span class="style-section-toggle-icon" aria-hidden="true"></span>
+                        </button>
                     </div>
                 </div>
                 <div id="style-template-gallery"
-                    class="grid grid-cols-2 gap-2 max-h-96 overflow-auto pr-1"></div>
+                    class="style-section-scroll-area grid grid-cols-3 gap-2 overflow-auto pr-1 min-h-0"></div>
             </div>
 
-            <div class="flex items-center justify-between">
-                <h2 class="text-xs font-semibold text-text-sub m-0">Style Injection</h2>
-                <span class="text-[10px] text-gray-400">Apply로 Figma에 반영됩니다.</span>
-            </div>
+            <div class="style-section-shell style-section-shell--injection is-expanded min-h-0" data-style-section="injection">
+                <div class="style-injection-layout">
+                    <div class="style-injection-toolbar">
+                        <div class="style-injection-toolbar-main">
+                            <h2 class="style-injection-heading">Style Injection</h2>
+                            <div class="style-injection-tabs" role="tablist" aria-label="Style Injection Tabs">
+                                <button type="button" class="style-injection-tab is-active" data-style-injection-tab="mark">Mark</button>
+                                <button type="button" class="style-injection-tab" data-style-injection-tab="plot-area">Plot Area</button>
+                                <button type="button" class="style-injection-tab" data-style-injection-tab="assist-line">Assist Line</button>
+                            </div>
+                        </div>
+                        <button class="style-section-toggle" type="button" data-style-section-toggle="injection" aria-expanded="true" aria-label="Toggle style injection section">
+                            <span class="style-section-toggle-icon" aria-hidden="true"></span>
+                        </button>
+                    </div>
 
-            <div class="style-injection-layout">
-                <div class="style-injection-tabs" role="tablist" aria-label="Style Injection Tabs">
-                    <button type="button" class="style-injection-tab is-active" data-style-injection-tab="mark">Mark</button>
-                    <button type="button" class="style-injection-tab" data-style-injection-tab="plot-area">Plot Area</button>
-                    <button type="button" class="style-injection-tab" data-style-injection-tab="assist-line">Assist Line</button>
-                </div>
-
-                <div class="style-injection-panel" data-style-injection-panel="plot-area">
-                    <div class="style-injection-card-rail">
+                    <div class="style-injection-panels">
+                    <div class="style-injection-panel" data-style-injection-panel="plot-area">
+                        <div class="style-injection-card-rail">
                     <div class="style-injection-card">
                         <div class="style-injection-card-header">
                             <span class="style-injection-card-title">Background</span>
@@ -572,10 +580,10 @@
                         </div>
                     </div>
                 </div>
-                </div>
+                    </div>
 
-                <div class="style-injection-panel is-active" data-style-injection-panel="mark">
-                <label class="flex flex-col gap-1">
+                    <div class="style-injection-panel is-active" data-style-injection-panel="mark">
+                    <label class="flex flex-col gap-1">
                     <span class="text-xxs text-text-sub">Mark Index</span>
                     <select id="style-mark-index"
                         class="w-full px-2 py-1 border border-border rounded text-xs h-7 bg-white focus:border-primary focus:outline-none transition-colors"></select>
@@ -672,10 +680,10 @@
                         </div>
                     </div>
                 </div>
-                </div>
+                    </div>
 
-                <div class="style-injection-panel" data-style-injection-panel="assist-line">
-                <div class="style-injection-card-body style-injection-assist-grid">
+                    <div class="style-injection-panel" data-style-injection-panel="assist-line">
+                    <div class="style-injection-card-body style-injection-assist-grid">
                     <label class="flex flex-col gap-1">
                         <span class="text-xxs text-text-sub">Color (HEX)</span>
                         <div class="hex-input-with-preview">
@@ -698,6 +706,8 @@
                             class="w-full px-2 py-1 border border-border rounded text-xs h-7 focus:border-primary focus:outline-none transition-colors" />
                     </label>
                 </div>
+                    </div>
+                    </div>
                 </div>
             </div>
 

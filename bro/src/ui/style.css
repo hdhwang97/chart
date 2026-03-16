@@ -392,6 +392,84 @@ input[type=number]::-webkit-outer-spin-button {
     box-sizing: border-box;
 }
 
+.style-panel-scroll-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex !important;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.style-section-shell {
+    flex: 0 0 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.style-section-shell.is-expanded {
+    flex: 1 1 auto;
+}
+
+.style-section-shell.is-collapsed {
+    flex: 0 0 auto;
+}
+
+.style-section-shell--injection {
+    gap: 0;
+}
+
+.style-section-header {
+    flex: 0 0 auto;
+}
+
+.style-section-scroll-area {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.style-section-shell.is-collapsed .style-section-scroll-area,
+.style-section-shell.is-collapsed .style-injection-panels {
+    display: none;
+}
+
+[data-style-section="templates"].is-collapsed .style-template-mode-switch,
+[data-style-section="templates"].is-collapsed #style-template-add-btn,
+[data-style-section="injection"].is-collapsed .style-injection-tabs {
+    display: none;
+}
+
+.style-section-toggle {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #D1D5DB;
+    border-radius: 999px;
+    background: #FFFFFF;
+    color: #697281;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.style-section-toggle-icon {
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    margin-top: -1px;
+    transition: transform 0.15s ease;
+}
+
+.style-section-shell.is-expanded .style-section-toggle-icon {
+    transform: rotate(225deg);
+    margin-top: 2px;
+}
+
 .style-template-card {
     border: 1px solid #DDDEDF;
     border-radius: 12px;
@@ -632,41 +710,91 @@ input[type=number]::-webkit-outer-spin-button {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--mac-panel) !important;
+}
+
+.style-injection-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+
+.style-injection-toolbar-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.style-injection-heading {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+    color: #697281;
+    white-space: nowrap;
 }
 
 .style-injection-tabs {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-wrap: nowrap;
+    gap: 0;
+    flex: 0 0 auto;
+    width: fit-content;
+    max-width: 100%;
+    padding: 2px;
+    border: 1px solid #D1D5DB;
+    border-radius: 11px;
+    background: #F3F4F7;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    overflow-x: auto;
+}
+
+.style-injection-panels {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
 }
 
 .style-injection-tab {
-    border: 1px solid #D1D5DB;
-    border-radius: 8px;
-    background: #F8FAFC;
-    color: #64748B;
-    font-size: 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #697281;
+    font-size: 11px;
     line-height: 1.2;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    padding: 7px 10px;
-    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0;
+    padding: 5px 12px;
+    text-transform: none;
+    white-space: nowrap;
     cursor: pointer;
-    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+    transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .style-injection-tab.is-active {
-    border-color: #93C5FD;
-    background: #EFF6FF;
-    color: #1D4ED8;
+    background: #FFFFFF;
+    color: #0A84FF;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.style-injection-tab:not(.is-active):hover {
+    color: #1F2328;
 }
 
 .style-injection-panel {
     display: none;
     flex-direction: column;
     gap: 8px;
+    min-height: 100%;
 }
 
 .style-injection-panel.is-active {
@@ -926,7 +1054,6 @@ header {
 #row-color-style-input-box,
 .style-template-thumbnail,
 .style-template-card-color-panel,
-.style-injection-layout,
 .style-injection-card,
 .row-color-style-main,
 .row-color-style-caret-btn,

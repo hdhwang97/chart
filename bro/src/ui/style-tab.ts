@@ -36,6 +36,7 @@ function debounce<F extends (...args: any[]) => void>(func: F, wait: number): F 
 }
 
 type StyleInjectionTabKey = 'plot-area' | 'mark' | 'assist-line';
+type StyleSectionKey = 'templates' | 'injection';
 
 function markFillEnabled() {
     return chartTypeUsesMarkFill(state.chartType);
@@ -130,21 +131,52 @@ function setActiveStyleInjectionTab(tabKey: StyleInjectionTabKey) {
     });
 }
 
+function setExpandedStyleSection(sectionKey: StyleSectionKey | null) {
+    const shells = Array.from(document.querySelectorAll<HTMLElement>('[data-style-section]'));
+    const toggles = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-style-section-toggle]'));
+    if (shells.length === 0) return;
+
+    shells.forEach((shell) => {
+        const isExpanded = sectionKey !== null && shell.dataset.styleSection === sectionKey;
+        shell.classList.toggle('is-expanded', isExpanded);
+        shell.classList.toggle('is-collapsed', !isExpanded);
+    });
+
+    toggles.forEach((toggle) => {
+        const isExpanded = sectionKey !== null && toggle.dataset.styleSectionToggle === sectionKey;
+        toggle.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    });
+}
+
 function bindStyleInjectionTabEvents() {
     const stylePanel = document.querySelector<HTMLElement>('#style-panel');
     if (!stylePanel) return;
     const tabButtons = Array.from(stylePanel.querySelectorAll<HTMLButtonElement>('[data-style-injection-tab]'));
     if (tabButtons.length === 0) return;
 
+    const expandedShell = stylePanel.querySelector<HTMLElement>('[data-style-section].is-expanded');
+    const initialSection = (expandedShell?.dataset.styleSection as StyleSectionKey | undefined) || 'injection';
+    setExpandedStyleSection(initialSection);
+
     const activeTab = tabButtons.find((btn) => btn.classList.contains('is-active'))?.dataset.styleInjectionTab as StyleInjectionTabKey | undefined;
     setActiveStyleInjectionTab(activeTab || 'mark');
 
     stylePanel.addEventListener('click', (e) => {
         const target = e.target as HTMLElement | null;
+        const sectionToggle = target?.closest<HTMLButtonElement>('[data-style-section-toggle]');
+        if (sectionToggle) {
+            const sectionKey = sectionToggle.dataset.styleSectionToggle as StyleSectionKey | undefined;
+            if (!sectionKey) return;
+            const isExpanded = sectionToggle.getAttribute('aria-expanded') === 'true';
+            setExpandedStyleSection(isExpanded ? null : sectionKey);
+            return;
+        }
+
         const tabButton = target?.closest<HTMLButtonElement>('[data-style-injection-tab]');
         if (!tabButton) return;
         const tabKey = tabButton.dataset.styleInjectionTab as StyleInjectionTabKey | undefined;
         if (!tabKey) return;
+        setExpandedStyleSection('injection');
         setActiveStyleInjectionTab(tabKey);
     });
 }
