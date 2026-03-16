@@ -932,6 +932,31 @@
         </div>
     </div>
 
+    <div id="template-color-popover"
+        class="hidden fixed z-[85] w-56 rounded border border-border bg-white shadow-lg p-2 text-xxs text-text">
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2 min-w-0">
+                <span id="template-color-popover-title" class="font-semibold text-text-sub truncate">Template Color</span>
+                <span id="template-color-popover-preview" class="w-4 h-4 rounded border border-border block shrink-0"></span>
+            </div>
+            <button id="template-color-popover-close" type="button" class="style-item-close-btn" aria-label="Close template color popover">✕</button>
+        </div>
+        <label class="block mb-2">
+            <span class="block text-[10px] text-text-sub mb-0.5">Color (HEX)</span>
+            <div class="hex-input-with-preview">
+                <input id="template-color-popover-input" type="text" value="#FFFFFF"
+                    class="w-full px-1.5 py-1 border border-border rounded text-xxs font-mono uppercase focus:border-primary focus:outline-none transition-colors" />
+                <span id="template-color-popover-input-preview" class="style-hex-preview"></span>
+            </div>
+        </label>
+        <div class="flex items-center justify-end gap-2">
+            <button id="template-color-popover-cancel" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer">Cancel</button>
+            <button id="template-color-popover-save" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-primary hover:bg-blue-50 cursor-pointer">Save</button>
+        </div>
+    </div>
+
     <div id="graph-setting-tooltip" class="gs-tooltip" role="tooltip" aria-hidden="true">
         <img id="graph-setting-tooltip-image" class="gs-tooltip-image" alt="">
         <div class="gs-tooltip-content">

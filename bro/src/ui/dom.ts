@@ -222,5 +222,13 @@ export const ui = {
     get styleTemplateModeReadBtn() { return byId<HTMLButtonElement>('style-template-mode-read'); },
     get styleTemplateModeEditBtn() { return byId<HTMLButtonElement>('style-template-mode-edit'); },
     get styleTemplateAddBtn() { return byId<HTMLButtonElement>('style-template-add-btn'); },
-    get styleTemplateGallery() { return byId<HTMLElement>('style-template-gallery'); }
+    get styleTemplateGallery() { return byId<HTMLElement>('style-template-gallery'); },
+    get templateColorPopover() { return byId<HTMLElement>('template-color-popover'); },
+    get templateColorPopoverTitle() { return byId<HTMLElement>('template-color-popover-title'); },
+    get templateColorPopoverPreview() { return byId<HTMLElement>('template-color-popover-preview'); },
+    get templateColorPopoverInput() { return byId<HTMLInputElement>('template-color-popover-input'); },
+    get templateColorPopoverInputPreview() { return byId<HTMLElement>('template-color-popover-input-preview'); },
+    get templateColorPopoverCloseBtn() { return byId<HTMLButtonElement>('template-color-popover-close'); },
+    get templateColorPopoverCancelBtn() { return byId<HTMLButtonElement>('template-color-popover-cancel'); },
+    get templateColorPopoverSaveBtn() { return byId<HTMLButtonElement>('template-color-popover-save'); }
 };
