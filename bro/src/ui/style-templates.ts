@@ -15,6 +15,7 @@ const TEMPLATE_MARK_FILL_FALLBACK = ['#3B82F6', '#60A5FA', '#A3E635', '#FBBF24']
 const TEMPLATE_MARK_STROKE_FALLBACK = '#111827';
 const TEMPLATE_PLOT_AREA_FALLBACK = ['#FFFFFF', '#111827', '#E5E7EB', '#111827'];
 const TEMPLATE_THUMBNAIL_BAR_HEIGHTS = [44, 68, 32, 80];
+let templateRenameBlurTimer: ReturnType<typeof setTimeout> | null = null;
 
 function normalizeTemplateChartType(value: unknown): StyleTemplateChartType {
     if (value === 'line') return 'line';
@@ -81,6 +82,81 @@ export function normalizeTemplateNameInput(raw: string): string | null {
 export function closeTemplateNameEditor() {
     state.editingTemplateId = null;
     state.editingTemplateName = '';
+}
+
+function clearPendingTemplateRenameBlur() {
+    if (!templateRenameBlurTimer) return;
+    clearTimeout(templateRenameBlurTimer);
+    templateRenameBlurTimer = null;
+}
+
+function focusTemplateRenameInput(id: string) {
+    requestAnimationFrame(() => {
+        const input = ui.styleTemplateGallery.querySelector<HTMLInputElement>(`[data-template-rename-input-id="${id}"]`);
+        if (!input) return;
+        input.focus();
+        input.select();
+    });
+}
+
+function startTemplateRename(id: string) {
+    const template = state.styleTemplates.find((item) => item.id === id);
+    if (!template) return;
+    clearPendingTemplateRenameBlur();
+    state.editingTemplateId = id;
+    state.editingTemplateName = template.name;
+    renderStyleTemplateGallery();
+    focusTemplateRenameInput(id);
+}
+
+function commitTemplateRename(
+    id: string,
+    rawName?: string,
+    options: { cancelOnInvalid?: boolean } = {}
+) {
+    clearPendingTemplateRenameBlur();
+    const template = state.styleTemplates.find((item) => item.id === id);
+    if (!template) {
+        closeTemplateNameEditor();
+        renderStyleTemplateGallery();
+        return false;
+    }
+
+    const normalized = normalizeTemplateNameInput(rawName ?? state.editingTemplateName ?? template.name);
+    if (!normalized) {
+        if (options.cancelOnInvalid) {
+            closeTemplateNameEditor();
+            renderStyleTemplateGallery();
+            return false;
+        }
+        window.alert('템플릿 이름은 1~40자로 입력해야 합니다.');
+        focusTemplateRenameInput(id);
+        return false;
+    }
+
+    const changed = normalized !== template.name;
+    closeTemplateNameEditor();
+    renderStyleTemplateGallery();
+    if (changed) {
+        parent.postMessage({ pluginMessage: { type: 'rename_style_template', id, name: normalized, chartType: state.chartType } }, '*');
+    }
+    return true;
+}
+
+function commitCurrentTemplateRename(options: { cancelOnInvalid?: boolean } = {}) {
+    if (!state.editingTemplateId) return true;
+    const id = state.editingTemplateId;
+    const input = ui.styleTemplateGallery.querySelector<HTMLInputElement>(`[data-template-rename-input-id="${id}"]`);
+    return commitTemplateRename(id, input?.value ?? state.editingTemplateName, options);
+}
+
+function scheduleTemplateRenameCommit(id: string, rawName: string) {
+    clearPendingTemplateRenameBlur();
+    templateRenameBlurTimer = setTimeout(() => {
+        templateRenameBlurTimer = null;
+        if (state.editingTemplateId !== id) return;
+        commitTemplateRename(id, rawName, { cancelOnInvalid: true });
+    }, 0);
 }
 
 export function estimateNextTemplateName(): string {
@@ -235,8 +311,7 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
 export function renderTemplateCard(item: StyleTemplateItem): string {
     const payload = resolveTemplatePayload(item);
     const selectedClass = state.selectedStyleTemplateId === item.id ? ' selected' : '';
-    const inEdit = state.styleTemplateMode === 'edit';
-    const editing = inEdit && state.editingTemplateId === item.id;
+    const editing = state.editingTemplateId === item.id;
     const chartLabel = resolveTemplateChartLabel(item);
     const markColors = buildMarkSummaryColors(payload);
     const plotAreaColors = buildPlotAreaSummaryColors(payload);
@@ -248,22 +323,13 @@ export function renderTemplateCard(item: StyleTemplateItem): string {
     <div class="style-template-card-header-copy">
       ${editing
             ? `<input class="style-template-card-title-input" data-template-rename-input-id="${item.id}" value="${escapeHtml(state.editingTemplateName || item.name)}" maxlength="40" />`
-            : `<div class="style-template-card-title">${escapedName}</div>`
+            : `<button class="style-template-card-title-button" data-template-rename-id="${item.id}" type="button">
+                 <span class="style-template-card-title">${escapedName}</span>
+               </button>`
         }
       <div class="style-template-card-subtitle">${escapeHtml(chartLabel)}</div>
     </div>
-    ${inEdit
-            ? editing
-                ? `<div class="style-template-card-actions">
-                    <button class="style-template-card-action style-template-card-action--primary" data-template-rename-save-id="${item.id}" type="button">Save</button>
-                    <button class="style-template-card-action" data-template-rename-cancel-id="${item.id}" type="button">Cancel</button>
-                   </div>`
-                : `<div class="style-template-card-actions">
-                    <button class="style-template-card-action" data-template-rename-id="${item.id}" type="button">Rename</button>
-                    <button class="style-template-card-action style-template-card-action--danger" data-template-delete-id="${item.id}" type="button">Delete</button>
-                   </div>`
-            : ''
-        }
+    <button class="style-template-card-close" data-template-delete-id="${item.id}" type="button" aria-label="Delete template">×</button>
   </div>
   <div class="style-template-thumbnail">
     ${renderTemplateThumbnail(item, markColors, plotAreaColors)}
@@ -284,18 +350,12 @@ export function renderTemplateCard(item: StyleTemplateItem): string {
       </div>
     </div>
   </div>
+  <button class="style-template-card-apply" data-template-apply-id="${item.id}" type="button">Apply</button>
 </div>`;
 }
 
 export function renderStyleTemplateGallery() {
     const gallery = ui.styleTemplateGallery;
-    const readActive = state.styleTemplateMode === 'read';
-    ui.styleTemplateModeReadBtn.className = readActive
-        ? 'px-2 py-0.5 text-xxs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer'
-        : 'px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer';
-    ui.styleTemplateModeEditBtn.className = readActive
-        ? 'px-2 py-0.5 text-xxs font-semibold rounded text-text-sub hover:text-text bg-transparent transition-all border-0 cursor-pointer'
-        : 'px-2 py-0.5 text-xxs font-semibold rounded bg-white shadow-sm text-primary transition-all border-0 cursor-pointer';
     ui.styleTemplateAddBtn.disabled = state.styleTemplates.length >= MAX_STYLE_TEMPLATES;
     if (ui.styleTemplateAddBtn.disabled) ui.styleTemplateAddBtn.classList.add('read-panel-disabled');
     else ui.styleTemplateAddBtn.classList.remove('read-panel-disabled');
@@ -342,38 +402,26 @@ export function bindStyleTemplateEvents() {
             e.stopPropagation();
             const id = renameBtn.dataset.templateRenameId;
             if (!id) return;
+            if (state.editingTemplateId && state.editingTemplateId !== id) {
+                commitCurrentTemplateRename({ cancelOnInvalid: true });
+            }
+            if (state.editingTemplateId === id) return;
+            startTemplateRename(id);
+            return;
+        }
+
+        const applyBtn = target.closest<HTMLButtonElement>('[data-template-apply-id]');
+        if (applyBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = applyBtn.dataset.templateApplyId;
+            if (!id) return;
+            if (state.editingTemplateId) {
+                commitCurrentTemplateRename({ cancelOnInvalid: true });
+            }
             const template = state.styleTemplates.find((item) => item.id === id);
             if (!template) return;
-            state.editingTemplateId = id;
-            state.editingTemplateName = template.name;
-            renderStyleTemplateGallery();
-            return;
-        }
-
-        const renameCancelBtn = target.closest<HTMLButtonElement>('[data-template-rename-cancel-id]');
-        if (renameCancelBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            closeTemplateNameEditor();
-            renderStyleTemplateGallery();
-            return;
-        }
-
-        const renameSaveBtn = target.closest<HTMLButtonElement>('[data-template-rename-save-id]');
-        if (renameSaveBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            const id = renameSaveBtn.dataset.templateRenameSaveId;
-            if (!id) return;
-            const input = ui.styleTemplateGallery.querySelector<HTMLInputElement>(`[data-template-rename-input-id="${id}"]`);
-            const normalized = normalizeTemplateNameInput(input?.value || state.editingTemplateName);
-            if (!normalized) {
-                window.alert('템플릿 이름은 1~40자로 입력해야 합니다.');
-                return;
-            }
-            parent.postMessage({ pluginMessage: { type: 'rename_style_template', id, name: normalized, chartType: state.chartType } }, '*');
-            closeTemplateNameEditor();
-            renderStyleTemplateGallery();
+            applyTemplateToDraft(template);
             return;
         }
 
@@ -381,21 +429,17 @@ export function bindStyleTemplateEvents() {
         if (deleteBtn) {
             e.preventDefault();
             e.stopPropagation();
+            clearPendingTemplateRenameBlur();
             const id = deleteBtn.dataset.templateDeleteId;
             if (!id) return;
+            if (state.editingTemplateId === id) {
+                closeTemplateNameEditor();
+                renderStyleTemplateGallery();
+            }
             if (!window.confirm('이 템플릿을 삭제하시겠습니까?')) return;
             parent.postMessage({ pluginMessage: { type: 'delete_style_template', id, chartType: state.chartType } }, '*');
             return;
         }
-
-        const card = target.closest<HTMLElement>('[data-template-id]');
-        if (!card) return;
-        if (state.styleTemplateMode === 'edit') return;
-        const id = card.dataset.templateId;
-        if (!id) return;
-        const template = state.styleTemplates.find((item) => item.id === id);
-        if (!template) return;
-        applyTemplateToDraft(template);
     });
 
     ui.styleTemplateGallery.addEventListener('keydown', (e) => {
@@ -407,20 +451,30 @@ export function bindStyleTemplateEvents() {
             e.preventDefault();
             const id = input.dataset.templateRenameInputId;
             if (!id) return;
-            const normalized = normalizeTemplateNameInput(input.value || state.editingTemplateName);
-            if (!normalized) {
-                window.alert('템플릿 이름은 1~40자로 입력해야 합니다.');
-                return;
-            }
-            parent.postMessage({ pluginMessage: { type: 'rename_style_template', id, name: normalized, chartType: state.chartType } }, '*');
-            closeTemplateNameEditor();
-            renderStyleTemplateGallery();
+            commitTemplateRename(id, input.value);
             return;
         }
         if (e.key === 'Escape') {
             e.preventDefault();
+            clearPendingTemplateRenameBlur();
             closeTemplateNameEditor();
             renderStyleTemplateGallery();
         }
+    });
+
+    ui.styleTemplateGallery.addEventListener('input', (e) => {
+        const target = e.target as HTMLElement | null;
+        const input = target?.closest<HTMLInputElement>('[data-template-rename-input-id]');
+        if (!input) return;
+        state.editingTemplateName = input.value;
+    });
+
+    ui.styleTemplateGallery.addEventListener('focusout', (e) => {
+        const target = e.target as HTMLElement | null;
+        const input = target?.closest<HTMLInputElement>('[data-template-rename-input-id]');
+        if (!input) return;
+        const id = input.dataset.templateRenameInputId;
+        if (!id) return;
+        scheduleTemplateRenameCommit(id, input.value);
     });
 }

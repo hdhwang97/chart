@@ -475,7 +475,6 @@ input[type=number]::-webkit-outer-spin-button {
     border-radius: 12px;
     background: #FFFFFF;
     padding: 8px;
-    cursor: pointer;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -517,6 +516,16 @@ input[type=number]::-webkit-outer-spin-button {
     text-overflow: ellipsis;
 }
 
+.style-template-card-title-button {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    text-align: left;
+    cursor: text;
+}
+
 .style-template-card-subtitle {
     margin-top: 2px;
     font-size: 10px;
@@ -542,36 +551,46 @@ input[type=number]::-webkit-outer-spin-button {
     box-sizing: border-box;
 }
 
-.style-template-card-actions {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 6px;
-    flex: 0 0 auto;
-}
-
-.style-template-card-action {
-    border: 0;
-    background: transparent;
+.style-template-card-close {
+    width: 18px;
+    height: 18px;
     padding: 0;
-    font-size: 10px;
-    line-height: 1.2;
-    font-weight: 600;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
     color: rgba(17, 24, 39, 0.45);
     cursor: pointer;
-    transition: color 0.12s ease;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1;
+    transition: background 0.12s ease, color 0.12s ease;
 }
 
-.style-template-card-action:hover {
-    color: #111827;
-}
-
-.style-template-card-action--primary {
-    color: #18A0FB;
-}
-
-.style-template-card-action--danger:hover {
+.style-template-card-close:hover {
+    background: rgba(220, 38, 38, 0.08);
     color: #DC2626;
+}
+
+.style-template-card-apply {
+    width: 100%;
+    border: 1px solid #D1D5DB;
+    border-radius: 9px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 247, 250, 0.96) 100%);
+    color: #697281;
+    font-size: 10px;
+    line-height: 1.2;
+    font-weight: 700;
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.style-template-card-apply:hover {
+    border-color: rgba(10, 132, 255, 0.34);
+    color: #0A84FF;
 }
 
 .style-template-thumbnail {
@@ -1297,7 +1316,7 @@ label[class*="hover:text-primary"]:hover {
 
 .style-item-step-btn,
 .style-item-close-btn,
-.style-template-card-action,
+.style-template-card-close,
 .row-color-style-chip-close {
     color: var(--mac-text-sub);
 }
@@ -1327,12 +1346,10 @@ label[class*="hover:text-primary"]:hover {
     box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.14), var(--mac-shadow-soft) !important;
 }
 
-.style-template-card-action--primary {
+.style-template-card.selected .style-template-card-apply {
+    border-color: rgba(10, 132, 255, 0.24) !important;
     color: var(--mac-accent) !important;
-}
-
-.style-template-card-action--danger:hover {
-    color: var(--mac-danger) !important;
+    box-shadow: var(--mac-segment-shadow) !important;
 }
 
 .style-template-empty {
