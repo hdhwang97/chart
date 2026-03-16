@@ -987,6 +987,12 @@ input[type="radio"] {
     accent-color: var(--mac-accent);
 }
 
+#data-grid .grid-cell,
+#row-header-container .row-header,
+#data-grid .col-header {
+    border-radius: 0 !important;
+}
+
 div[class*="bg-surface rounded p-0.5 border border-border"] {
     background: linear-gradient(180deg, rgba(240, 242, 246, 0.96) 0%, rgba(234, 237, 242, 0.96) 100%) !important;
     border-color: var(--mac-border-strong) !important;
@@ -1086,29 +1092,52 @@ label[class*="hover:text-primary"]:hover {
     background: rgba(122, 39, 34, 0.96) !important;
 }
 
-.header-hover,
-.grid-cell-mark-hover,
-.grid-cell-self-hover {
-    background-color: var(--mac-accent-soft) !important;
-    color: var(--mac-accent-hover) !important;
+.header-hover {
+    background-color: #E5F1FF !important;
+    color: #0A5FCC !important;
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.22);
+}
+
+#data-grid input.grid-cell-mark-hover,
+#data-grid input.grid-cell-self-hover {
+    background: #EAF3FF !important;
+    color: #0A5FCC !important;
+    border-color: rgba(10, 132, 255, 0.26) !important;
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.18);
+}
+
+#data-grid input.grid-cell-remaining-preview {
+    background: #F4F8FF !important;
+    color: rgba(10, 95, 204, 0.58) !important;
+    border-color: rgba(10, 132, 255, 0.16) !important;
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.1);
+}
+
+#data-grid input.grid-cell-remaining-preview::placeholder {
+    color: rgba(10, 95, 204, 0.58) !important;
 }
 
 .col-header.style-grid-linked-col {
-    background-color: var(--mac-accent-softer) !important;
-    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.28);
+    background-color: #E8F2FF !important;
+    color: #0A5FCC !important;
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.34);
 }
 
-.col-color-swatch.style-grid-linked-col,
+.col-color-swatch.style-grid-linked-col {
+    box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.42);
+}
+
 .row-color-swatch:hover {
-    box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.26);
+    box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.3);
 }
 
-.grid-cell-stacked-overflow,
+#data-grid input.grid-cell-stacked-overflow,
 .row-color-hex-error,
 .style-input-error,
 .style-color-hex-error {
-    background-color: #FFF1F0 !important;
-    border-color: rgba(255, 59, 48, 0.5) !important;
+    background: #FFF1F0 !important;
+    border-color: rgba(255, 59, 48, 0.58) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.16);
 }
 
 .row-color-mode-tab,

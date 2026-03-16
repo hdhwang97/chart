@@ -72,7 +72,7 @@ export function renderGrid() {
                 const controls = document.createElement('div');
                 controls.className = 'hidden group-hover:flex items-center gap-0.5 ml-1';
                 const addBtn = document.createElement('button');
-                addBtn.className = 'w-3.5 h-3.5 flex items-center justify-center rounded-full bg-primary text-white text-[8px] hover:bg-primary-hover cursor-pointer stacked-add-bar';
+                addBtn.className = 'w-3.5 h-3.5 flex items-center justify-center rounded-none bg-primary text-white text-[8px] hover:bg-primary-hover cursor-pointer stacked-add-bar';
                 addBtn.dataset.g = String(gIdx);
                 addBtn.textContent = '+';
                 controls.appendChild(addBtn);
@@ -83,7 +83,7 @@ export function renderGrid() {
 
             if (state.mode !== 'read') {
                 const delBtn = document.createElement('button');
-                delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer';
+                delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-none bg-danger text-white text-[6px] cursor-pointer';
                 delBtn.innerHTML = '✕';
                 delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(getGroupStartIndex(gIdx)); };
                 gCell.appendChild(delBtn);
@@ -111,7 +111,7 @@ export function renderGrid() {
 
                 if (state.mode !== 'read' && barCount > 1) {
                     const removeBtn = document.createElement('button');
-                    removeBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-gray-300 text-white text-[6px] hover:bg-danger cursor-pointer stacked-remove-bar';
+                    removeBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-none bg-gray-300 text-white text-[6px] hover:bg-danger cursor-pointer stacked-remove-bar';
                     removeBtn.textContent = '−';
                     removeBtn.dataset.g = String(gIdx);
                     removeBtn.dataset.b = String(b);
@@ -142,7 +142,7 @@ export function renderGrid() {
             if (state.chartType === 'bar' && state.mode !== 'read') {
                 const swatch = document.createElement('button');
                 swatch.type = 'button';
-                swatch.className = 'col-color-swatch w-3.5 h-3.5 rounded-[2px] border border-border shrink-0 mr-1 cursor-pointer';
+                swatch.className = 'col-color-swatch w-3.5 h-3.5 rounded-none border border-border shrink-0 mr-1 cursor-pointer';
                 if (state.stylePopoverLinkedColIndex === c) {
                     swatch.classList.add('style-grid-linked-col');
                 }
@@ -186,7 +186,7 @@ export function renderGrid() {
 
             if (state.mode !== 'read' && totalCols > 1) {
                 const delBtn = document.createElement('button');
-                delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer';
+                delBtn.className = 'hidden group-hover:flex absolute -top-0 right-0 w-3 h-3 items-center justify-center rounded-none bg-danger text-white text-[6px] cursor-pointer';
                 delBtn.innerHTML = '✕';
                 delBtn.onclick = (e) => { e.stopPropagation(); deleteColumn(c); };
                 hCell.appendChild(delBtn);
@@ -210,7 +210,7 @@ export function renderGrid() {
             const rowColor = getRowColor(r);
             const swatch = document.createElement('button');
             swatch.type = 'button';
-            swatch.className = 'row-color-swatch w-3.5 h-3.5 rounded-[2px] border border-border shrink-0';
+            swatch.className = 'row-color-swatch w-3.5 h-3.5 rounded-none border border-border shrink-0';
             swatch.style.backgroundColor = rowColor;
             swatch.title = isRowColorDisabledByColOverrides
                 ? '모든 컬럼 색상이 지정되어 Row 색상은 비활성화됨'
@@ -264,7 +264,7 @@ export function renderGrid() {
 
         if (isStacked && r === 0 && state.mode !== 'read') {
             const clearBtn = document.createElement('button');
-            clearBtn.className = 'hidden absolute right-1 w-5 h-3 items-center justify-center rounded-full bg-gray-300 text-white text-[7px] cursor-pointer group-hover:flex hover:bg-danger';
+            clearBtn.className = 'hidden absolute right-1 w-5 h-3 items-center justify-center rounded-none bg-gray-300 text-white text-[7px] cursor-pointer group-hover:flex hover:bg-danger';
             clearBtn.textContent = 'CLR';
             clearBtn.title = 'Clear all data';
             clearBtn.onclick = (e) => {
@@ -276,7 +276,7 @@ export function renderGrid() {
 
         if (state.mode !== 'read' && state.rows > 1 && !(isStacked && r === 0)) {
             const delBtn = document.createElement('button');
-            delBtn.className = 'del-row-btn hidden absolute right-1 w-3 h-3 items-center justify-center rounded-full bg-danger text-white text-[6px] cursor-pointer group-hover:flex';
+            delBtn.className = 'del-row-btn hidden absolute right-1 w-3 h-3 items-center justify-center rounded-none bg-danger text-white text-[6px] cursor-pointer group-hover:flex';
             delBtn.innerHTML = '✕';
             delBtn.onclick = () => deleteRow(r);
             rowH.appendChild(delBtn);
@@ -453,7 +453,7 @@ function startRowHeaderInlineEdit(rowHeaderEl: HTMLElement, labelEl: HTMLSpanEle
     const input = document.createElement('input');
     input.type = 'text';
     input.value = currentLabel;
-    input.className = 'w-16 h-5 text-xxs px-1 border border-primary rounded bg-white focus:outline-none';
+    input.className = 'w-16 h-5 text-xxs px-1 border border-primary rounded-none bg-white focus:outline-none';
     labelEl.replaceWith(input);
     input.focus();
     input.select();
@@ -504,7 +504,7 @@ function startColHeaderInlineEdit(
     const input = document.createElement('input');
     input.type = 'text';
     input.value = currentLabel;
-    input.className = 'w-16 h-5 text-xxs px-1 border border-primary rounded bg-white focus:outline-none';
+    input.className = 'w-16 h-5 text-xxs px-1 border border-primary rounded-none bg-white focus:outline-none';
     labelEl.replaceWith(input);
     input.focus();
     input.select();
