@@ -488,9 +488,9 @@ input[type=number]::-webkit-outer-spin-button {
 }
 
 .style-template-card.selected {
-    border-color: #18A0FB;
-    box-shadow: 0 0 0 1px rgba(24, 160, 251, 0.22);
-    background: #F8FCFF;
+    border-color: rgba(10, 132, 255, 0.26);
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.18);
+    background: #EAF3FF;
 }
 
 .style-template-card-header {
@@ -1341,9 +1341,9 @@ label[class*="hover:text-primary"]:hover {
 }
 
 .style-template-card.selected {
-    border-color: rgba(10, 132, 255, 0.34) !important;
-    background: #F9FBFF !important;
-    box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.14), var(--mac-shadow-soft) !important;
+    border-color: rgba(10, 132, 255, 0.26) !important;
+    background: #EAF3FF !important;
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.18), var(--mac-shadow-soft) !important;
 }
 
 .style-template-card.selected .style-template-card-apply {

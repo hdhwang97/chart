@@ -440,6 +440,22 @@ export function bindStyleTemplateEvents() {
             parent.postMessage({ pluginMessage: { type: 'delete_style_template', id, chartType: state.chartType } }, '*');
             return;
         }
+
+        const renameInput = target.closest<HTMLInputElement>('[data-template-rename-input-id]');
+        if (renameInput) return;
+
+        const card = target.closest<HTMLElement>('[data-template-id]');
+        if (!card) return;
+        e.stopPropagation();
+        const id = card.dataset.templateId;
+        if (!id) return;
+        if (state.editingTemplateId && state.editingTemplateId !== id) {
+            commitCurrentTemplateRename({ cancelOnInvalid: true });
+        }
+        if (state.selectedStyleTemplateId !== id) {
+            state.selectedStyleTemplateId = id;
+            renderStyleTemplateGallery();
+        }
     });
 
     ui.styleTemplateGallery.addEventListener('keydown', (e) => {
@@ -476,5 +492,15 @@ export function bindStyleTemplateEvents() {
         const id = input.dataset.templateRenameInputId;
         if (!id) return;
         scheduleTemplateRenameCommit(id, input.value);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!state.selectedStyleTemplateId) return;
+        const isInsideTemplateCard = e.composedPath().some((node) => (
+            node instanceof HTMLElement && Boolean(node.closest('#style-template-gallery [data-template-id]'))
+        ));
+        if (isInsideTemplateCard) return;
+        state.selectedStyleTemplateId = null;
+        renderStyleTemplateGallery();
     });
 }
