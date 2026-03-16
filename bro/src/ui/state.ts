@@ -188,6 +188,7 @@ export const state = {
     styleTemplateMode: 'read' as 'read' | 'edit',
     styleTemplates: [] as StyleTemplateItem[],
     selectedStyleTemplateId: null as string | null,
+    styleTemplateOverwritePendingId: null as string | null,
     editingTemplateId: null as string | null,
     editingTemplateName: '' as string
 };

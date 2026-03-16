@@ -311,6 +311,8 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
 export function renderTemplateCard(item: StyleTemplateItem): string {
     const payload = resolveTemplatePayload(item);
     const selectedClass = state.selectedStyleTemplateId === item.id ? ' selected' : '';
+    const isSelected = state.selectedStyleTemplateId === item.id;
+    const isOverwritePending = state.styleTemplateOverwritePendingId === item.id;
     const editing = state.editingTemplateId === item.id;
     const chartLabel = resolveTemplateChartLabel(item);
     const markColors = buildMarkSummaryColors(payload);
@@ -350,7 +352,13 @@ export function renderTemplateCard(item: StyleTemplateItem): string {
       </div>
     </div>
   </div>
-  <button class="style-template-card-apply" data-template-apply-id="${item.id}" type="button">Apply</button>
+  <div class="style-template-card-cta-row${isSelected ? ' is-selected' : ''}">
+    ${isSelected
+        ? `<button class="style-template-card-overwrite${isOverwritePending ? ' is-pending' : ''}" data-template-overwrite-id="${item.id}" type="button"${isOverwritePending ? ' disabled' : ''}>${isOverwritePending ? 'Saving...' : 'Overwrite'}</button>`
+        : ''
+    }
+    <button class="style-template-card-apply${isSelected ? '' : ' is-full'}" data-template-apply-id="${item.id}" type="button">Apply</button>
+  </div>
 </div>`;
 }
 
@@ -369,6 +377,9 @@ export function renderStyleTemplateGallery() {
 
 export function setStyleTemplateList(items: StyleTemplateItem[]) {
     state.styleTemplates = Array.isArray(items) ? items : [];
+    if (state.styleTemplateOverwritePendingId && !state.styleTemplates.some((item) => item.id === state.styleTemplateOverwritePendingId)) {
+        state.styleTemplateOverwritePendingId = null;
+    }
     if (state.selectedStyleTemplateId && !state.styleTemplates.some((item) => item.id === state.selectedStyleTemplateId)) {
         state.selectedStyleTemplateId = null;
     }
@@ -422,6 +433,27 @@ export function bindStyleTemplateEvents() {
             const template = state.styleTemplates.find((item) => item.id === id);
             if (!template) return;
             applyTemplateToDraft(template);
+            return;
+        }
+
+        const overwriteBtn = target.closest<HTMLButtonElement>('[data-template-overwrite-id]');
+        if (overwriteBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = overwriteBtn.dataset.templateOverwriteId;
+            if (!id || state.styleTemplateOverwritePendingId) return;
+            if (state.editingTemplateId) {
+                const committed = commitCurrentTemplateRename({ cancelOnInvalid: false });
+                if (!committed) return;
+            }
+            const template = state.styleTemplates.find((item) => item.id === id);
+            if (!template) return;
+            if (!window.confirm(`현재 스타일로 "${template.name}" 템플릿을 덮어쓸까요?`)) return;
+            state.styleTemplateOverwritePendingId = id;
+            renderStyleTemplateGallery();
+            document.dispatchEvent(new CustomEvent('request-style-template-overwrite', {
+                detail: { id }
+            }));
             return;
         }
 
@@ -496,6 +528,7 @@ export function bindStyleTemplateEvents() {
 
     document.addEventListener('click', (e) => {
         if (!state.selectedStyleTemplateId) return;
+        if (state.styleTemplateOverwritePendingId) return;
         const isInsideTemplateCard = e.composedPath().some((node) => (
             node instanceof HTMLElement && Boolean(node.closest('#style-template-gallery [data-template-id]'))
         ));

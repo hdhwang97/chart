@@ -574,8 +574,14 @@ input[type=number]::-webkit-outer-spin-button {
     color: #DC2626;
 }
 
+.style-template-card-cta-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    min-height: 31px;
+}
+
 .style-template-card-apply {
-    width: 100%;
     border: 1px solid #D1D5DB;
     border-radius: 9px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 247, 250, 0.96) 100%);
@@ -588,9 +594,39 @@ input[type=number]::-webkit-outer-spin-button {
     transition: border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 
+.style-template-card-apply.is-full {
+    grid-column: 1 / -1;
+}
+
 .style-template-card-apply:hover {
     border-color: rgba(10, 132, 255, 0.34);
     color: #0A84FF;
+}
+
+.style-template-card-overwrite {
+    border: 1px solid #D1D5DB;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #697281;
+    font-size: 10px;
+    line-height: 1.2;
+    font-weight: 700;
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.style-template-card-overwrite:hover {
+    border-color: rgba(10, 132, 255, 0.24);
+    color: #0A84FF;
+    background: #F8FBFF;
+}
+
+.style-template-card-overwrite.is-pending,
+.style-template-card-overwrite:disabled {
+    cursor: progress;
+    color: rgba(105, 114, 129, 0.7);
+    background: rgba(244, 246, 249, 0.9);
 }
 
 .style-template-thumbnail {
@@ -1350,6 +1386,10 @@ label[class*="hover:text-primary"]:hover {
     border-color: rgba(10, 132, 255, 0.24) !important;
     color: var(--mac-accent) !important;
     box-shadow: var(--mac-segment-shadow) !important;
+}
+
+.style-template-card.selected .style-template-card-overwrite {
+    border-color: rgba(10, 132, 255, 0.16) !important;
 }
 
 .style-template-empty {

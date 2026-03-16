@@ -419,3 +419,33 @@ export async function renameStyleTemplate(
     await persistTemplates(next);
     return { list: await loadStyleTemplates(chartType) };
 }
+
+export async function overwriteStyleTemplate(
+    id: unknown,
+    payloadInput: unknown,
+    chartTypeInput?: unknown,
+    thumbnailDataUrlInput?: unknown
+): Promise<{ list?: StyleTemplateItem[]; error?: string }> {
+    if (typeof id !== 'string' || !id.trim()) return { error: 'Invalid template id.' };
+    const chartType = normalizeTemplateChartType(chartTypeInput);
+    const payload = normalizeStructuredPayload(payloadInput, chartType);
+    if (!payload) return { error: 'Template payload is empty or invalid.' };
+    const nextThumbnailDataUrl = normalizeThumbnailDataUrl(thumbnailDataUrlInput);
+
+    const list = await loadAllStyleTemplates();
+    let found = false;
+    const now = Date.now();
+    const next = list.map((item) => {
+        if (item.id !== id) return item;
+        found = true;
+        return {
+            ...item,
+            payload,
+            thumbnailDataUrl: nextThumbnailDataUrl || item.thumbnailDataUrl,
+            updatedAt: now
+        };
+    });
+    if (!found) return { error: 'Template not found.' };
+    await persistTemplates(next);
+    return { list: await loadStyleTemplates(chartType) };
+}

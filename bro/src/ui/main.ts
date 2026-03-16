@@ -1094,15 +1094,23 @@ function handlePluginMessage(msg: any) {
         window.alert(msg.reason || 'Paint Style 처리 중 오류가 발생했습니다.');
     }
     if (msg.type === 'style_template_saved') {
+        state.styleTemplateOverwritePendingId = null;
+        setStyleTemplateList(msg.list || []);
+    }
+    if (msg.type === 'style_template_overwritten') {
+        state.styleTemplateOverwritePendingId = null;
         setStyleTemplateList(msg.list || []);
     }
     if (msg.type === 'style_template_deleted') {
+        state.styleTemplateOverwritePendingId = null;
         setStyleTemplateList(msg.list || []);
     }
     if (msg.type === 'style_template_renamed') {
         setStyleTemplateList(msg.list || []);
     }
     if (msg.type === 'style_template_error') {
+        state.styleTemplateOverwritePendingId = null;
+        renderStyleTemplateGallery();
         window.alert(msg.reason || '템플릿 처리 중 오류가 발생했습니다.');
     }
 
@@ -1521,6 +1529,25 @@ function bindUiEvents() {
         const thumbnailDataUrl = await captureStylePreviewThumbnail();
         parent.postMessage({ pluginMessage: { type: 'save_style_template', name, payload, chartType: state.chartType, thumbnailDataUrl } }, '*');
     });
+    document.addEventListener('request-style-template-overwrite', ((event: Event) => {
+        const customEvent = event as CustomEvent<{ id?: string }>;
+        const id = customEvent.detail?.id;
+        if (!id) return;
+        void (async () => {
+            const draft = readStyleTabDraft();
+            const validated = validateStyleTabDraft(draft);
+            setStyleInjectionDraft(validated.draft);
+            if (!validated.isValid) {
+                state.styleTemplateOverwritePendingId = null;
+                renderStyleTemplateGallery();
+                window.alert('현재 Style 입력값이 유효하지 않습니다. 오류를 먼저 수정해주세요.');
+                return;
+            }
+            const payload = buildTemplatePayloadFromDraft(validated.draft);
+            const thumbnailDataUrl = await captureStylePreviewThumbnail();
+            parent.postMessage({ pluginMessage: { type: 'overwrite_style_template', id, payload, chartType: state.chartType, thumbnailDataUrl } }, '*');
+        })();
+    }) as EventListener);
     document.addEventListener('style-draft-updated', () => {
         if (state.isInstanceTarget) {
             const draft = readStyleTabDraft();
@@ -1544,7 +1571,6 @@ function bindUiEvents() {
             if (fromDraft.mask.colStrokeStyle) setLocalStyleOverrideField('colStrokeStyle', fromDraft.overrides.colStrokeStyle);
             recomputeEffectiveStyleSnapshot();
         }
-        state.selectedStyleTemplateId = null;
         renderStyleTemplateGallery();
     });
 }

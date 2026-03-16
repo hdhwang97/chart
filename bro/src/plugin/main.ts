@@ -10,7 +10,7 @@ import { applyStrokeInjection } from './drawing/stroke-injection';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
 import { normalizeHexColor, rgbToHex, traverse } from './utils';
-import { deleteStyleTemplate, loadStyleTemplates, renameStyleTemplate, saveStyleTemplate } from './template-store';
+import { deleteStyleTemplate, loadStyleTemplates, overwriteStyleTemplate, renameStyleTemplate, saveStyleTemplate } from './template-store';
 import { PerfTracker, shouldLogApplyPerf } from './perf';
 import { debugLog } from './log';
 import type {
@@ -1324,6 +1324,14 @@ figma.ui.onmessage = async (msg) => {
             return;
         }
         figma.ui.postMessage({ type: 'style_template_renamed', id: msg.id, list: result.list || [] });
+    }
+    else if (msg.type === 'overwrite_style_template') {
+        const result = await overwriteStyleTemplate(msg.id, msg.payload, msg.chartType, msg.thumbnailDataUrl);
+        if (result.error) {
+            figma.ui.postMessage({ type: 'style_template_error', reason: result.error });
+            return;
+        }
+        figma.ui.postMessage({ type: 'style_template_overwritten', id: msg.id, list: result.list || [] });
     }
 };
 
