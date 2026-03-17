@@ -38,6 +38,27 @@ export function getGraphHeight(node: FrameNode) {
     return Math.max(0, node.height - xEmptyHeight - chartLegendHeight);
 }
 
+export function getPlotAreaWidth(node: SceneNode): number {
+    const chartMain = 'findOne' in node
+        ? (node as SceneNode & ChildrenMixin).findOne((candidate) => candidate.name === 'chart_main') as SceneNode | null
+        : null;
+    if (chartMain && 'children' in chartMain) {
+        const colContainer = (chartMain as SceneNode & ChildrenMixin).children.find((child) => child.name === 'col') || null;
+        if (colContainer && 'width' in colContainer && typeof colContainer.width === 'number') {
+            return Math.max(0, colContainer.width);
+        }
+    }
+
+    const fallback = 'findOne' in node
+        ? (node as SceneNode & ChildrenMixin).findOne((candidate) => candidate.name === 'col') as SceneNode | null
+        : null;
+    if (fallback && 'width' in fallback && typeof fallback.width === 'number') {
+        return Math.max(0, fallback.width);
+    }
+
+    return 0;
+}
+
 export function getXEmptyHeight(node: FrameNode): number {
     const xEmpty = node.findOne(n => n.name === "x-empty");
     if (!xEmpty) return 0;

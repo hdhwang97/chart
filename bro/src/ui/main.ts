@@ -1022,6 +1022,8 @@ function handlePluginMessage(msg: any) {
         state.colStrokeStyle = msg.colStrokeStyle || null;
         state.cellStrokeStyles = msg.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.rowStrokeStyles || [];
+        state.previewPlotWidth = Number.isFinite(Number(msg.previewPlotWidth)) ? Math.max(0, Number(msg.previewPlotWidth)) : 0;
+        state.previewPlotHeight = Number.isFinite(Number(msg.previewPlotHeight)) ? Math.max(0, Number(msg.previewPlotHeight)) : 0;
         initializeStyleTabDraft(
             {
                 savedCellFillStyle: msg.savedCellFillStyle,
@@ -1161,6 +1163,8 @@ function handlePluginMessage(msg: any) {
             if (msg.payload.isTemplateMasterTarget !== undefined) {
                 state.isTemplateMasterTarget = Boolean(msg.payload.isTemplateMasterTarget);
             }
+            state.previewPlotWidth = Number.isFinite(Number(msg.payload.previewPlotWidth)) ? Math.max(0, Number(msg.payload.previewPlotWidth)) : state.previewPlotWidth;
+            state.previewPlotHeight = Number.isFinite(Number(msg.payload.previewPlotHeight)) ? Math.max(0, Number(msg.payload.previewPlotHeight)) : state.previewPlotHeight;
             state.extractedStyleSnapshot = normalizeIncomingLocalOverrides(msg.payload.extractedStyleSnapshot);
             setLocalStyleOverrideSnapshot(
                 normalizeIncomingLocalOverrides(msg.payload.localStyleOverrides),
@@ -1274,6 +1278,16 @@ function handlePluginMessage(msg: any) {
         checkCtaValidation();
         handleStyleExtracted(msg.payload);
         updateTemplateModeBanner();
+    }
+
+    if (msg.type === 'preview_plot_size_updated') {
+        state.previewPlotWidth = Number.isFinite(Number(msg.previewPlotWidth))
+            ? Math.max(0, Number(msg.previewPlotWidth))
+            : state.previewPlotWidth;
+        state.previewPlotHeight = Number.isFinite(Number(msg.previewPlotHeight))
+            ? Math.max(0, Number(msg.previewPlotHeight))
+            : state.previewPlotHeight;
+        refreshExportPreview();
     }
 }
 

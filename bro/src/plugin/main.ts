@@ -1,7 +1,7 @@
 import { VARIANT_MAPPING, PLUGIN_DATA_KEYS, MARK_NAME_PATTERNS } from './constants';
 import { loadChartData, loadLocalStyleOverrides, saveChartData, saveLocalStyleOverrides } from './data-layer';
 import { extractStyleFromNode } from './style';
-import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, getChartLegendHeight, getGraphHeight, getXEmptyHeight, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
+import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, getChartLegendHeight, getGraphHeight, getPlotAreaWidth, getXEmptyHeight, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
@@ -996,6 +996,8 @@ figma.ui.onmessage = async (msg) => {
             assistLineStrokeStyle: effectiveLocalMask.assistLineStyle
                 ? (effectiveLocalOverrides.assistLineStyle || styleInfo.assistLineStrokeStyle || null)
                 : (styleInfo.assistLineStrokeStyle || null),
+            previewPlotWidth: getPlotAreaWidth(targetNode),
+            previewPlotHeight: getGraphHeight(targetNode as FrameNode),
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
             rowStrokeStyles: effectiveLocalMask.rowStrokeStyles
                 ? (effectiveLocalOverrides.rowStrokeStyles || styleInfo.rowStrokeStyles || [])
@@ -1186,6 +1188,8 @@ figma.ui.onmessage = async (msg) => {
             markNum: extractedMarkNum,
             yCount: structure.cellCount || 4,
             colCount: colCount,
+            previewPlotWidth: getPlotAreaWidth(node),
+            previewPlotHeight: getGraphHeight(node as FrameNode),
 
             colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
             markRatio: markRatioForUi,

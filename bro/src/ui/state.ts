@@ -141,6 +141,8 @@ export const state = {
     colStrokeStyle: null as StrokeStyleSnapshot | null,
     cellStrokeStyles: [] as CellStrokeStyle[],
     rowStrokeStyles: [] as RowStrokeStyle[],
+    previewPlotWidth: 0,
+    previewPlotHeight: 0,
     isInstanceTarget: false,
     isTemplateMasterTarget: false,
     extractedStyleSnapshot: {} as LocalStyleOverrides,

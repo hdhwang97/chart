@@ -31,10 +31,25 @@ export type PreviewRenderOptions = {
 };
 
 const PREVIEW_OPTS = {
-    margin: { top: 12, right: 14, bottom: 30, left: 44 },
+    margin: { top: 8, right: 12, bottom: 6, left: 24 },
     lineStroke: 2,
     colors: ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#fb923c']
 };
+const PREVIEW_LAYOUT = {
+    xAxisHeight: 20,
+    xAxisLabelY: 14,
+    xAxisFontSize: 8,
+    yAxisFontSize: 8,
+    yAxisLabelOffset: 4,
+    legendMaxWidth: 183,
+    legendSwatchSize: 7,
+    legendItemGap: 3,
+    legendColumnGap: 12,
+    legendRowGap: 6,
+    legendFontSize: 8,
+    legendGapTop: 6,
+    legendRowHeight: 10
+} as const;
 const GRID_MARK_HOVER_CLASS = 'grid-cell-mark-hover';
 const MARK_DIM_OPACITY = 0.2;
 const MARK_HOVER_OPACITY = 1;
@@ -382,6 +397,96 @@ function buildYTickValues(yMin: number, yMax: number, cellCount: number): number
     return Array.from({ length: n + 1 }, (_, i) => yMin + (step * i));
 }
 
+function resolveXAxisLabels(count: number): string[] {
+    return Array.from({ length: count }, (_, i) => {
+        const raw = state.colHeaderTitles[i];
+        return typeof raw === 'string' && raw.trim() ? raw.trim() : `C${i + 1}`;
+    });
+}
+
+function buildLegendItems(chartType: string): Array<{ label: string; color: string }> {
+    const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
+    const startRow = isStacked ? 1 : 0;
+    const items: Array<{ label: string; color: string }> = [];
+
+    for (let r = startRow; r < state.rows; r++) {
+        const seriesIndex = isStacked ? (r - 1) : r;
+        const rawLabel = state.rowHeaderLabels[r];
+        const fallback = isStacked ? `R${r}` : `R${r + 1}`;
+        const label = typeof rawLabel === 'string' && rawLabel.trim() ? rawLabel.trim() : fallback;
+        const color = resolveSeriesStyleColor(seriesIndex, chartType, chartType === 'line' ? 'stroke' : 'fill');
+        items.push({ label, color });
+    }
+
+    return items;
+}
+
+function estimateLegendItemWidth(label: string): number {
+    return PREVIEW_LAYOUT.legendSwatchSize
+        + PREVIEW_LAYOUT.legendItemGap
+        + Math.max(16, Math.ceil(label.length * 5));
+}
+
+function measureLegendLayout(chartType: string, availableWidth: number) {
+    const items = buildLegendItems(chartType);
+    if (items.length === 0) return null;
+
+    const maxWidth = Math.max(40, Math.min(PREVIEW_LAYOUT.legendMaxWidth, availableWidth));
+    const positions: Array<{ x: number; y: number; item: { label: string; color: string } }> = [];
+    let x = 0;
+    let y = 0;
+    let rowWidth = 0;
+    let blockWidth = 0;
+
+    items.forEach((item) => {
+        const itemWidth = estimateLegendItemWidth(item.label);
+        const nextX = x === 0 ? itemWidth : x + PREVIEW_LAYOUT.legendColumnGap + itemWidth;
+        if (x > 0 && nextX > maxWidth) {
+            blockWidth = Math.max(blockWidth, rowWidth);
+            x = 0;
+            y += PREVIEW_LAYOUT.legendRowHeight + PREVIEW_LAYOUT.legendRowGap;
+        }
+
+        positions.push({ x, y, item });
+        rowWidth = x + itemWidth;
+        blockWidth = Math.max(blockWidth, rowWidth);
+        x += itemWidth + PREVIEW_LAYOUT.legendColumnGap;
+    });
+
+    const blockHeight = y + PREVIEW_LAYOUT.legendRowHeight;
+    return { positions, blockWidth, blockHeight };
+}
+
+function renderLegend(svg: any, width: number, top: number, chartType: string) {
+    const availableWidth = width - PREVIEW_OPTS.margin.left - PREVIEW_OPTS.margin.right;
+    const layout = measureLegendLayout(chartType, availableWidth);
+    if (!layout) return;
+
+    const originX = Math.max(PREVIEW_OPTS.margin.left, width - PREVIEW_OPTS.margin.right - layout.blockWidth);
+    const group = svg.append('g')
+        .attr('transform', `translate(${originX},${top})`);
+
+    layout.positions.forEach(({ x, y, item }) => {
+        const itemGroup = group.append('g')
+            .attr('transform', `translate(${x},${y})`);
+
+        itemGroup.append('rect')
+            .attr('x', 0)
+            .attr('y', 1)
+            .attr('width', PREVIEW_LAYOUT.legendSwatchSize)
+            .attr('height', PREVIEW_LAYOUT.legendSwatchSize)
+            .attr('fill', item.color);
+
+        itemGroup.append('text')
+            .attr('x', PREVIEW_LAYOUT.legendSwatchSize + PREVIEW_LAYOUT.legendItemGap)
+            .attr('y', PREVIEW_LAYOUT.legendRowHeight - 1)
+            .attr('font-size', PREVIEW_LAYOUT.legendFontSize)
+            .attr('font-family', 'Inter, sans-serif')
+            .attr('fill', '#000000')
+            .text(item.label);
+    });
+}
+
 function collectAssistLineValues(chartType: string, numData: number[][], totalCols: number): number[] {
     if (!Array.isArray(numData) || numData.length === 0) return [];
     const values: number[] = [];
@@ -489,33 +594,48 @@ function renderAxes(
     yTickValues: number[],
     h: number,
     yLabelFormat: YLabelFormatMode,
+    xLabels: string[],
     xTickValues?: number[]
 ) {
-    const yAxis = d3.axisLeft(yScale)
-        .tickValues(yTickValues)
-        .tickFormat((d: number) => formatYLabelValue(Number(d), yLabelFormat))
-        .tickPadding(6);
+    const yAxisGroup = g.append('g');
+    yTickValues.forEach((tickValue) => {
+        const y = yScale(tickValue);
+        if (!Number.isFinite(y)) return;
+        yAxisGroup.append('text')
+            .attr('x', -PREVIEW_LAYOUT.yAxisLabelOffset)
+            .attr('y', y)
+            .attr('dy', '0.32em')
+            .attr('text-anchor', 'end')
+            .attr('font-size', PREVIEW_LAYOUT.yAxisFontSize)
+            .attr('font-family', 'Inter, sans-serif')
+            .attr('fill', '#000000')
+            .text(formatYLabelValue(Number(tickValue), yLabelFormat));
+    });
 
-    const yAxisGroup = g.append('g').call(yAxis);
-    yAxisGroup.selectAll('.tick line').remove();
-    yAxisGroup.selectAll('text')
-        .attr('font-size', 9)
-        .attr('font-family', 'Inter, sans-serif');
+    const xAxisGroup = g.append('g');
+    const positions = xTickValues && xTickValues.length > 0
+        ? xTickValues.map((tickValue, i) => ({
+            x: xScale(tickValue),
+            label: xLabels[i] || `C${i + 1}`
+        }))
+        : xLabels.map((label, i) => ({
+            x: typeof xScale.bandwidth === 'function'
+                ? xScale(i)! + (xScale.bandwidth() / 2)
+                : xScale(i),
+            label
+        }));
 
-    const xAxis = d3.axisBottom(xScale)
-        .tickSizeOuter(0)
-        .tickFormat((d: number) => `C${d + 1}`);
-    if (xTickValues && xTickValues.length > 0) {
-        xAxis.tickValues(xTickValues);
-    }
-
-    const xAxisGroup = g.append('g')
-        .attr('transform', `translate(0,${h})`)
-        .call(xAxis);
-    xAxisGroup.selectAll('.tick line').remove();
-    xAxisGroup.selectAll('text')
-        .attr('font-size', 9)
-        .attr('font-family', 'Inter, sans-serif');
+    positions.forEach(({ x, label }) => {
+        if (!Number.isFinite(Number(x))) return;
+        xAxisGroup.append('text')
+            .attr('x', x)
+            .attr('y', h + PREVIEW_LAYOUT.xAxisLabelY)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', PREVIEW_LAYOUT.xAxisFontSize)
+            .attr('font-family', 'Inter, sans-serif')
+            .attr('fill', '#000000')
+            .text(label);
+    });
 }
 
 function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount: number, mode: PreviewInteractionMode, xGuidePositions?: number[]) {
@@ -754,8 +874,10 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
         .style('font-family', 'Inter, sans-serif');
 
     const { margin } = PREVIEW_OPTS;
-    const w = width - margin.left - margin.right;
-    const h = height - margin.top - margin.bottom;
+    const legendLayout = measureLegendLayout(state.chartType, width - margin.left - margin.right);
+    const legendHeight = legendLayout ? (PREVIEW_LAYOUT.legendGapTop + legendLayout.blockHeight) : 0;
+    const w = Math.max(0, width - margin.left - margin.right);
+    const h = Math.max(0, height - margin.top - margin.bottom - PREVIEW_LAYOUT.xAxisHeight - legendHeight);
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const chartType = state.chartType;
@@ -791,10 +913,11 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
         ? d3.scaleLinear().domain([0, Math.max(1, totalCols - 1)]).range([0, w])
         : d3.scaleBand().domain(d3.range(axisCols)).range([0, w]).padding(0);
     const yTickValues = buildYTickValues(yMin, yMax, state.cellCount);
+    const xLabels = resolveXAxisLabels(axisCols);
 
     drawTabBackgroundLayer(g, w, h, mode);
 
-    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, lineTickValues);
+    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;
@@ -811,6 +934,7 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
 
     drawGridContainerBorder(g, w, h, mode);
     drawAssistLines(g, yScale, w, yMin, yMax, chartType, numData, totalCols, mode);
+    renderLegend(svg, width, margin.top + h + PREVIEW_LAYOUT.xAxisHeight + PREVIEW_LAYOUT.legendGapTop, chartType);
 
     if (mode === 'style') {
         bindStyleInteractions(container, options.onTargetHover, options.onTargetClick);

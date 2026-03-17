@@ -12,7 +12,7 @@ import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
-import { getGraphHeight, getXEmptyHeight } from './drawing/shared';
+import { getGraphHeight, getPlotAreaWidth, getXEmptyHeight } from './drawing/shared';
 import { detectLineSeriesCountInColumns, hasLineBundleStructureInColumns } from './drawing/line-structure';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import type {
@@ -515,6 +515,11 @@ export async function initPluginUI(
                 ...(localOverrideState.mask.colStrokeStyle ? { colStrokeStyle: localOverrideState.overrides.colStrokeStyle } : {})
             });
         }
+        figma.ui.postMessage({
+            type: 'preview_plot_size_updated',
+            previewPlotWidth: getPlotAreaWidth(node),
+            previewPlotHeight: getGraphHeight(node as FrameNode)
+        });
         return;
     }
 
@@ -545,6 +550,8 @@ export async function initPluginUI(
     const savedMarkStyles = parseSavedMarkStylesFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLES);
     const savedRowHeaderLabels = parseSavedRowHeaderLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS);
     const savedXAxisLabels = parseSavedXAxisLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS);
+    const previewPlotWidth = getPlotAreaWidth(node);
+    const previewPlotHeight = getGraphHeight(node as FrameNode);
     const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
     const extractedRowColors = Array.from({ length: Math.max(1, rowColorCount) }, (_, i) =>
         normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
@@ -675,6 +682,8 @@ export async function initPluginUI(
             : savedMarkStyles,
         savedRowHeaderLabels,
         savedXAxisLabels,
+        previewPlotWidth,
+        previewPlotHeight,
 
         cellFillStyle: effectiveUiSnapshot.cellFillStyle || styleInfo.cellFillStyle || null,
         lineBackgroundStyle: effectiveUiSnapshot.lineBackgroundStyle || styleInfo.lineBackgroundStyle || null,
