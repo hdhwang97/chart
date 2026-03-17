@@ -125,6 +125,7 @@ export const state = {
     conversionMax: 100,
     strokeWidth: 2,
     markRatio: 0.8,
+    xAxisLabelsVisible: true,
     // Compatibility alias: derived from markStylesDraft for runtime sync/output.
     rowColors: DEFAULT_ROW_COLORS.slice(0, 3),
     rowColorModes: ['hex', 'hex', 'hex'] as ColorMode[],

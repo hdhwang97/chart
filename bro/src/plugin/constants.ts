@@ -46,6 +46,7 @@ export const PLUGIN_DATA_KEYS = {
     LAST_CELL_COUNT: "lastCellCount",
     LAST_MARK_NUM: "lastMarkNum",
     LAST_X_AXIS_LABELS: "lastXAxisLabels",
+    LAST_X_AXIS_LABELS_VISIBLE: "lastXAxisLabelsVisible",
     LAST_Y_MIN: "lastYMin",
     LAST_Y_MAX: "lastYMax",
     LAST_Y_LABEL_FORMAT: "lastYLabelFormat",

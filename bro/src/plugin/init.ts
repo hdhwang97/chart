@@ -6,7 +6,7 @@ import {
 import { traverse, findActualPropKey, normalizeHexColor } from './utils';
 import { loadChartData, loadLocalStyleOverrides } from './data-layer';
 import { extractChartColors, extractStyleFromNode } from './style';
-import { collectColumns } from './drawing/shared';
+import { applyColumnXEmptyVisibility, applyYAxisEmptyVisibility, collectColumns } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
@@ -69,6 +69,12 @@ function resolveAssistLineEnabledFromNode(node: SceneNode) {
 
 function resolveAssistLineVisibleFromNode(node: SceneNode) {
     return node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
+}
+
+function resolveXAxisLabelsVisibleFromNode(node: SceneNode) {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS_VISIBLE);
+    if (!raw) return true;
+    return raw !== 'false';
 }
 
 function parseSavedSideStyleFromNode(node: SceneNode, key: string): SideStrokeInjectionStyle | null {
@@ -426,6 +432,7 @@ export async function initPluginUI(
 
         const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
         const assistLineVisible = resolveAssistLineVisibleFromNode(node);
+        const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
         const localOverrideState = node.type === 'INSTANCE'
             ? loadLocalStyleOverrides(node)
             : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
@@ -459,6 +466,7 @@ export async function initPluginUI(
             markRatio: (chartType === 'bar' || chartType === 'stackedBar' || chartType === 'stacked')
                 ? resolveMarkRatioFromNode(node)
                 : undefined,
+            xAxisLabelsVisible,
             assistLineVisible,
             assistLineEnabled,
             rowColors: runtimeRowColors ?? resolveRowColorsFromNode(node, chartType, Math.max(1, rowCount)),
@@ -474,6 +482,8 @@ export async function initPluginUI(
             reason: opts?.reason || 'auto-resize'
         };
 
+        applyColumnXEmptyVisibility(node, xAxisLabelsVisible);
+        applyYAxisEmptyVisibility(node, xAxisLabelsVisible);
         const H = getGraphHeight(node as FrameNode);
         const xEmptyHeight = getXEmptyHeight(node as FrameNode);
         if (chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
@@ -538,6 +548,7 @@ export async function initPluginUI(
     const markRatio = resolveMarkRatioFromNode(node, styleInfo.markRatio);
     const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
+    const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
     const savedCellTopStyle =
         parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE)
         || parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
@@ -654,6 +665,7 @@ export async function initPluginUI(
         markColorSource,
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
         markRatio,
+        xAxisLabelsVisible,
         assistLineVisible,
         assistLineEnabled,
         savedCellTopStyle: isInstanceTarget

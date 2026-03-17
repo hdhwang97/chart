@@ -38,6 +38,7 @@ function buildPreviewStyleFromState() {
         markNum: state.chartType === 'stackedBar' ? state.groupStructure : state.rows,
         yCount: state.cellCount,
         colCount: state.cols,
+        xAxisLabelsVisible: state.xAxisLabelsVisible,
         markRatio: state.markRatio,
         rowColors: state.rowColors,
         colColors: state.colHeaderColors,
@@ -406,6 +407,7 @@ function renderAxes(
     h: number,
     yLabelFormat: YLabelFormatMode,
     xLabels: string[],
+    showXLabels: boolean,
     xTickValues?: number[]
 ) {
     const yAxisGroup = g.append('g');
@@ -422,6 +424,8 @@ function renderAxes(
             .attr('fill', '#000000')
             .text(formatYLabelValue(Number(tickValue), yLabelFormat));
     });
+
+    if (!showXLabels) return;
 
     const xAxisGroup = g.append('g');
     const positions = xTickValues && xTickValues.length > 0
@@ -578,6 +582,10 @@ function renderD3Preview(style: any) {
     if (width === 0 || height === 0) return;
 
     const margin = EXPORT_LAYOUT.margin;
+    const xAxisLabelsVisible = style?.xAxisLabelsVisible !== undefined
+        ? Boolean(style.xAxisLabelsVisible)
+        : state.xAxisLabelsVisible;
+    const xAxisHeight = xAxisLabelsVisible ? EXPORT_LAYOUT.xAxisHeight : 0;
     const requestedPlotWidth = Number(style?.previewPlotWidth);
     const requestedPlotHeight = Number(style?.previewPlotHeight);
     const w = Number.isFinite(requestedPlotWidth) && requestedPlotWidth > 0
@@ -592,7 +600,7 @@ function renderD3Preview(style: any) {
     const legendLayout = measureLegendLayout(chartType, rowColors, margin.left + w + margin.right);
     const legendHeight = legendLayout ? (EXPORT_LAYOUT.legendGapTop + legendLayout.blockHeight) : 0;
     const svgNaturalWidth = Math.max(1, margin.left + w + margin.right);
-    const svgNaturalHeight = Math.max(1, margin.top + h + EXPORT_LAYOUT.xAxisHeight + legendHeight + margin.bottom);
+    const svgNaturalHeight = Math.max(1, margin.top + h + xAxisHeight + legendHeight + margin.bottom);
 
     const svg = d3.select(container).append('svg')
         .attr('width', width)
@@ -674,7 +682,7 @@ function renderD3Preview(style: any) {
     const xLabels = buildXAxisLabels(axisCols);
 
     drawTabBackgroundLayer(g, w, h);
-    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, lineTickValues);
+    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, xAxisLabelsVisible, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;
@@ -788,7 +796,7 @@ function renderD3Preview(style: any) {
     }
 
     drawGridContainerBorder(g, w, h);
-    renderLegend(svg, svgNaturalWidth, margin.top + h + EXPORT_LAYOUT.xAxisHeight + EXPORT_LAYOUT.legendGapTop, chartType, rowColors);
+    renderLegend(svg, svgNaturalWidth, margin.top + h + xAxisHeight + EXPORT_LAYOUT.legendGapTop, chartType, rowColors);
 }
 
 function updateCodeOutput(style: any) {
@@ -802,6 +810,9 @@ export function generateD3CodeString(style: any): string {
     const containerHeight = container?.clientHeight || 0;
     const chartTypeRaw = style.chartType || 'bar';
     const chartType = chartTypeRaw === 'stacked' ? 'stackedBar' : chartTypeRaw;
+    const xAxisLabelsVisible = style?.xAxisLabelsVisible !== undefined
+        ? Boolean(style.xAxisLabelsVisible)
+        : state.xAxisLabelsVisible;
     const colCount = Number(style.colCount) || 5;
     const yCount = Number(style.yCount) || 4;
     const strokeVal = Number(style.strokeWidth) || state.strokeWidth || 2;
@@ -866,7 +877,8 @@ export function generateD3CodeString(style: any): string {
     const svgNaturalWidth = Math.max(1, EXPORT_LAYOUT.margin.left + plotWidth + EXPORT_LAYOUT.margin.right);
     const legendLayout = measureLegendLayout(chartType, rowColors, svgNaturalWidth);
     const legendHeight = legendLayout ? (EXPORT_LAYOUT.legendGapTop + legendLayout.blockHeight) : 0;
-    const svgNaturalHeight = Math.max(1, EXPORT_LAYOUT.margin.top + plotHeight + EXPORT_LAYOUT.xAxisHeight + legendHeight + EXPORT_LAYOUT.margin.bottom);
+    const xAxisHeight = xAxisLabelsVisible ? EXPORT_LAYOUT.xAxisHeight : 0;
+    const svgNaturalHeight = Math.max(1, EXPORT_LAYOUT.margin.top + plotHeight + xAxisHeight + legendHeight + EXPORT_LAYOUT.margin.bottom);
     const paddingVal = Number((1 - normalizeMarkRatio(style.markRatio)).toFixed(4));
     const yTicks = yTickValues.map((value) => ({
         value,
@@ -937,6 +949,7 @@ export function generateD3CodeString(style: any): string {
             flatCols,
             yCount,
             xLabels,
+            xAxisLabelsVisible,
             yDomain,
             yTicks,
             yLabelFormat: state.yLabelFormat
@@ -1113,6 +1126,7 @@ if (config.axis.yCount > 1) {
   }
 }
 
+if (config.axis.xAxisLabelsVisible) {
 config.axis.xLabels.forEach((label, index) => {
   let x = 0;
   if (config.chartType === 'line') {
@@ -1134,6 +1148,7 @@ config.axis.xLabels.forEach((label, index) => {
     .attr('font-size', config.layout.xAxisFontSize)
     .text(label);
 });
+}
 
 if (config.chartType === 'bar') {
   const xScale = d3.scaleBand()
@@ -1267,7 +1282,7 @@ if (Array.isArray(config.legend.positions) && config.legend.positions.length > 0
       'translate('
         + Math.max(config.layout.margin.left, config.svg.width - config.layout.margin.right - config.legend.blockWidth)
         + ','
-        + (config.layout.margin.top + config.plot.height + config.layout.xAxisHeight + config.layout.legendGapTop)
+        + (config.layout.margin.top + config.plot.height + (config.axis.xAxisLabelsVisible ? config.layout.xAxisHeight : 0) + config.layout.legendGapTop)
         + ')'
     );
 

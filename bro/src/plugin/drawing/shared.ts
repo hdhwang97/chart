@@ -59,10 +59,89 @@ export function getPlotAreaWidth(node: SceneNode): number {
     return 0;
 }
 
+function findColumnXEmptyLayer(colNode: SceneNode): SceneNode | null {
+    let target: SceneNode | null = null;
+
+    if ('children' in colNode) {
+        const direct = (colNode as SceneNode & ChildrenMixin).children.find((child) => child.name === 'x-empty') || null;
+        if (direct) target = direct;
+    }
+
+    if (!target) {
+        traverse(colNode, (node) => {
+            if (target) return;
+            if (node.id === colNode.id) return;
+            if (node.name === 'x-empty') {
+                target = node;
+            }
+        });
+    }
+
+    return target;
+}
+
+function findColumnXEmptyPropKey(props: InstanceNode['componentProperties']): string | null {
+    return findActualPropKey(props, 'xEmpty')
+        || findActualPropKey(props, 'x-empty')
+        || findActualPropKey(props, 'x_empty')
+        || findActualPropKey(props, 'XEmpty')
+        || findActualPropKey(props, 'X-empty')
+        || findActualPropKey(props, 'X_empty');
+}
+
+function readColumnXEmptyProperty(colNode: SceneNode): boolean | null {
+    if (colNode.type !== 'INSTANCE') return null;
+    try {
+        const props = colNode.componentProperties;
+        const propKey = findColumnXEmptyPropKey(props);
+        if (!propKey) return null;
+        const rawValue = props[propKey]?.value;
+        if (typeof rawValue === 'boolean') return rawValue;
+        if (typeof rawValue === 'string') {
+            const normalized = rawValue.trim().toLowerCase();
+            if (normalized === 'true') return true;
+            if (normalized === 'false') return false;
+        }
+    } catch {
+        // ignore and fall back to layer visibility
+    }
+    return null;
+}
+
+export function isColumnXEmptyVisible(colNode: SceneNode): boolean {
+    if (!colNode.visible) return false;
+
+    const propVisible = readColumnXEmptyProperty(colNode);
+    if (propVisible === false) return false;
+
+    const xEmptyLayer = findColumnXEmptyLayer(colNode);
+    if (!xEmptyLayer) return false;
+    return xEmptyLayer.visible;
+}
+
+export function hasVisibleXEmpty(node: FrameNode): boolean {
+    const columns = collectColumns(node).filter((col) => col.node.visible);
+    if (columns.length > 0) {
+        return columns.some((col) => isColumnXEmptyVisible(col.node));
+    }
+
+    const fallback = node.findOne((candidate) => candidate.name === 'x-empty');
+    return Boolean(fallback?.visible);
+}
+
 export function getXEmptyHeight(node: FrameNode): number {
-    const xEmpty = node.findOne(n => n.name === "x-empty");
-    if (!xEmpty) return 0;
-    return Math.max(0, xEmpty.height);
+    const columns = collectColumns(node).filter((col) => col.node.visible);
+    for (const col of columns) {
+        if (!isColumnXEmptyVisible(col.node)) continue;
+        const xEmpty = findColumnXEmptyLayer(col.node);
+        if (xEmpty && typeof xEmpty.height === 'number') {
+            return Math.max(0, xEmpty.height);
+        }
+    }
+
+    const fallback = node.findOne((candidate) => candidate.name === 'x-empty' && candidate.visible);
+    if (!fallback || typeof fallback.height !== 'number') return 0;
+    return Math.max(0, fallback.height);
 }
 
 export function getChartLegendHeight(node: FrameNode): number {
@@ -164,6 +243,54 @@ export function applyYAxis(node: SceneNode, cellCount: number, payload: any) {
             }
         }
     });
+}
+
+export function applyYAxisEmptyVisibility(node: SceneNode, visible: boolean) {
+    const yAxis = (node as FrameNode).findOne((candidate) => MARK_NAME_PATTERNS.Y_AXIS_CONTAINER.test(candidate.name));
+    if (!yAxis) return;
+
+    traverse(yAxis, (candidate) => {
+        if (candidate.id === yAxis.id) return;
+        if (candidate.name !== 'y_empty') return;
+        candidate.visible = visible;
+    });
+}
+
+export function applyColumnXEmptyVisibility(graph: SceneNode, visible: boolean, precomputedCols?: ColRef[]) {
+    const columns = precomputedCols ?? collectColumns(graph);
+    const result = { candidates: columns.length, applied: 0, skipped: 0 };
+
+    columns.forEach((col) => {
+        let changed = false;
+
+        if (col.node.type === 'INSTANCE') {
+            try {
+                const propKey = findColumnXEmptyPropKey(col.node.componentProperties);
+                if (propKey) {
+                    const current = col.node.componentProperties[propKey]?.value;
+                    if (current !== visible) {
+                        col.node.setProperties({ [propKey]: visible });
+                        changed = true;
+                    }
+                }
+            } catch {
+                // fall back to layer visibility below
+            }
+        }
+
+        const xEmptyLayer = findColumnXEmptyLayer(col.node);
+        if (xEmptyLayer) {
+            if (xEmptyLayer.visible !== visible) {
+                xEmptyLayer.visible = visible;
+                changed = true;
+            }
+        }
+
+        if (changed) result.applied += 1;
+        else result.skipped += 1;
+    });
+
+    return result;
 }
 
 export function applyColumnXEmptyAlign(graph: SceneNode, align: 'center' | 'right', precomputedCols?: ColRef[]) {

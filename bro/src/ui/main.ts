@@ -711,9 +711,24 @@ function updateYLabelFormatUi() {
         : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
 }
 
+function updateXAxisLabelsVisibleUi() {
+    ui.xAxisLabelToggleBtn.textContent = state.xAxisLabelsVisible ? 'ON' : 'OFF';
+    ui.xAxisLabelToggleBtn.className = state.xAxisLabelsVisible
+        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
+        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+}
+
 function setYLabelFormat(mode: string) {
     state.yLabelFormat = normalizeYLabelFormatMode(mode);
     updateYLabelFormatUi();
+    renderPreview();
+    renderStylePreview();
+    refreshExportPreview();
+}
+
+function setXAxisLabelsVisible(next: boolean) {
+    state.xAxisLabelsVisible = Boolean(next);
+    updateXAxisLabelsVisibleUi();
     renderPreview();
     renderStylePreview();
     refreshExportPreview();
@@ -872,10 +887,12 @@ function handlePluginMessage(msg: any) {
             state.assistLineVisible = false;
             state.assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
             state.yLabelFormat = 'integer';
+            state.xAxisLabelsVisible = true;
             ui.settingMarkRatioInput.value = '80';
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
             updateYLabelFormatUi();
+            updateXAxisLabelsVisibleUi();
             closeAllAssistLinePopovers();
             closeRowColorPopover();
             updateAssistLineToggleUi();
@@ -1006,9 +1023,11 @@ function handlePluginMessage(msg: any) {
         if (msg.lastCellCount) state.cellCount = Number(msg.lastCellCount);
         if (msg.lastMode) state.dataMode = msg.lastMode as 'raw' | 'percent';
         state.yLabelFormat = normalizeYLabelFormatMode(msg.lastYLabelFormat);
+        state.xAxisLabelsVisible = msg.xAxisLabelsVisible !== false;
         ui.settingYMin.value = msg.lastYMin !== undefined ? String(msg.lastYMin) : '0';
         ui.settingYMax.value = msg.lastYMax !== undefined ? String(msg.lastYMax) : ((msg.lastMode || 'raw') === 'raw' ? '' : '100');
         updateYLabelFormatUi();
+        updateXAxisLabelsVisibleUi();
         if (msg.lastStrokeWidth !== undefined) {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
@@ -1334,6 +1353,9 @@ function bindUiEvents() {
     });
     ui.yLabelFormatToggleBtn.addEventListener('click', () => {
         setYLabelFormat(state.yLabelFormat === 'decimal' ? 'integer' : 'decimal');
+    });
+    ui.xAxisLabelToggleBtn.addEventListener('click', () => {
+        setXAxisLabelsVisible(!state.xAxisLabelsVisible);
     });
     ui.styleAssistLineLabelBtn.addEventListener('click', (e) => {
         e.stopPropagation();

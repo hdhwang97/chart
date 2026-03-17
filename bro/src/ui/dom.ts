@@ -43,6 +43,7 @@ export const ui = {
     get settingYMax() { return byId<HTMLInputElement>('setting-y-max'); },
     get settingYLabelFormat() { return byId<HTMLSelectElement>('setting-y-label-format'); },
     get yLabelFormatToggleBtn() { return byId<HTMLButtonElement>('y-label-format-toggle'); },
+    get xAxisLabelToggleBtn() { return byId<HTMLButtonElement>('x-axis-label-toggle'); },
     get settingMarkRatioInput() { return byId<HTMLSelectElement>('setting-mark-ratio-input'); },
 
     get settingStrokeInput() { return byId<HTMLInputElement>('setting-stroke-input'); },

@@ -81,6 +81,10 @@ function normalizeXAxisLabels(value: unknown): string[] {
     return next;
 }
 
+function normalizeXAxisLabelsVisible(value: unknown): boolean {
+    return value !== false;
+}
+
 function normalizeMarkColorSource(value: unknown): 'row' | 'col' {
     return value === 'col' ? 'col' : 'row';
 }
@@ -441,6 +445,10 @@ export function saveChartData(
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS,
         JSON.stringify(normalizeXAxisLabels(msg.xAxisLabels))
+    );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS_VISIBLE,
+        String(normalizeXAxisLabelsVisible(msg.xAxisLabelsVisible))
     );
     node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED,

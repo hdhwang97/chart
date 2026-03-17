@@ -595,6 +595,7 @@ function renderAxes(
     h: number,
     yLabelFormat: YLabelFormatMode,
     xLabels: string[],
+    showXLabels: boolean,
     xTickValues?: number[]
 ) {
     const yAxisGroup = g.append('g');
@@ -611,6 +612,8 @@ function renderAxes(
             .attr('fill', '#000000')
             .text(formatYLabelValue(Number(tickValue), yLabelFormat));
     });
+
+    if (!showXLabels) return;
 
     const xAxisGroup = g.append('g');
     const positions = xTickValues && xTickValues.length > 0
@@ -874,10 +877,11 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
         .style('font-family', 'Inter, sans-serif');
 
     const { margin } = PREVIEW_OPTS;
+    const xAxisHeight = state.xAxisLabelsVisible ? PREVIEW_LAYOUT.xAxisHeight : 0;
     const legendLayout = measureLegendLayout(state.chartType, width - margin.left - margin.right);
     const legendHeight = legendLayout ? (PREVIEW_LAYOUT.legendGapTop + legendLayout.blockHeight) : 0;
     const w = Math.max(0, width - margin.left - margin.right);
-    const h = Math.max(0, height - margin.top - margin.bottom - PREVIEW_LAYOUT.xAxisHeight - legendHeight);
+    const h = Math.max(0, height - margin.top - margin.bottom - xAxisHeight - legendHeight);
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const chartType = state.chartType;
@@ -917,7 +921,7 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
 
     drawTabBackgroundLayer(g, w, h, mode);
 
-    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, lineTickValues);
+    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, state.xAxisLabelsVisible, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;
@@ -934,7 +938,7 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
 
     drawGridContainerBorder(g, w, h, mode);
     drawAssistLines(g, yScale, w, yMin, yMax, chartType, numData, totalCols, mode);
-    renderLegend(svg, width, margin.top + h + PREVIEW_LAYOUT.xAxisHeight + PREVIEW_LAYOUT.legendGapTop, chartType);
+    renderLegend(svg, width, margin.top + h + xAxisHeight + PREVIEW_LAYOUT.legendGapTop, chartType);
 
     if (mode === 'style') {
         bindStyleInteractions(container, options.onTargetHover, options.onTargetClick);
