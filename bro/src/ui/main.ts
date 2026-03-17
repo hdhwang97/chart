@@ -48,6 +48,7 @@ declare const iro: any;
 let uiInitialized = false;
 const pendingMessages: any[] = [];
 let previewAssistLinePopoverOpen = false;
+let previewAxisPopoverOpen = false;
 let styleAssistLinePopoverOpen = false;
 let rowColorPopoverOpen = false;
 let activeColorTarget: { type: 'row' | 'col'; index: number } | null = null;
@@ -686,6 +687,16 @@ function openPreviewAssistLinePopover() {
     ui.previewAssistLinePopover.classList.remove('hidden');
 }
 
+function closePreviewAxisPopover() {
+    previewAxisPopoverOpen = false;
+    ui.previewAxisPopover.classList.add('hidden');
+}
+
+function openPreviewAxisPopover() {
+    previewAxisPopoverOpen = true;
+    ui.previewAxisPopover.classList.remove('hidden');
+}
+
 function closeStyleAssistLinePopover() {
     styleAssistLinePopoverOpen = false;
     ui.styleAssistLinePopover.classList.add('hidden');
@@ -698,6 +709,7 @@ function openStyleAssistLinePopover() {
 
 function closeAllAssistLinePopovers() {
     closePreviewAssistLinePopover();
+    closePreviewAxisPopover();
     closeStyleAssistLinePopover();
 }
 
@@ -711,18 +723,14 @@ function updateYLabelFormatUi() {
         : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
 }
 
-function updateXAxisLabelsVisibleUi() {
-    ui.xAxisLabelToggleBtn.textContent = state.xAxisLabelsVisible ? 'ON' : 'OFF';
-    ui.xAxisLabelToggleBtn.className = state.xAxisLabelsVisible
+function updateAxisVisibilityUi() {
+    const axisVisible = state.xAxisLabelsVisible || state.yAxisVisible;
+    ui.previewAxisToggleBtn.textContent = axisVisible ? 'ON' : 'OFF';
+    ui.previewAxisToggleBtn.className = axisVisible
         ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
         : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
-}
-
-function updateYAxisVisibleUi() {
-    ui.yAxisLabelToggleBtn.textContent = state.yAxisVisible ? 'ON' : 'OFF';
-    ui.yAxisLabelToggleBtn.className = state.yAxisVisible
-        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
-        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+    ui.previewAxisXCheck.checked = state.xAxisLabelsVisible;
+    ui.previewAxisYCheck.checked = state.yAxisVisible;
 }
 
 function setYLabelFormat(mode: string) {
@@ -735,7 +743,7 @@ function setYLabelFormat(mode: string) {
 
 function setXAxisLabelsVisible(next: boolean) {
     state.xAxisLabelsVisible = Boolean(next);
-    updateXAxisLabelsVisibleUi();
+    updateAxisVisibilityUi();
     renderPreview();
     renderStylePreview();
     refreshExportPreview();
@@ -743,7 +751,16 @@ function setXAxisLabelsVisible(next: boolean) {
 
 function setYAxisVisible(next: boolean) {
     state.yAxisVisible = Boolean(next);
-    updateYAxisVisibleUi();
+    updateAxisVisibilityUi();
+    renderPreview();
+    renderStylePreview();
+    refreshExportPreview();
+}
+
+function setAxisVisible(next: boolean) {
+    state.xAxisLabelsVisible = Boolean(next);
+    state.yAxisVisible = Boolean(next);
+    updateAxisVisibilityUi();
     renderPreview();
     renderStylePreview();
     refreshExportPreview();
@@ -908,8 +925,7 @@ function handlePluginMessage(msg: any) {
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
             updateYLabelFormatUi();
-            updateXAxisLabelsVisibleUi();
-            updateYAxisVisibleUi();
+            updateAxisVisibilityUi();
             closeAllAssistLinePopovers();
             closeRowColorPopover();
             updateAssistLineToggleUi();
@@ -1045,8 +1061,7 @@ function handlePluginMessage(msg: any) {
         ui.settingYMin.value = msg.lastYMin !== undefined ? String(msg.lastYMin) : '0';
         ui.settingYMax.value = msg.lastYMax !== undefined ? String(msg.lastYMax) : ((msg.lastMode || 'raw') === 'raw' ? '' : '100');
         updateYLabelFormatUi();
-        updateXAxisLabelsVisibleUi();
-        updateYAxisVisibleUi();
+        updateAxisVisibilityUi();
         if (msg.lastStrokeWidth !== undefined) {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
@@ -1203,11 +1218,11 @@ function handlePluginMessage(msg: any) {
             }
             if (msg.payload.xAxisLabelsVisible !== undefined) {
                 state.xAxisLabelsVisible = Boolean(msg.payload.xAxisLabelsVisible);
-                updateXAxisLabelsVisibleUi();
+                updateAxisVisibilityUi();
             }
             if (msg.payload.yAxisVisible !== undefined) {
                 state.yAxisVisible = Boolean(msg.payload.yAxisVisible);
-                updateYAxisVisibleUi();
+                updateAxisVisibilityUi();
             }
             state.previewPlotWidth = Number.isFinite(Number(msg.payload.previewPlotWidth)) ? Math.max(0, Number(msg.payload.previewPlotWidth)) : state.previewPlotWidth;
             state.previewPlotHeight = Number.isFinite(Number(msg.payload.previewPlotHeight)) ? Math.max(0, Number(msg.payload.previewPlotHeight)) : state.previewPlotHeight;
@@ -1381,11 +1396,21 @@ function bindUiEvents() {
     ui.yLabelFormatToggleBtn.addEventListener('click', () => {
         setYLabelFormat(state.yLabelFormat === 'decimal' ? 'integer' : 'decimal');
     });
-    ui.xAxisLabelToggleBtn.addEventListener('click', () => {
-        setXAxisLabelsVisible(!state.xAxisLabelsVisible);
+    ui.previewAxisLabelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (previewAxisPopoverOpen) closePreviewAxisPopover();
+        else openPreviewAxisPopover();
     });
-    ui.yAxisLabelToggleBtn.addEventListener('click', () => {
-        setYAxisVisible(!state.yAxisVisible);
+    ui.previewAxisToggleBtn.addEventListener('click', () => {
+        setAxisVisible(!(state.xAxisLabelsVisible || state.yAxisVisible));
+    });
+    ui.previewAxisXCheck.addEventListener('change', () => {
+        setXAxisLabelsVisible(ui.previewAxisXCheck.checked);
+        updateAxisVisibilityUi();
+    });
+    ui.previewAxisYCheck.addEventListener('change', () => {
+        setYAxisVisible(ui.previewAxisYCheck.checked);
+        updateAxisVisibilityUi();
     });
     ui.styleAssistLineLabelBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1435,6 +1460,8 @@ function bindUiEvents() {
     });
     ui.previewAssistLinePopover.addEventListener('click', (e) => e.stopPropagation());
     ui.previewAssistLineControl.addEventListener('click', (e) => e.stopPropagation());
+    ui.previewAxisPopover.addEventListener('click', (e) => e.stopPropagation());
+    ui.previewAxisControl.addEventListener('click', (e) => e.stopPropagation());
     ui.styleAssistLinePopover.addEventListener('click', (e) => e.stopPropagation());
     ui.styleAssistLineControl.addEventListener('click', (e) => e.stopPropagation());
     ui.rowColorPopover.addEventListener('click', (e) => e.stopPropagation());

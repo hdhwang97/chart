@@ -243,19 +243,24 @@
                                     <option value="decimal">Decimal</option>
                                 </select>
                             </div>
-                            <div id="x-axis-label-control" class="flex items-center gap-1.5">
-                                <span id="x-axis-label-label"
-                                    class="text-xxs font-semibold text-text-sub whitespace-nowrap">x축 라벨</span>
-                                <button id="x-axis-label-toggle"
+                            <div id="preview-axis-control" class="relative flex items-center gap-1.5">
+                                <button id="preview-axis-label-btn"
+                                    class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2"
+                                    type="button">축 표시</button>
+                                <button id="preview-axis-toggle"
                                     class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer"
                                     type="button">ON</button>
-                            </div>
-                            <div id="y-axis-label-control" class="flex items-center gap-1.5">
-                                <span id="y-axis-label-label"
-                                    class="text-xxs font-semibold text-text-sub whitespace-nowrap">y축</span>
-                                <button id="y-axis-label-toggle"
-                                    class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer"
-                                    type="button">ON</button>
+                                <div id="preview-axis-popover"
+                                    class="hidden absolute top-6 right-0 z-30 w-24 rounded border border-border bg-white shadow-md p-2">
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-axis-x-check" type="checkbox" class="cursor-pointer">
+                                        <span>x축</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-axis-y-check" type="checkbox" class="cursor-pointer">
+                                        <span>y축</span>
+                                    </label>
+                                </div>
                             </div>
                             <div id="preview-assist-line-control" class="relative flex items-center gap-1.5">
                                 <button id="preview-assist-line-label-btn"

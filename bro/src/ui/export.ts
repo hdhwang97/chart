@@ -40,6 +40,8 @@ function buildPreviewStyleFromState() {
         colCount: state.cols,
         xAxisLabelsVisible: state.xAxisLabelsVisible,
         yAxisVisible: state.yAxisVisible,
+        assistLineVisible: state.assistLineVisible,
+        assistLineEnabled: state.assistLineEnabled,
         markRatio: state.markRatio,
         rowColors: state.rowColors,
         colColors: state.colHeaderColors,
@@ -398,6 +400,92 @@ function drawTabBackgroundLayer(g: any, w: number, h: number) {
         .attr('height', h)
         .attr('fill', state.styleInjectionDraft.cellFill.color)
         .attr('fill-opacity', 1);
+}
+
+function getAssistLineStyle() {
+    const draft = state.styleInjectionDraft.assistLine;
+    return {
+        color: draft.color || '#E5E7EB',
+        thickness: Math.max(1, Number(draft.thickness) || 1),
+        dash: draft.strokeStyle === 'dash'
+    };
+}
+
+function collectAssistLineValues(chartType: string, numData: number[][], totalCols: number): number[] {
+    const values: number[] = [];
+    if (chartType === 'stackedBar' || chartType === 'stacked') {
+        const startRow = numData.length > 1 ? 1 : 0;
+        for (let c = 0; c < totalCols; c++) {
+            let sum = 0;
+            for (let r = startRow; r < numData.length; r++) {
+                sum += Number(numData[r]?.[c]) || 0;
+            }
+            values.push(sum);
+        }
+    } else {
+        for (let r = 0; r < numData.length; r++) {
+            for (let c = 0; c < totalCols; c++) {
+                const v = Number(numData[r]?.[c]);
+                if (Number.isFinite(v)) values.push(v);
+            }
+        }
+    }
+    return values;
+}
+
+function drawAssistLines(
+    g: any,
+    yScale: any,
+    w: number,
+    yMin: number,
+    yMax: number,
+    chartType: string,
+    numData: number[][],
+    totalCols: number,
+    stylePayload: any
+) {
+    const assistLineVisible = stylePayload?.assistLineVisible !== undefined
+        ? Boolean(stylePayload.assistLineVisible)
+        : state.assistLineVisible;
+    if (!assistLineVisible) return;
+
+    const enabled = stylePayload?.assistLineEnabled && typeof stylePayload.assistLineEnabled === 'object'
+        ? {
+            min: Boolean(stylePayload.assistLineEnabled.min),
+            max: Boolean(stylePayload.assistLineEnabled.max),
+            avg: Boolean(stylePayload.assistLineEnabled.avg),
+            ctr: Boolean(stylePayload.assistLineEnabled.ctr)
+        }
+        : (state.assistLineEnabled || { min: false, max: false, avg: false, ctr: false });
+    if (!enabled.min && !enabled.max && !enabled.avg && !enabled.ctr) return;
+
+    const values = collectAssistLineValues(chartType, numData, totalCols);
+    const hasValues = values.length > 0;
+    const min = hasValues ? Math.min(...values) : yMin;
+    const max = hasValues ? Math.max(...values) : yMax;
+    const avg = hasValues ? (values.reduce((acc, v) => acc + v, 0) / values.length) : ((yMin + yMax) / 2);
+    const ctr = (yMin + yMax) / 2;
+    const assistLineStyle = getAssistLineStyle();
+
+    const lines: number[] = [];
+    if (enabled.min) lines.push(min);
+    if (enabled.max) lines.push(max);
+    if (enabled.avg) lines.push(avg);
+    if (enabled.ctr) lines.push(ctr);
+
+    lines.forEach((value) => {
+        const y = yScale(value);
+        if (!Number.isFinite(y)) return;
+        const line = g.append('line')
+            .attr('x1', 0)
+            .attr('x2', w)
+            .attr('y1', y)
+            .attr('y2', y)
+            .attr('stroke', assistLineStyle.color)
+            .attr('stroke-width', assistLineStyle.thickness)
+            .attr('opacity', 0.9);
+        if (assistLineStyle.dash) line.attr('stroke-dasharray', '4,2');
+    });
 }
 
 function renderAxes(
@@ -803,6 +891,7 @@ function renderD3Preview(style: any) {
     }
 
     drawGridContainerBorder(g, w, h);
+    drawAssistLines(g, yScale, w, yDomain.yMin, yDomain.yMax, chartType, sampleData, flatCols, style);
     renderLegend(svg, svgNaturalWidth, margin.top + h + xAxisHeight + EXPORT_LAYOUT.legendGapTop, chartType, rowColors);
 }
 
@@ -902,6 +991,13 @@ export function generateD3CodeString(style: any): string {
             color: item.color
         }))
         : [];
+    const assistLineEnabled = {
+        min: Boolean(state.assistLineEnabled?.min),
+        max: Boolean(state.assistLineEnabled?.max),
+        avg: Boolean(state.assistLineEnabled?.avg),
+        ctr: Boolean(state.assistLineEnabled?.ctr)
+    };
+    const assistLineStyle = getAssistLineStyle();
     const verticalStroke = getDraftLineStroke('tabRight') || style.colStrokeStyle || null;
     const horizontalStroke = getDraftLineStroke('cellTop');
     const gridContainer = {
@@ -990,6 +1086,11 @@ export function generateD3CodeString(style: any): string {
             horizontalStroke,
             container: gridContainer
         },
+        assistLine: {
+            visible: Boolean(style?.assistLineVisible !== undefined ? style.assistLineVisible : state.assistLineVisible),
+            enabled: assistLineEnabled,
+            style: assistLineStyle
+        },
         strokes: {
             colStroke: style.colStrokeStyle || null,
             rowStrokes: style.rowStrokeStyles || []
@@ -1076,6 +1177,28 @@ function computeClusterLayout(cellWidth, markRatio, markNum) {
 const yScale = d3.scaleLinear()
   .domain([config.axis.yDomain.yMin, config.axis.yDomain.yMax])
   .range([config.plot.height, 0]);
+
+function collectAssistLineValues(chartType, data, totalCols) {
+  const values = [];
+  if (chartType === 'stackedBar' || chartType === 'stacked') {
+    const startRow = data.length > 1 ? 1 : 0;
+    for (let col = 0; col < totalCols; col += 1) {
+      let sum = 0;
+      for (let row = startRow; row < data.length; row += 1) {
+        sum += Number(data[row]?.[col]) || 0;
+      }
+      values.push(sum);
+    }
+  } else {
+    data.forEach((row) => {
+      for (let col = 0; col < totalCols; col += 1) {
+        const value = Number(row?.[col]);
+        if (Number.isFinite(value)) values.push(value);
+      }
+    });
+  }
+  return values;
+}
 
 plot.append('rect')
   .attr('x', 0)
@@ -1286,6 +1409,37 @@ if (config.grid.container && config.grid.container.weight > 0) {
       .attr('y2', config.plot.height);
     applyStroke(leftLine, border, border.color, border.weight);
   }
+}
+
+if (config.assistLine.visible) {
+  const enabled = config.assistLine.enabled || {};
+  const values = collectAssistLineValues(config.chartType, config.data, config.axis.flatCols);
+  const hasValues = values.length > 0;
+  const min = hasValues ? Math.min(...values) : config.axis.yDomain.yMin;
+  const max = hasValues ? Math.max(...values) : config.axis.yDomain.yMax;
+  const avg = hasValues ? values.reduce((sum, value) => sum + value, 0) / values.length : ((config.axis.yDomain.yMin + config.axis.yDomain.yMax) / 2);
+  const ctr = (config.axis.yDomain.yMin + config.axis.yDomain.yMax) / 2;
+  const lines = [];
+
+  if (enabled.min) lines.push(min);
+  if (enabled.max) lines.push(max);
+  if (enabled.avg) lines.push(avg);
+  if (enabled.ctr) lines.push(ctr);
+
+  lines.forEach((value) => {
+    const y = yScale(value);
+    const line = plot.append('line')
+      .attr('x1', 0)
+      .attr('x2', config.plot.width)
+      .attr('y1', y)
+      .attr('y2', y)
+      .attr('stroke', config.assistLine.style.color)
+      .attr('stroke-width', config.assistLine.style.thickness)
+      .attr('opacity', 0.9);
+    if (config.assistLine.style.dash) {
+      line.attr('stroke-dasharray', '4,2');
+    }
+  });
 }
 
 if (Array.isArray(config.legend.positions) && config.legend.positions.length > 0) {
