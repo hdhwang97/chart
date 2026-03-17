@@ -256,6 +256,12 @@ export function applyYAxisEmptyVisibility(node: SceneNode, visible: boolean) {
     });
 }
 
+export function applyYAxisVisibility(node: SceneNode, visible: boolean) {
+    const yAxis = (node as FrameNode).findOne((candidate) => MARK_NAME_PATTERNS.Y_AXIS_CONTAINER.test(candidate.name));
+    if (!yAxis) return;
+    yAxis.visible = visible;
+}
+
 export function applyColumnXEmptyVisibility(graph: SceneNode, visible: boolean, precomputedCols?: ColRef[]) {
     const columns = precomputedCols ?? collectColumns(graph);
     const result = { candidates: columns.length, applied: 0, skipped: 0 };

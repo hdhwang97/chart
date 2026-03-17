@@ -1,7 +1,7 @@
 import { VARIANT_MAPPING, PLUGIN_DATA_KEYS, MARK_NAME_PATTERNS } from './constants';
 import { loadChartData, loadLocalStyleOverrides, saveChartData, saveLocalStyleOverrides } from './data-layer';
 import { extractStyleFromNode } from './style';
-import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, applyYAxisEmptyVisibility, applyColumnXEmptyVisibility, getChartLegendHeight, getGraphHeight, getPlotAreaWidth, getXEmptyHeight, hasVisibleXEmpty, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
+import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, applyYAxisEmptyVisibility, applyYAxisVisibility, applyColumnXEmptyVisibility, getChartLegendHeight, getGraphHeight, getPlotAreaWidth, getXEmptyHeight, hasVisibleXEmpty, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
@@ -520,6 +520,7 @@ figma.ui.onmessage = async (msg) => {
             markStyles,
             xAxisLabels,
             xAxisLabelsVisible,
+            yAxisVisible,
             cellFillStyle,
             lineBackgroundStyle,
             rowStrokeStyles,
@@ -667,6 +668,7 @@ figma.ui.onmessage = async (msg) => {
             applyCells(targetNode, cellCount);
             applyYAxis(targetNode, cellCount, { yMin: effectiveY.yMin, yMax: effectiveY.yMax, yLabelFormat });
             applyYAxisEmptyVisibility(targetNode, hasVisibleXEmpty(targetNode as FrameNode));
+            applyYAxisVisibility(targetNode, yAxisVisible !== false);
         });
 
         // 4. Draw Chart
@@ -975,6 +977,7 @@ figma.ui.onmessage = async (msg) => {
                 ? (effectiveLocalOverrides.assistLineEnabled || { min: false, max: false, avg: false, ctr: false })
                 : (assistLineEnabled || { min: false, max: false, avg: false, ctr: false }),
             xAxisLabelsVisible: xAxisLabelsVisible !== false,
+            yAxisVisible: yAxisVisible !== false,
             cornerRadius: cornerRadiusForUi,
             strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
             cellFillStyle: effectiveLocalMask.cellFillStyle
@@ -1174,6 +1177,7 @@ figma.ui.onmessage = async (msg) => {
             : (isInstanceTarget ? extractedMarkColorSource : (node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row'));
         const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
         const xAxisLabelsVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS_VISIBLE) !== 'false';
+        const yAxisVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE) !== 'false';
         const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
         let assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
         if (assistLineEnabledRaw) {
@@ -1207,6 +1211,7 @@ figma.ui.onmessage = async (msg) => {
             colColorEnabled: colColorEnabledForUi,
             markColorSource,
             xAxisLabelsVisible,
+            yAxisVisible,
             assistLineVisible,
             assistLineEnabled,
             cornerRadius: styleInfo.cornerRadius,

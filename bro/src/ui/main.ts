@@ -718,6 +718,13 @@ function updateXAxisLabelsVisibleUi() {
         : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
 }
 
+function updateYAxisVisibleUi() {
+    ui.yAxisLabelToggleBtn.textContent = state.yAxisVisible ? 'ON' : 'OFF';
+    ui.yAxisLabelToggleBtn.className = state.yAxisVisible
+        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
+        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+}
+
 function setYLabelFormat(mode: string) {
     state.yLabelFormat = normalizeYLabelFormatMode(mode);
     updateYLabelFormatUi();
@@ -729,6 +736,14 @@ function setYLabelFormat(mode: string) {
 function setXAxisLabelsVisible(next: boolean) {
     state.xAxisLabelsVisible = Boolean(next);
     updateXAxisLabelsVisibleUi();
+    renderPreview();
+    renderStylePreview();
+    refreshExportPreview();
+}
+
+function setYAxisVisible(next: boolean) {
+    state.yAxisVisible = Boolean(next);
+    updateYAxisVisibleUi();
     renderPreview();
     renderStylePreview();
     refreshExportPreview();
@@ -888,11 +903,13 @@ function handlePluginMessage(msg: any) {
             state.assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
             state.yLabelFormat = 'integer';
             state.xAxisLabelsVisible = true;
+            state.yAxisVisible = true;
             ui.settingMarkRatioInput.value = '80';
             ui.settingYMin.value = '0';
             ui.settingYMax.value = '';
             updateYLabelFormatUi();
             updateXAxisLabelsVisibleUi();
+            updateYAxisVisibleUi();
             closeAllAssistLinePopovers();
             closeRowColorPopover();
             updateAssistLineToggleUi();
@@ -1024,10 +1041,12 @@ function handlePluginMessage(msg: any) {
         if (msg.lastMode) state.dataMode = msg.lastMode as 'raw' | 'percent';
         state.yLabelFormat = normalizeYLabelFormatMode(msg.lastYLabelFormat);
         state.xAxisLabelsVisible = msg.xAxisLabelsVisible !== false;
+        state.yAxisVisible = msg.yAxisVisible !== false;
         ui.settingYMin.value = msg.lastYMin !== undefined ? String(msg.lastYMin) : '0';
         ui.settingYMax.value = msg.lastYMax !== undefined ? String(msg.lastYMax) : ((msg.lastMode || 'raw') === 'raw' ? '' : '100');
         updateYLabelFormatUi();
         updateXAxisLabelsVisibleUi();
+        updateYAxisVisibleUi();
         if (msg.lastStrokeWidth !== undefined) {
             state.strokeWidth = msg.lastStrokeWidth;
             ui.settingStrokeInput.value = String(msg.lastStrokeWidth);
@@ -1181,6 +1200,14 @@ function handlePluginMessage(msg: any) {
             }
             if (msg.payload.isTemplateMasterTarget !== undefined) {
                 state.isTemplateMasterTarget = Boolean(msg.payload.isTemplateMasterTarget);
+            }
+            if (msg.payload.xAxisLabelsVisible !== undefined) {
+                state.xAxisLabelsVisible = Boolean(msg.payload.xAxisLabelsVisible);
+                updateXAxisLabelsVisibleUi();
+            }
+            if (msg.payload.yAxisVisible !== undefined) {
+                state.yAxisVisible = Boolean(msg.payload.yAxisVisible);
+                updateYAxisVisibleUi();
             }
             state.previewPlotWidth = Number.isFinite(Number(msg.payload.previewPlotWidth)) ? Math.max(0, Number(msg.payload.previewPlotWidth)) : state.previewPlotWidth;
             state.previewPlotHeight = Number.isFinite(Number(msg.payload.previewPlotHeight)) ? Math.max(0, Number(msg.payload.previewPlotHeight)) : state.previewPlotHeight;
@@ -1356,6 +1383,9 @@ function bindUiEvents() {
     });
     ui.xAxisLabelToggleBtn.addEventListener('click', () => {
         setXAxisLabelsVisible(!state.xAxisLabelsVisible);
+    });
+    ui.yAxisLabelToggleBtn.addEventListener('click', () => {
+        setYAxisVisible(!state.yAxisVisible);
     });
     ui.styleAssistLineLabelBtn.addEventListener('click', (e) => {
         e.stopPropagation();

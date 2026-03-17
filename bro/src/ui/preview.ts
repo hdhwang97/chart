@@ -595,23 +595,26 @@ function renderAxes(
     h: number,
     yLabelFormat: YLabelFormatMode,
     xLabels: string[],
+    showYLabels: boolean,
     showXLabels: boolean,
     xTickValues?: number[]
 ) {
-    const yAxisGroup = g.append('g');
-    yTickValues.forEach((tickValue) => {
-        const y = yScale(tickValue);
-        if (!Number.isFinite(y)) return;
-        yAxisGroup.append('text')
-            .attr('x', -PREVIEW_LAYOUT.yAxisLabelOffset)
-            .attr('y', y)
-            .attr('dy', '0.32em')
-            .attr('text-anchor', 'end')
-            .attr('font-size', PREVIEW_LAYOUT.yAxisFontSize)
-            .attr('font-family', 'Inter, sans-serif')
-            .attr('fill', '#000000')
-            .text(formatYLabelValue(Number(tickValue), yLabelFormat));
-    });
+    if (showYLabels) {
+        const yAxisGroup = g.append('g');
+        yTickValues.forEach((tickValue) => {
+            const y = yScale(tickValue);
+            if (!Number.isFinite(y)) return;
+            yAxisGroup.append('text')
+                .attr('x', -PREVIEW_LAYOUT.yAxisLabelOffset)
+                .attr('y', y)
+                .attr('dy', '0.32em')
+                .attr('text-anchor', 'end')
+                .attr('font-size', PREVIEW_LAYOUT.yAxisFontSize)
+                .attr('font-family', 'Inter, sans-serif')
+                .attr('fill', '#000000')
+                .text(formatYLabelValue(Number(tickValue), yLabelFormat));
+        });
+    }
 
     if (!showXLabels) return;
 
@@ -921,7 +924,7 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
 
     drawTabBackgroundLayer(g, w, h, mode);
 
-    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, state.xAxisLabelsVisible, lineTickValues);
+    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, state.yAxisVisible, state.xAxisLabelsVisible, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;

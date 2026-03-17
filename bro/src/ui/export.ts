@@ -39,6 +39,7 @@ function buildPreviewStyleFromState() {
         yCount: state.cellCount,
         colCount: state.cols,
         xAxisLabelsVisible: state.xAxisLabelsVisible,
+        yAxisVisible: state.yAxisVisible,
         markRatio: state.markRatio,
         rowColors: state.rowColors,
         colColors: state.colHeaderColors,
@@ -407,23 +408,26 @@ function renderAxes(
     h: number,
     yLabelFormat: YLabelFormatMode,
     xLabels: string[],
+    showYLabels: boolean,
     showXLabels: boolean,
     xTickValues?: number[]
 ) {
-    const yAxisGroup = g.append('g');
-    yTickValues.forEach((tickValue) => {
-        const y = yScale(tickValue);
-        if (!Number.isFinite(y)) return;
-        yAxisGroup.append('text')
-            .attr('x', -EXPORT_LAYOUT.yAxisLabelOffset)
-            .attr('y', y)
-            .attr('dy', '0.32em')
-            .attr('text-anchor', 'end')
-            .attr('font-size', EXPORT_LAYOUT.yAxisFontSize)
-            .attr('font-family', 'Inter, sans-serif')
-            .attr('fill', '#000000')
-            .text(formatYLabelValue(Number(tickValue), yLabelFormat));
-    });
+    if (showYLabels) {
+        const yAxisGroup = g.append('g');
+        yTickValues.forEach((tickValue) => {
+            const y = yScale(tickValue);
+            if (!Number.isFinite(y)) return;
+            yAxisGroup.append('text')
+                .attr('x', -EXPORT_LAYOUT.yAxisLabelOffset)
+                .attr('y', y)
+                .attr('dy', '0.32em')
+                .attr('text-anchor', 'end')
+                .attr('font-size', EXPORT_LAYOUT.yAxisFontSize)
+                .attr('font-family', 'Inter, sans-serif')
+                .attr('fill', '#000000')
+                .text(formatYLabelValue(Number(tickValue), yLabelFormat));
+        });
+    }
 
     if (!showXLabels) return;
 
@@ -585,6 +589,9 @@ function renderD3Preview(style: any) {
     const xAxisLabelsVisible = style?.xAxisLabelsVisible !== undefined
         ? Boolean(style.xAxisLabelsVisible)
         : state.xAxisLabelsVisible;
+    const yAxisVisible = style?.yAxisVisible !== undefined
+        ? Boolean(style.yAxisVisible)
+        : state.yAxisVisible;
     const xAxisHeight = xAxisLabelsVisible ? EXPORT_LAYOUT.xAxisHeight : 0;
     const requestedPlotWidth = Number(style?.previewPlotWidth);
     const requestedPlotHeight = Number(style?.previewPlotHeight);
@@ -682,7 +689,7 @@ function renderD3Preview(style: any) {
     const xLabels = buildXAxisLabels(axisCols);
 
     drawTabBackgroundLayer(g, w, h);
-    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, xAxisLabelsVisible, lineTickValues);
+    renderAxes(g, xAxisScale, yScale, yTickValues, h, state.yLabelFormat, xLabels, yAxisVisible, xAxisLabelsVisible, lineTickValues);
     const lineGuidePositions = isLine && lineTickValues
         ? lineTickValues.map(idx => xAxisScale(idx))
         : undefined;
@@ -813,6 +820,9 @@ export function generateD3CodeString(style: any): string {
     const xAxisLabelsVisible = style?.xAxisLabelsVisible !== undefined
         ? Boolean(style.xAxisLabelsVisible)
         : state.xAxisLabelsVisible;
+    const yAxisVisible = style?.yAxisVisible !== undefined
+        ? Boolean(style.yAxisVisible)
+        : state.yAxisVisible;
     const colCount = Number(style.colCount) || 5;
     const yCount = Number(style.yCount) || 4;
     const strokeVal = Number(style.strokeWidth) || state.strokeWidth || 2;
@@ -950,6 +960,7 @@ export function generateD3CodeString(style: any): string {
             yCount,
             xLabels,
             xAxisLabelsVisible,
+            yAxisVisible,
             yDomain,
             yTicks,
             yLabelFormat: state.yLabelFormat
@@ -1073,6 +1084,7 @@ plot.append('rect')
   .attr('height', config.plot.height)
   .attr('fill', config.grid.backgroundColor);
 
+if (config.axis.yAxisVisible) {
 config.axis.yTicks.forEach((tick) => {
   const y = yScale(tick.value);
 
@@ -1084,6 +1096,7 @@ config.axis.yTicks.forEach((tick) => {
     .attr('font-size', config.layout.yAxisFontSize)
     .text(tick.label);
 });
+}
 
 if (config.chartType === 'line') {
   const lineGuidePositions = Array.from({ length: config.axis.flatCols }, (_, index) => {
