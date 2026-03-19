@@ -252,6 +252,10 @@ function hasSavedChartData(node: SceneNode) {
     return Boolean(node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES));
 }
 
+function isPersistedChartOwner(node: SceneNode) {
+    return hasSavedChartData(node) || Boolean(node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE));
+}
+
 function isDescendantOfNode(node: SceneNode, ancestor: SceneNode): boolean {
     let current: BaseNode | null = node.parent;
     while (current && current.type !== 'PAGE') {
@@ -345,10 +349,18 @@ function findSingleDescendantChartTarget(root: SceneNode): SceneNode | null {
     return candidates[0].node;
 }
 
-function resolveChartTargetFromSelection(node: SceneNode): SceneNode {
+function resolveChartTargetWithinSelectionRoot(node: SceneNode): SceneNode {
     // If the selected node already owns persisted chart data, prefer it.
-    // This protects direct selection of the original chart instance (2번).
-    if (hasSavedChartData(node)) return node;
+    if (isPersistedChartOwner(node)) return node;
+
+    const descendantTarget = findSingleDescendantChartTarget(node);
+    if (descendantTarget) return descendantTarget;
+
+    return node;
+}
+
+function resolveChartTargetFromInnerNode(node: SceneNode): SceneNode {
+    if (isPersistedChartOwner(node)) return node;
 
     const descendantTarget = findSingleDescendantChartTarget(node);
     if (descendantTarget) return descendantTarget;
@@ -357,13 +369,33 @@ function resolveChartTargetFromSelection(node: SceneNode): SceneNode {
     while (current && current.type !== 'PAGE') {
         if ('getPluginData' in current) {
             const candidate = current as SceneNode;
-            if (isRecognizedChartSelection(candidate)) {
+            if (isPersistedChartOwner(candidate)) {
                 return candidate;
             }
         }
         current = current.parent;
     }
     return node;
+}
+
+function collectChartTargetsWithinSelectionRoot(node: SceneNode): SceneNode[] {
+    if (isPersistedChartOwner(node)) return [node];
+
+    const targets: SceneNode[] = [];
+    const visit = (current: SceneNode) => {
+        if (current.id !== node.id && isPersistedChartOwner(current)) {
+            targets.push(current);
+            return;
+        }
+        if (!('children' in current)) return;
+        (current as SceneNode & ChildrenMixin).children.forEach((child) => visit(child));
+    };
+
+    visit(node);
+    if (targets.length > 0) return targets;
+
+    const fallback = resolveChartTargetWithinSelectionRoot(node);
+    return isRecognizedChartSelection(fallback) ? [fallback] : [];
 }
 
 function buildSelectionTargetMeta(node: SceneNode): SelectionTargetMeta {
@@ -377,11 +409,13 @@ function buildSelectionTargetMeta(node: SceneNode): SelectionTargetMeta {
 function collectSelectedChartTargets(selection: readonly SceneNode[]): SceneNode[] {
     const deduped = new Map<string, SceneNode>();
     selection.forEach((node) => {
-        const resolvedNode = resolveChartTargetFromSelection(node);
-        if (!isRecognizedChartSelection(resolvedNode)) return;
-        if (!deduped.has(resolvedNode.id)) {
-            deduped.set(resolvedNode.id, resolvedNode);
-        }
+        const resolvedNodes = collectChartTargetsWithinSelectionRoot(node);
+        resolvedNodes.forEach((resolvedNode) => {
+            if (!isRecognizedChartSelection(resolvedNode)) return;
+            if (!deduped.has(resolvedNode.id)) {
+                deduped.set(resolvedNode.id, resolvedNode);
+            }
+        });
     });
     return Array.from(deduped.values());
 }
@@ -596,7 +630,7 @@ figma.ui.onmessage = async (msg) => {
                     }
                 }
                 if (!resolvedNode && nodes.length > 0) {
-                    resolvedNode = resolveChartTargetFromSelection(nodes[0]);
+                    resolvedNode = resolveChartTargetFromInnerNode(nodes[0]);
                 }
                 if (!resolvedNode) {
                     figma.notify("Please select a chart component instance.");
@@ -1129,7 +1163,7 @@ figma.ui.onmessage = async (msg) => {
             figma.notify("Please select exactly one chart component.");
             return;
         }
-        const node = resolveChartTargetFromSelection(nodes[0]);
+        const node = resolveChartTargetFromInnerNode(nodes[0]);
         if (!isRecognizedChartSelection(node)) {
             figma.notify("Please select a chart component instance.");
             return;
@@ -1427,7 +1461,7 @@ figma.on("selectionchange", () => {
     const selection = figma.currentPage.selection;
     if (selection.length === 1) {
         const node = selection[0];
-        const resolvedNode = resolveChartTargetFromSelection(node);
+        const resolvedNode = resolveChartTargetFromInnerNode(node);
         const isCType = detectCTypeSelection(node, resolvedNode);
         if (isCType) {
             const resizedCount = applyCTypeResizeRules(node);
