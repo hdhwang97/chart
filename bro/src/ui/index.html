@@ -66,6 +66,15 @@
                     class="hidden flex items-center gap-1.5 bg-surface border border-border px-2 py-0.5 rounded text-text-sub">
                     <span id="chart-type-icon" class="flex items-center justify-center"></span>
                     <span id="chart-type-display" class="text-xxs font-medium uppercase tracking-wide">Bar</span>
+                    <div id="chart-target-stepper" class="hidden items-center gap-1 border-l border-border pl-1.5 ml-0.5">
+                        <button id="chart-target-prev" type="button"
+                            class="w-5 h-5 rounded border border-border bg-white text-[10px] leading-none text-text-sub hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label="Previous chart">◀</button>
+                        <span id="chart-target-label" class="min-w-[34px] text-[10px] font-medium text-center">1 / 1</span>
+                        <button id="chart-target-next" type="button"
+                            class="w-5 h-5 rounded border border-border bg-white text-[10px] leading-none text-text-sub hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label="Next chart">▶</button>
+                    </div>
                 </div>
             </h1>
 

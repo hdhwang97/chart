@@ -21,6 +21,10 @@ export const ui = {
     get chartTypeWrapper() { return byId<HTMLElement>('chart-type-wrapper'); },
     get chartTypeIcon() { return byId<HTMLElement>('chart-type-icon'); },
     get chartTypeDisplay() { return byId<HTMLElement>('chart-type-display'); },
+    get chartTargetStepper() { return byId<HTMLElement>('chart-target-stepper'); },
+    get chartTargetPrevBtn() { return byId<HTMLButtonElement>('chart-target-prev'); },
+    get chartTargetNextBtn() { return byId<HTMLButtonElement>('chart-target-next'); },
+    get chartTargetLabel() { return byId<HTMLElement>('chart-target-label'); },
     get templateModeBanner() { return byId<HTMLElement>('template-mode-banner'); },
     get tabStyleBtn() { return byId<HTMLButtonElement>('tab-style'); },
 

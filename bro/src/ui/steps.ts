@@ -2,7 +2,7 @@ import { state, CHART_ICONS, initData, getTotalStackedCols, ensureColHeaderColor
 import { ui } from './dom';
 import { renderGrid } from './grid';
 import { renderPreview } from './preview';
-import { updateModeButtonState, checkCtaValidation, setMode, syncYMaxValidationUi, applyModeLocks } from './mode';
+import { updateModeButtonState, checkCtaValidation, getStackedOverflowState, setMode, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { updateCsvUi } from './csv';
 import { getEffectiveYDomain } from './y-range';
 import { syncMarkCountFromRows } from './data-ops';
@@ -67,6 +67,36 @@ export function goToStep(step: number) {
         applyModeLocks();
         checkCtaValidation();
     }
+}
+
+type SubmissionBuildOptions = {
+    includeTargetId?: boolean;
+    force?: boolean;
+};
+
+function hasValidSubmissionData() {
+    let hasAny = false;
+    state.data.forEach((row) => {
+        row.forEach((val) => {
+            if (val !== '' && val !== null && val !== undefined) hasAny = true;
+        });
+    });
+    if (!hasAny) return false;
+
+    if (state.dataMode === 'percent') {
+        for (const row of state.data) {
+            for (const val of row) {
+                if (val === '') continue;
+                const n = Number(val);
+                if (n < 0 || n > 100) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    syncYMaxValidationUi();
+    return !getStackedOverflowState(state.data).hasOverflow;
 }
 
 export function selectType(type: string) {
@@ -181,9 +211,11 @@ export function updateSettingInputs() {
     }
 }
 
-export function submitData() {
-    const isAllowed = checkCtaValidation();
-    if (!isAllowed) return;
+export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
+    const isAllowed = options?.force
+        ? hasValidSubmissionData()
+        : checkCtaValidation();
+    if (!isAllowed) return null;
 
     const isStacked = state.chartType === 'stackedBar';
 
@@ -281,10 +313,25 @@ export function submitData() {
         localStyleOverrides: state.isInstanceTarget ? state.localStyleOverrides : undefined,
         localStyleOverrideMask: state.isInstanceTarget ? state.localStyleOverrideMask : undefined,
         styleApplyMode,
+        ...(options?.includeTargetId && msgType === 'apply' && state.activeTargetId
+            ? { targetId: state.activeTargetId }
+            : {}),
         ...(explicitStylePayload || {})
     };
 
-    parent.postMessage({ pluginMessage: { type: msgType, payload } }, '*');
+    return { msgType, payload };
+}
+
+export function serializeApplySnapshot() {
+    const built = buildSubmissionPayload({ force: true });
+    if (!built) return '';
+    return JSON.stringify(built.payload);
+}
+
+export function submitData(options?: { force?: boolean }) {
+    const built = buildSubmissionPayload({ includeTargetId: true, force: options?.force });
+    if (!built) return;
+    parent.postMessage({ pluginMessage: { type: built.msgType, payload: built.payload } }, '*');
 }
 
 // Expose functions that are called from HTML onclick attributes

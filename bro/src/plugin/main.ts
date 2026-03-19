@@ -8,7 +8,7 @@ import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
 import { resolveEffectiveYRange } from './drawing/y-range';
-import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph } from './init';
+import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph, syncChartOnResize, type SelectionTargetMeta } from './init';
 import { normalizeHexColor, rgbToHex, traverse } from './utils';
 import { deleteStyleTemplate, loadStyleTemplates, overwriteStyleTemplate, renameStyleTemplate, saveStyleTemplate } from './template-store';
 import { PerfTracker, shouldLogApplyPerf } from './perf';
@@ -27,9 +27,9 @@ import type {
 
 figma.showUI(__html__, { width: 600, height: 800 });
 
-let currentSelectionId: string | null = null;
-let prevWidth = 0;
-let prevHeight = 0;
+let selectedChartTargets: SceneNode[] = [];
+let activeTargetId: string | null = null;
+const trackedTargetSizes = new Map<string, { width: number; height: number }>();
 type ApplyPolicy = 'template-master' | 'instance-data' | 'default';
 
 function normalizeMarkRatio(value: unknown): number | null {
@@ -366,6 +366,40 @@ function resolveChartTargetFromSelection(node: SceneNode): SceneNode {
     return node;
 }
 
+function buildSelectionTargetMeta(node: SceneNode): SelectionTargetMeta {
+    return {
+        id: node.id,
+        name: node.name,
+        chartType: node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node)
+    };
+}
+
+function collectSelectedChartTargets(selection: readonly SceneNode[]): SceneNode[] {
+    const deduped = new Map<string, SceneNode>();
+    selection.forEach((node) => {
+        const resolvedNode = resolveChartTargetFromSelection(node);
+        if (!isRecognizedChartSelection(resolvedNode)) return;
+        if (!deduped.has(resolvedNode.id)) {
+            deduped.set(resolvedNode.id, resolvedNode);
+        }
+    });
+    return Array.from(deduped.values());
+}
+
+function rebuildTrackedTargetSizes(targets: readonly SceneNode[]) {
+    trackedTargetSizes.clear();
+    targets.forEach((target) => {
+        trackedTargetSizes.set(target.id, {
+            width: target.width,
+            height: target.height
+        });
+    });
+}
+
+function getSelectionTargetsMeta(targets: readonly SceneNode[]): SelectionTargetMeta[] {
+    return targets.map((target) => buildSelectionTargetMeta(target));
+}
+
 function resolveColColorsFromNode(node: SceneNode, colCount: number, fallbackColor: string) {
     const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLORS);
     let saved: any[] = [];
@@ -551,8 +585,23 @@ figma.ui.onmessage = async (msg) => {
         let targetNode: FrameNode | ComponentNode | InstanceNode | null = null;
 
         targetNode = await perf.step('target-resolve', async () => {
-            if (msg.type === 'apply' && nodes.length > 0) {
-                const resolvedNode = resolveChartTargetFromSelection(nodes[0]);
+            if (msg.type === 'apply') {
+                let resolvedNode: SceneNode | null = null;
+                const requestedTargetId = typeof msg.payload?.targetId === 'string' ? msg.payload.targetId : null;
+                if (requestedTargetId) {
+                    const matchedTarget = selectedChartTargets.find((target) => target.id === requestedTargetId);
+                    const requestedNode = matchedTarget || figma.getNodeById(requestedTargetId);
+                    if (requestedNode && requestedNode.type !== 'PAGE' && requestedNode.type !== 'DOCUMENT') {
+                        resolvedNode = requestedNode as SceneNode;
+                    }
+                }
+                if (!resolvedNode && nodes.length > 0) {
+                    resolvedNode = resolveChartTargetFromSelection(nodes[0]);
+                }
+                if (!resolvedNode) {
+                    figma.notify("Please select a chart component instance.");
+                    return null;
+                }
                 if (!isRecognizedChartSelection(resolvedNode)) {
                     figma.notify("Please select a chart component instance.");
                     return null;
@@ -562,9 +611,9 @@ figma.ui.onmessage = async (msg) => {
                         ? 'template-master'
                         : (resolvedNode.type === 'INSTANCE' ? 'instance-data' : 'default');
                 debugLog('[chart-plugin][apply]', {
-                    selectedNodeId: nodes[0].id,
+                    selectedNodeId: nodes[0]?.id || null,
                     targetNodeId: resolvedNode.id,
-                    selectedNodeName: nodes[0].name,
+                    selectedNodeName: nodes[0]?.name || null,
                     targetNodeName: resolvedNode.name,
                     applyPolicy
                 });
@@ -599,6 +648,9 @@ figma.ui.onmessage = async (msg) => {
             return instance;
         });
         if (!targetNode) return;
+        if (msg.type === 'apply') {
+            activeTargetId = targetNode.id;
+        }
         const isTemplateMasterApply = msg.type === 'apply' && (targetNode as any).type === 'COMPONENT';
         const applyPolicy: ApplyPolicy = isTemplateMasterApply
             ? 'template-master'
@@ -1054,6 +1106,9 @@ figma.ui.onmessage = async (msg) => {
                 skipDataKeys: isTemplateMasterApply
             });
             figma.ui.postMessage({ type: 'style_extracted', source: 'generate_apply', payload: stylePayload });
+            if (msg.type === 'apply') {
+                figma.ui.postMessage({ type: 'apply_completed', targetId: targetNode.id });
+            }
         });
         const perfReport = perf.done();
         if (shouldLogApplyPerf(msg.type, type)) {
@@ -1351,6 +1406,19 @@ figma.ui.onmessage = async (msg) => {
         }
         figma.ui.postMessage({ type: 'style_template_overwritten', id: msg.id, list: result.list || [] });
     }
+    else if (msg.type === 'select_chart_target') {
+        const requestedTargetId = typeof msg.targetId === 'string' ? msg.targetId : '';
+        if (!requestedTargetId) return;
+        const nextTarget = selectedChartTargets.find((target) => target.id === requestedTargetId);
+        if (!nextTarget || !isRecognizedChartSelection(nextTarget)) return;
+        activeTargetId = nextTarget.id;
+        initPluginUI(nextTarget, false, {
+            reason: 'selection',
+            isCType: false,
+            selectionTargets: getSelectionTargetsMeta(selectedChartTargets),
+            activeTargetId
+        });
+    }
 };
 
 
@@ -1378,54 +1446,68 @@ figma.on("selectionchange", () => {
             resolvedNodeName: resolvedNode.name,
             isCType
         });
-        if (!isRecognizedChartSelection(resolvedNode)) {
-            currentSelectionId = null;
-            figma.ui.postMessage({ type: 'init', chartType: null });
-            return;
-        }
-        initPluginUI(resolvedNode, false, { reason: 'selection', isCType });
+    }
 
-        if (resolvedNode.id !== currentSelectionId) {
-            currentSelectionId = resolvedNode.id;
-            prevWidth = resolvedNode.width;
-            prevHeight = resolvedNode.height;
-        }
-    } else {
-        currentSelectionId = null;
+    selectedChartTargets = collectSelectedChartTargets(selection);
+    if (selectedChartTargets.length === 0) {
+        activeTargetId = null;
+        rebuildTrackedTargetSizes([]);
         debugLog('[chart-plugin][selection]', {
             recognized: false,
-            reason: selection.length === 0 ? 'empty-selection' : 'multi-selection',
+            reason: selection.length === 0 ? 'empty-selection' : 'selection-without-chart',
             selectionCount: selection.length
         });
         figma.ui.postMessage({ type: 'init', chartType: null });
+        return;
     }
+
+    if (!activeTargetId || !selectedChartTargets.some((target) => target.id === activeTargetId)) {
+        activeTargetId = selectedChartTargets[0].id;
+    }
+    rebuildTrackedTargetSizes(selectedChartTargets);
+
+    const activeTarget = selectedChartTargets.find((target) => target.id === activeTargetId) || selectedChartTargets[0];
+    activeTargetId = activeTarget.id;
+    initPluginUI(activeTarget, false, {
+        reason: 'selection',
+        isCType: selection.length === 1 ? detectCTypeSelection(selection[0], activeTarget) : false,
+        selectionTargets: getSelectionTargetsMeta(selectedChartTargets),
+        activeTargetId
+    });
 });
 
 // Auto-Resize Loop
 setInterval(() => {
-    if (!currentSelectionId) return;
-    const tracked = figma.getNodeById(currentSelectionId);
-    if (!tracked || tracked.type === 'PAGE' || tracked.type === 'DOCUMENT') {
-        currentSelectionId = null;
-        return;
-    }
+    if (trackedTargetSizes.size === 0) return;
+    Array.from(trackedTargetSizes.entries()).forEach(([targetId, prevSize]) => {
+        const tracked = figma.getNodeById(targetId);
+        if (!tracked || tracked.type === 'PAGE' || tracked.type === 'DOCUMENT') {
+            trackedTargetSizes.delete(targetId);
+            return;
+        }
 
-    const trackedScene = tracked as SceneNode;
-    if (!isRecognizedChartSelection(trackedScene)) {
-        currentSelectionId = null;
-        return;
-    }
+        const trackedScene = tracked as SceneNode;
+        if (!isRecognizedChartSelection(trackedScene)) {
+            trackedTargetSizes.delete(targetId);
+            return;
+        }
 
-    if (Math.abs(trackedScene.width - prevWidth) > 1 || Math.abs(trackedScene.height - prevHeight) > 1) {
-        debugLog('[chart-plugin][auto-resize]', {
-            nodeId: trackedScene.id,
-            prevWidth,
-            nextWidth: trackedScene.width,
-            prevHeight,
-            nextHeight: trackedScene.height
-        });
-        initPluginUI(trackedScene, true, { reason: 'auto-resize' });
-        prevWidth = trackedScene.width;
-        prevHeight = trackedScene.height;
-    }
+        if (Math.abs(trackedScene.width - prevSize.width) > 1 || Math.abs(trackedScene.height - prevSize.height) > 1) {
+            debugLog('[chart-plugin][auto-resize]', {
+                nodeId: trackedScene.id,
+                prevWidth: prevSize.width,
+                nextWidth: trackedScene.width,
+                prevHeight: prevSize.height,
+                nextHeight: trackedScene.height
+            });
+            syncChartOnResize(trackedScene, {
+                reason: 'auto-resize',
+                postPreviewUpdate: trackedScene.id === activeTargetId
+            });
+            trackedTargetSizes.set(targetId, {
+                width: trackedScene.width,
+                height: trackedScene.height
+            });
+        }
+    });
 }, 500);

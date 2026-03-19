@@ -3,6 +3,7 @@ import './style.css';
 import {
     state,
     CHART_ICONS,
+    type SelectionTargetSummary,
     initData,
     getTotalStackedCols,
     getGridColsForChart,
@@ -31,7 +32,7 @@ import { renderPreview } from './preview';
 import { setMode, toggleMode, updateModeButtonState, checkCtaValidation, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
-import { goToStep, selectType, resetData, updateSettingInputs, submitData } from './steps';
+import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
 import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection } from '../shared/style-types';
@@ -182,6 +183,57 @@ function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
     if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
     if (source.colStrokeStyle) next.colStrokeStyle = source.colStrokeStyle;
     return next;
+}
+
+function updateChartTargetStepperUi() {
+    const count = state.selectionTargets.length;
+    const showStepper = state.uiMode === 'edit' && count > 1;
+    ui.chartTargetStepper.classList.toggle('hidden', !showStepper);
+    ui.chartTargetStepper.classList.toggle('flex', showStepper);
+    const safeIndex = Math.max(0, Math.min(state.activeTargetIndex, Math.max(0, count - 1)));
+    ui.chartTargetLabel.textContent = `${safeIndex + 1} / ${Math.max(1, count)}`;
+    ui.chartTargetPrevBtn.disabled = !showStepper || safeIndex <= 0;
+    ui.chartTargetNextBtn.disabled = !showStepper || safeIndex >= count - 1;
+    const activeMeta = state.selectionTargets[safeIndex];
+    if (activeMeta) {
+        ui.chartTypeDisplay.title = activeMeta.name || '';
+    } else {
+        ui.chartTypeDisplay.removeAttribute('title');
+    }
+}
+
+function postSelectChartTarget(targetId: string) {
+    parent.postMessage({ pluginMessage: { type: 'select_chart_target', targetId } }, '*');
+}
+
+function hasUnsavedChartChanges() {
+    return serializeApplySnapshot() !== state.loadedApplySnapshot;
+}
+
+function queueSwitchToTarget(target: SelectionTargetSummary) {
+    commitRowColorPopoverIfOpen();
+    commitStyleColorPopoverIfOpen();
+    if (!hasUnsavedChartChanges()) {
+        state.pendingSwitchTargetId = null;
+        postSelectChartTarget(target.id);
+        return;
+    }
+    const shouldSave = window.confirm('Save changes before switching charts?\n\nOK = Save current chart\nCancel = Discard changes');
+    if (shouldSave) {
+        state.pendingSwitchTargetId = target.id;
+        submitData({ force: true });
+        return;
+    }
+    state.pendingSwitchTargetId = null;
+    postSelectChartTarget(target.id);
+}
+
+function moveChartTarget(delta: number) {
+    const nextIndex = state.activeTargetIndex + delta;
+    if (nextIndex < 0 || nextIndex >= state.selectionTargets.length) return;
+    const nextTarget = state.selectionTargets[nextIndex];
+    if (!nextTarget || nextTarget.id === state.activeTargetId) return;
+    queueSwitchToTarget(nextTarget);
 }
 
 function closeRowColorPopover() {
@@ -903,6 +955,11 @@ function handlePluginMessage(msg: any) {
             state.uiMode = 'create';
             state.isInstanceTarget = false;
             state.isTemplateMasterTarget = false;
+            state.selectionTargets = [];
+            state.activeTargetId = null;
+            state.activeTargetIndex = 0;
+            state.loadedApplySnapshot = '';
+            state.pendingSwitchTargetId = null;
             resetLocalStyleOverrideState();
             state.mode = 'edit';
             state.markRatio = 0.8;
@@ -938,6 +995,7 @@ function handlePluginMessage(msg: any) {
             switchTab('data');
             goToStep(1);
             ui.editModeBtn.classList.add('hidden');
+            updateChartTargetStepperUi();
             updateTemplateModeBanner();
             return;
         }
@@ -946,6 +1004,20 @@ function handlePluginMessage(msg: any) {
         state.chartType = msg.chartType;
         state.isInstanceTarget = Boolean(msg.isInstanceTarget);
         state.isTemplateMasterTarget = Boolean(msg.isTemplateMasterTarget);
+        state.selectionTargets = Array.isArray(msg.selectionTargets)
+            ? msg.selectionTargets
+                .map((target: any) => ({
+                    id: typeof target?.id === 'string' ? target.id : '',
+                    name: typeof target?.name === 'string' ? target.name : '',
+                    chartType: typeof target?.chartType === 'string' ? target.chartType : msg.chartType
+                }))
+                .filter((target: SelectionTargetSummary) => Boolean(target.id))
+            : [];
+        state.activeTargetId = typeof msg.activeTargetId === 'string' ? msg.activeTargetId : null;
+        state.activeTargetIndex = Number.isFinite(Number(msg.activeTargetIndex))
+            ? Math.max(0, Number(msg.activeTargetIndex))
+            : 0;
+        state.pendingSwitchTargetId = null;
         state.extractedStyleSnapshot = normalizeIncomingLocalOverrides(msg.extractedStyleSnapshot);
         setLocalStyleOverrideSnapshot(
             normalizeIncomingLocalOverrides(msg.localStyleOverrides),
@@ -1138,6 +1210,8 @@ function handlePluginMessage(msg: any) {
         goToStep(2);
         switchTab('data');
         checkCtaValidation();
+        updateChartTargetStepperUi();
+        state.loadedApplySnapshot = serializeApplySnapshot();
         updateTemplateModeBanner();
     }
     if (msg.type === 'style_templates_loaded') {
@@ -1350,11 +1424,23 @@ function handlePluginMessage(msg: any) {
             : state.previewPlotHeight;
         refreshExportPreview();
     }
+    if (msg.type === 'apply_completed') {
+        state.loadedApplySnapshot = serializeApplySnapshot();
+        if (state.pendingSwitchTargetId && msg.targetId === state.activeTargetId) {
+            const nextTargetId = state.pendingSwitchTargetId;
+            state.pendingSwitchTargetId = null;
+            postSelectChartTarget(nextTargetId);
+            return;
+        }
+        state.pendingSwitchTargetId = null;
+    }
 }
 
 function bindUiEvents() {
     // Header buttons
     ui.backBtn.addEventListener('click', () => goToStep(1));
+    ui.chartTargetPrevBtn.addEventListener('click', () => moveChartTarget(-1));
+    ui.chartTargetNextBtn.addEventListener('click', () => moveChartTarget(1));
     ui.mainCta.addEventListener('click', () => {
         commitRowColorPopoverIfOpen();
         commitStyleColorPopoverIfOpen();

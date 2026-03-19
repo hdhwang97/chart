@@ -76,6 +76,12 @@ export type StyleInjectionDraft = {
     mark: MarkStyleInjectionDraftItem;
 };
 
+export type SelectionTargetSummary = {
+    id: string;
+    name: string;
+    chartType: string;
+};
+
 export const DEFAULT_STYLE_INJECTION_ITEM: StyleInjectionDraftItem = {
     color: '#E5E7EB',
     thickness: 1,
@@ -147,6 +153,11 @@ export const state = {
     previewPlotHeight: 0,
     isInstanceTarget: false,
     isTemplateMasterTarget: false,
+    selectionTargets: [] as SelectionTargetSummary[],
+    activeTargetId: null as string | null,
+    activeTargetIndex: 0,
+    loadedApplySnapshot: '' as string,
+    pendingSwitchTargetId: null as string | null,
     extractedStyleSnapshot: {} as LocalStyleOverrides,
     localStyleOverrides: {} as LocalStyleOverrides,
     localStyleOverrideMask: {} as LocalStyleOverrideMask,
