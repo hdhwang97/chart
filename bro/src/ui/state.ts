@@ -85,7 +85,7 @@ export const DEFAULT_STYLE_INJECTION_ITEM: StyleInjectionDraftItem = {
 
 export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
     cellFill: { color: '#FFFFFF' },
-    lineBackground: { color: '#3B82F6', opacity: 1, visible: true },
+    lineBackground: { color: '#3B82F6', opacity: 1, visible: false },
     cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
     tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
     gridContainer: {
@@ -101,8 +101,8 @@ export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
         fillColor: '#3B82F6',
         strokeColor: '#3B82F6',
         lineBackgroundColor: '#3B82F6',
-        lineBackgroundOpacity: 100,
-        lineBackgroundVisible: true,
+        lineBackgroundOpacity: 12,
+        lineBackgroundVisible: false,
         thickness: 1,
         strokeStyle: 'solid'
     }
@@ -153,7 +153,7 @@ export const state = {
     effectiveStyleSnapshot: {} as LocalStyleOverrides,
     styleInjectionDraft: {
         cellFill: { color: '#FFFFFF' },
-        lineBackground: { color: '#3B82F6', opacity: 1, visible: true },
+        lineBackground: { color: '#3B82F6', opacity: 1, visible: false },
         cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
         tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
         gridContainer: {
@@ -169,8 +169,8 @@ export const state = {
             fillColor: '#3B82F6',
             strokeColor: '#3B82F6',
             lineBackgroundColor: '#3B82F6',
-            lineBackgroundOpacity: 100,
-            lineBackgroundVisible: true,
+            lineBackgroundOpacity: 12,
+            lineBackgroundVisible: false,
             thickness: 1,
             strokeStyle: 'solid'
         }
@@ -180,8 +180,8 @@ export const state = {
         fillColor: '#3B82F6',
         strokeColor: '#3B82F6',
         lineBackgroundColor: '#3B82F6',
-        lineBackgroundOpacity: 100,
-        lineBackgroundVisible: true,
+        lineBackgroundOpacity: 12,
+        lineBackgroundVisible: false,
         thickness: 1,
         strokeStyle: 'solid'
     }] as MarkStyleInjectionDraftItem[],
@@ -471,8 +471,8 @@ function normalizeMarkStyleItem(
     const strokeColor = normalizeHexColorInput(input?.strokeColor) || fillColor;
     const lineBackgroundColor = normalizeHexColorInput(input?.lineBackgroundColor) || strokeColor;
     const rawOpacity = Number(input?.lineBackgroundOpacity);
-    const lineBackgroundOpacity = Number.isFinite(rawOpacity) ? Math.max(0, Math.min(100, Math.round(rawOpacity))) : 100;
-    const lineBackgroundVisible = typeof input?.lineBackgroundVisible === 'boolean' ? input.lineBackgroundVisible : true;
+    const lineBackgroundOpacity = Number.isFinite(rawOpacity) ? Math.max(0, Math.min(100, Math.round(rawOpacity))) : 12;
+    const lineBackgroundVisible = typeof input?.lineBackgroundVisible === 'boolean' ? input.lineBackgroundVisible : false;
     const rawThickness = Number(input?.thickness);
     const thickness = Number.isFinite(rawThickness) ? Math.max(0, Math.round(rawThickness * 100) / 100) : 1;
     const strokeStyle = input?.strokeStyle === 'dash' ? 'dash' : 'solid';
@@ -536,8 +536,8 @@ export function seedMarkStylesFromRowColorsIfNeeded(
             fillColor: baseColor,
             strokeColor: baseColor,
             lineBackgroundColor: baseColor,
-            lineBackgroundOpacity: 100,
-            lineBackgroundVisible: true,
+            lineBackgroundOpacity: 12,
+            lineBackgroundVisible: false,
             thickness: 1,
             strokeStyle: 'solid'
         });

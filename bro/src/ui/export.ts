@@ -139,7 +139,7 @@ function getMarkDraftStyleFromState(seriesIndex: number) {
     const lineBackground = normalizeHexColorInput(source.lineBackgroundColor) || stroke;
     const lineBackgroundOpacity = Number.isFinite(Number(source.lineBackgroundOpacity))
         ? Math.max(0, Math.min(100, Number(source.lineBackgroundOpacity)))
-        : 100;
+        : 12;
     const lineBackgroundVisible = typeof source.lineBackgroundVisible === 'boolean'
         ? source.lineBackgroundVisible
         : (typeof (fallback as any).lineBackgroundVisible === 'boolean'
@@ -828,7 +828,7 @@ function renderD3Preview(style: any) {
                 dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
             };
             const areaColor = normalizeHexColorInput(draftStyle.lineBackgroundColor) || normalizeHexColorInput(draftStyle.strokeColor) || baseColor;
-            const areaVisible = draftStyle.lineBackgroundVisible !== false;
+            const areaVisible = Boolean(draftStyle.lineBackgroundVisible);
             if (areaVisible) {
                 const areaOpacity = Math.max(0, Math.min(1, Number(draftStyle.lineBackgroundOpacity) / 100));
                 g.append('path')
@@ -1024,7 +1024,7 @@ export function generateD3CodeString(style: any): string {
                 },
                 areaColor: normalizeHexColorInput(draftStyle.lineBackgroundColor) || normalizeHexColorInput(draftStyle.strokeColor) || baseColor,
                 areaOpacity: Math.max(0, Math.min(1, Number(draftStyle.lineBackgroundOpacity) / 100)),
-                areaVisible: draftStyle.lineBackgroundVisible !== false
+                areaVisible: Boolean(draftStyle.lineBackgroundVisible)
             };
         })
         : [];
