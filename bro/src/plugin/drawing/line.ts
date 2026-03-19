@@ -70,6 +70,18 @@ function setPaddingBottom(node: SceneNode, value: number): boolean {
     }
 }
 
+function setStrokeVisibility(node: SceneNode, visible: boolean): boolean {
+    if (!('strokes' in node)) return false;
+    try {
+        const target = node as SceneNode & GeometryMixin;
+        if (!Array.isArray(target.strokes)) return false;
+        target.strokes = target.strokes.map((paint) => ({ ...paint, visible }));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function setDirectionVariant(target: SceneNode, direction: string): boolean {
     if (target.type !== 'INSTANCE') return false;
     const propKey = getVariantPropKey(target, LINE_VARIANT_KEY_DEFAULT);
@@ -166,14 +178,28 @@ function applyLineColorAndStroke(targetNode: SceneNode, rowColor: string | null,
     });
 }
 
-function applyLineBundleLayout(bundle: LineBundle, pTop: number, pBottom: number, direction: string): LineStructureIssueReason | null {
+function setLineStrokeVisibility(lineRoot: SceneNode, visible: boolean) {
+    const segmentTargets = resolveLineSegmentTargets(lineRoot);
+    segmentTargets.forEach((target) => {
+        setStrokeVisibility(target, visible);
+    });
+}
+
+function applyLineBundleLayout(
+    bundle: LineBundle,
+    pTop: number,
+    pBottom: number,
+    lineDirection: string,
+    fillDirection: string,
+    fillBottomOffset = 0
+): LineStructureIssueReason | null {
     if (!setPaddingTop(bundle.lineNode, pTop) || !setPaddingBottom(bundle.lineNode, pBottom)) {
         return 'line_padding_unsupported';
     }
     if (!setPaddingTop(bundle.fillTop, pTop)) return 'fill_top_padding_unsupported';
-    if (!setPaddingBottom(bundle.fillBot, pBottom)) return 'fill_bot_padding_unsupported';
-    if (!setDirectionVariant(bundle.lineNode, direction)) return 'line_direction_variant_missing';
-    if (!setDirectionVariant(bundle.fillNode, direction)) return 'fill_direction_variant_missing';
+    if (!setPaddingBottom(bundle.fillBot, pBottom + fillBottomOffset)) return 'fill_bot_padding_unsupported';
+    if (!setDirectionVariant(bundle.lineNode, lineDirection)) return 'line_direction_variant_missing';
+    if (!setDirectionVariant(bundle.fillNode, fillDirection)) return 'fill_direction_variant_missing';
     return null;
 }
 
@@ -206,6 +232,7 @@ function buildLineApplyFailure(message: string, missing: LineStructureIssue[]): 
 }
 
 export function applyLine(config: any, H: number, graph: SceneNode): LineApplyResult {
+    const flatEpsilon = 1e-6;
     const values = Array.isArray(config?.values) ? config.values : [];
     const rowCount = values.length;
     const thickness = Number.isFinite(Number(config?.strokeWidth)) ? Number(config.strokeWidth) : 2;
@@ -260,6 +287,7 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
 
             const startVal = Number(seriesData[c]);
             const endVal = Number(seriesData[c + 1]);
+            const isFlat = Math.abs(endVal - startVal) < flatEpsilon;
             const startRatio = (startVal - yRange.min) / safeRange;
             const endRatio = (endVal - yRange.min) / safeRange;
             const startPx = H * clamp(startRatio, 0, 1);
@@ -269,12 +297,22 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
             let dir: string = LINE_VARIANT_VALUES.FLAT;
             if (endPx > startPx) dir = LINE_VARIANT_VALUES.UP;
             if (endPx < startPx) dir = LINE_VARIANT_VALUES.DOWN;
+            const fillDirection = isFlat ? LINE_VARIANT_VALUES.FLAT : dir;
+            const lineDirection = dir === LINE_VARIANT_VALUES.DOWN ? LINE_VARIANT_VALUES.DOWN : LINE_VARIANT_VALUES.UP;
 
             bundle.container.visible = true;
             bundle.lineNode.visible = true;
             bundle.fillNode.visible = true;
             applyLineColorAndStroke(bundle.lineNode, rowColor, rowStyleId, thickness);
-            const layoutIssue = applyLineBundleLayout(bundle, pTop, pBottom, dir);
+            setLineStrokeVisibility(bundle.lineNode, !isFlat);
+            const layoutIssue = applyLineBundleLayout(
+                bundle,
+                pTop,
+                pBottom,
+                lineDirection,
+                fillDirection,
+                isFlat ? thickness : 0
+            );
             if (layoutIssue) {
                 return buildLineApplyFailure('Line bundle layout injection failed.', [{
                     rowIndex: r,

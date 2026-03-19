@@ -1,5 +1,5 @@
 import { traverse } from '../utils';
-import { LINE_SERIES_CONTAINER_PATTERN } from '../constants';
+import { LINE_SERIES_CONTAINER_PATTERN, LINE_VARIANT_KEY_DEFAULT, LINE_VARIANT_VALUES } from '../constants';
 import type { ColRef } from './shared';
 
 export const LINE_COMPONENT_NAME = 'line';
@@ -125,6 +125,23 @@ export function collectLineBundlesInColumn(colNode: SceneNode, columnIndex = 0):
         if (bundle) byRow.set(rowIndex, bundle);
     });
     return byRow;
+}
+
+export function readInstanceVariantValue(node: SceneNode, key: string): string | null {
+    if (node.type !== 'INSTANCE') return null;
+    try {
+        const props = node.componentProperties || {};
+        const propKey = Object.keys(props).find((rawKey) => rawKey === key || rawKey.startsWith(`${key}#`));
+        if (!propKey) return null;
+        const value = props[propKey]?.value;
+        return typeof value === 'string' ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+export function isLineBundleFlat(bundle: LineBundle): boolean {
+    return readInstanceVariantValue(bundle.fillNode, LINE_VARIANT_KEY_DEFAULT) === LINE_VARIANT_VALUES.FLAT;
 }
 
 export function buildLineBundleMatrix(columns: ColRef[], rowCount: number): LineBundleMatrix {

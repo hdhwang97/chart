@@ -1,7 +1,7 @@
 import { MARK_NAME_PATTERNS } from './constants';
 import { rgbToHex, findAllLineLayers, traverse } from './utils';
 import { collectColumns, type ColRef } from './drawing/shared';
-import { collectLineBundlesInColumn } from './drawing/line-structure';
+import { collectLineBundlesInColumn, isLineBundleFlat } from './drawing/line-structure';
 import type { CellFillInjectionStyle, CellStrokeStyle, LineBackgroundInjectionStyle, MarkInjectionStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 
 // ==========================================
@@ -286,12 +286,17 @@ export function extractLineBackgroundStyle(graph: SceneNode, precomputedCols?: C
         const bundles = collectLineBundlesInColumn(col.node, col.index - 1);
         const sorted = Array.from(bundles.entries()).sort((a, b) => a[0] - b[0]);
         for (const [, bundle] of sorted) {
+            const isFlat = isLineBundleFlat(bundle);
             if (!color) {
-                color = getSolidFillColor(bundle.triNode || bundle.fillBot || bundle.fillNode);
+                color = getSolidFillColor(
+                    isFlat
+                        ? (bundle.fillBot || bundle.fillNode)
+                        : (bundle.triNode || bundle.fillBot || bundle.fillNode)
+                );
             }
             if (visible === undefined) {
-                visible = resolveLayerVisible(bundle.triNode);
-                if (visible === undefined) visible = resolveLayerVisible(bundle.fillBot);
+                visible = isFlat ? resolveLayerVisible(bundle.fillBot) : resolveLayerVisible(bundle.triNode);
+                if (visible === undefined && !isFlat) visible = resolveLayerVisible(bundle.fillBot);
                 if (visible === undefined) visible = resolveLayerVisible(bundle.fillNode);
             }
             if (color && visible !== undefined) break;

@@ -10,10 +10,10 @@ import type {
     StrokeInjectionPayload,
     StrokeStyleSnapshot
 } from '../../shared/style-types';
-import { normalizeHexColor, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke } from '../utils';
+import { normalizeHexColor, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
 import { debugLog } from '../log';
 import { collectColumns, type ColRef } from './shared';
-import { collectLineBundlesInColumn } from './line-structure';
+import { collectLineBundlesInColumn, isLineBundleFlat } from './line-structure';
 
 type SideName = 'top' | 'right' | 'bottom' | 'left';
 
@@ -21,6 +21,7 @@ type StrokeInjectionRuntimePayload = StrokeInjectionPayload & {
     chartType?: string;
     rowColors?: string[];
     rowColorModes?: ColorMode[];
+    rowPaintStyleIds?: Array<string | null>;
     colColors?: string[];
     colColorEnabled?: boolean[];
     rowHeaderLabels?: string[];
@@ -259,6 +260,18 @@ function applyStrokeStyleMode(node: SceneNode, mode: 'solid' | 'dash' | undefine
     if (!mode) return false;
     if (mode === 'dash') return tryApplyDashPattern(node, [4, 2]);
     return tryApplyDashPattern(node, []);
+}
+
+function setNodeStrokeVisibility(node: SceneNode, visible: boolean) {
+    if (!('strokes' in node)) return false;
+    try {
+        const target = node as SceneNode & GeometryMixin;
+        if (!Array.isArray(target.strokes)) return false;
+        target.strokes = target.strokes.map((paint) => ({ ...paint, visible }));
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 function setNodeFillVisibility(node: SceneNode, visible: boolean) {
@@ -561,6 +574,12 @@ function getMarkStyleBySeries(styles: NormalizedMarkStyle[], seriesIndex: number
     return styles[0];
 }
 
+function getRowPaintStyleId(payload: StrokeInjectionRuntimePayload | undefined, seriesIndex: number): string | null {
+    if (!payload || !Array.isArray(payload.rowPaintStyleIds)) return null;
+    const value = payload.rowPaintStyleIds[seriesIndex - 1];
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 function isLineLikeNode(node: SceneNode): boolean {
     if (MARK_NAME_PATTERNS.LINE.test(node.name)) return true;
     const lower = node.name.toLowerCase();
@@ -611,11 +630,52 @@ function applyLineSeriesStyleTargets(
     }
 }
 
+function setLineSeriesStrokeVisibility(root: SceneNode, visible: boolean) {
+    if (root.type === 'INSTANCE' || 'children' in root) {
+        traverse(root, (child) => {
+            if (child.id === root.id || !child.visible) return;
+            const lower = child.name.toLowerCase();
+            const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+            const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
+            if (!isPointLike && !isVectorLike) return;
+            setNodeStrokeVisibility(child, visible);
+        });
+        return;
+    }
+
+    const lower = root.name.toLowerCase();
+    const isPointLike = root.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+    const isVectorLike = root.type === 'VECTOR' || root.type === 'LINE' || root.type === 'POLYGON' || root.type === 'RECTANGLE';
+    if (!isPointLike && !isVectorLike) return;
+    setNodeStrokeVisibility(root, visible);
+}
+
+function applyFlatLineFillBotStyle(
+    node: SceneNode,
+    style: NormalizedMarkStyle,
+    rowStyleId: string | null,
+    skipStrokeColor: boolean
+): boolean {
+    let applied = false;
+    if (rowStyleId) {
+        applied = tryApplyStrokeStyleLink(node, rowStyleId) || applied;
+    }
+    const topOnlyStyle: NormalizedMarkStyle = {
+        ...style,
+        sides: { top: true, left: false, right: false }
+    };
+    return applyMarkStyleToNode(node, topOnlyStyle, {
+        skipFill: true,
+        skipStrokeColor: skipStrokeColor || Boolean(rowStyleId)
+    }) || applied;
+}
+
 function applyLineBundleStylesForColumn(
     colNode: SceneNode,
     colIndex: number,
     styles: NormalizedMarkStyle[],
     rowColorModes: ColorMode[] | undefined,
+    payload: StrokeInjectionRuntimePayload | undefined,
     result: ScopeResult
 ) {
     const bundles = collectLineBundlesInColumn(colNode, colIndex);
@@ -630,6 +690,21 @@ function applyLineBundleStylesForColumn(
             && rowColorModes[seriesIndex - 1] === 'paint_style';
 
         applyLineSeriesStyleTargets(bundle.lineNode, style, skipStrokeColorForSeries, result);
+        const isFlat = isLineBundleFlat(bundle);
+        setLineSeriesStrokeVisibility(bundle.lineNode, !isFlat);
+        if (!isFlat) return;
+
+        result.candidates += 1;
+        try {
+            const rowStyleId = getRowPaintStyleId(payload, seriesIndex);
+            if (applyFlatLineFillBotStyle(bundle.fillBot, style, rowStyleId, skipStrokeColorForSeries)) {
+                result.applied += 1;
+            } else {
+                result.skipped += 1;
+            }
+        } catch {
+            result.errors += 1;
+        }
     });
 }
 
@@ -651,7 +726,8 @@ function applyLineBackgroundStyles(
             const color = markStyle?.lineBackgroundColor || markStyle?.fillColor || markStyle?.strokeColor || style?.color;
             const opacity = typeof markStyle?.lineBackgroundOpacity === 'number' ? markStyle.lineBackgroundOpacity : undefined;
             const visible = typeof markStyle?.lineBackgroundVisible === 'boolean' ? markStyle.lineBackgroundVisible : style?.visible;
-            const targets = [bundle.triNode, bundle.fillBot].filter((target): target is SceneNode => Boolean(target));
+            const targets = (isLineBundleFlat(bundle) ? [bundle.fillBot] : [bundle.triNode, bundle.fillBot])
+                .filter((target): target is SceneNode => Boolean(target));
             if (targets.length === 0) return;
 
             targets.forEach((target) => {
@@ -736,7 +812,12 @@ function applyMarkStyleToNode(
 function applyMarkStyles(
     columns: ColRef[],
     styles: NormalizedMarkStyle[],
-    options?: { chartType?: string; colColorEnabled?: boolean[]; rowColorModes?: ColorMode[] }
+    options?: {
+        chartType?: string;
+        colColorEnabled?: boolean[];
+        rowColorModes?: ColorMode[];
+        rowPaintStyleIds?: Array<string | null>;
+    }
 ): ScopeResult {
     const result = createScopeResult();
     if (styles.length === 0) return result;
@@ -761,7 +842,7 @@ function applyMarkStyles(
         const colIndex = Math.max(0, col.index - 1);
         const skipColorForColumn = options?.chartType === 'bar' && Boolean(options?.colColorEnabled?.[colIndex]);
         if (options?.chartType === 'line') {
-            applyLineBundleStylesForColumn(col.node, colIndex, styles, options?.rowColorModes, result);
+            applyLineBundleStylesForColumn(col.node, colIndex, styles, options?.rowColorModes, options, result);
             return;
         }
         traverse(col.node, (node) => {
@@ -1144,7 +1225,8 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
             : applyMarkStyles(columns, markStyles, {
                 chartType: payload.chartType,
                 colColorEnabled: payload.colColorEnabled,
-                rowColorModes: payload.rowColorModes
+                rowColorModes: payload.rowColorModes,
+                rowPaintStyleIds: payload.rowPaintStyleIds
             }),
         legend: legendSync.result,
         cellTop: cellTopStyle ? applyCellTopStroke(columns, cellTopStyle) : createScopeResult(),
