@@ -62,6 +62,7 @@ const TAB_BACKGROUND_OPACITY = 1;
 
 type HighlightState = { type: string; index: number; row?: number; col?: number };
 let highlightState: HighlightState | null = null;
+const externalStyleHoverTargets = new Map<string, StylePreviewTarget | null>();
 
 function getPreviewMarkElements(containerId = 'chart-preview-container'): SVGElement[] {
     return Array.from(document.querySelectorAll<SVGElement>(`#${containerId} .preview-mark`));
@@ -792,6 +793,16 @@ function applyStyleTargetHover(container: HTMLElement, target: StylePreviewTarge
     });
 }
 
+export function setStylePreviewHoverTarget(
+    target: StylePreviewTarget | null,
+    containerId = 'style-preview-container'
+) {
+    externalStyleHoverTargets.set(containerId, target);
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    applyStyleTargetHover(container, target);
+}
+
 function bindStyleInteractions(
     container: HTMLElement,
     onTargetHover?: (target: StylePreviewTarget | null) => void,
@@ -945,7 +956,7 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
 
     if (mode === 'style') {
         bindStyleInteractions(container, options.onTargetHover, options.onTargetClick);
-        applyStyleTargetHover(container, null);
+        applyStyleTargetHover(container, externalStyleHoverTargets.get(containerId) ?? null);
     }
 }
 

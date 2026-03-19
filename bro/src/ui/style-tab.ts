@@ -20,6 +20,7 @@ import { applyQuickSwatchColor, applySelectedPaintStyleColor, applyStylePopoverH
 import { applyTemplateToDraft, bindStyleTemplateEvents, closeTemplateNameEditor, normalizeTemplateNameInput, renderStyleTemplateGallery, requestNewTemplateName, setStyleTemplateList, setStyleTemplateMode } from './style-templates';
 import { ui } from './dom';
 import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, chartTypeUsesMarkFill, chartTypeUsesMarkLineBackground, deriveRowColorsFromMarkStyles, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, seedMarkStylesFromRowColorsIfNeeded, setLocalStyleOverrideField, state, type AssistLineStyleInjectionDraftItem, type GridStyleInjectionDraftItem, type LineBackgroundStyleInjectionDraftItem, type MarkStyleInjectionDraftItem, type StyleInjectionDraft, type StyleInjectionDraftItem } from './state';
+import { setStylePreviewHoverTarget, type StylePreviewTarget } from './preview';
 
 const THICKNESS_MIN = 0;
 const THICKNESS_MAX = 20;
@@ -37,6 +38,8 @@ function debounce<F extends (...args: any[]) => void>(func: F, wait: number): F 
 
 type StyleInjectionTabKey = 'plot-area' | 'mark';
 type StyleSectionKey = 'templates' | 'injection';
+const STYLE_CARD_LINKED_HOVER_CLASS = 'is-preview-linked-hover';
+let styleSettingCardHoverBound = false;
 
 function markFillEnabled() {
     return chartTypeUsesMarkFill(state.chartType);
@@ -203,6 +206,59 @@ function bindStyleInjectionTabEvents() {
         if (!tabKey) return;
         setExpandedStyleSection('injection');
         setActiveStyleInjectionTab(tabKey);
+    });
+}
+
+function getStyleSettingCardsByTarget(): Array<{ target: StylePreviewTarget; cards: HTMLElement[] }> {
+    const resolveCard = (input: HTMLElement): HTMLElement | null => input.closest<HTMLElement>('.style-injection-card');
+    const uniqueCards = (cards: Array<HTMLElement | null | undefined>) => {
+        const next: HTMLElement[] = [];
+        cards.forEach((card) => {
+            if (!card || next.includes(card)) return;
+            next.push(card);
+        });
+        return next;
+    };
+
+    return [
+        { target: 'cell-fill', cards: uniqueCards([resolveCard(ui.styleCellFillColorInput)]) },
+        { target: 'tab-right', cards: uniqueCards([resolveCard(ui.styleTabRightColorInput)]) },
+        { target: 'cell-top', cards: uniqueCards([resolveCard(ui.styleCellTopColorInput)]) },
+        { target: 'grid', cards: uniqueCards([resolveCard(ui.styleGridColorInput)]) },
+        { target: 'assist-line', cards: uniqueCards([resolveCard(ui.styleAssistLineColorInput)]) },
+        { target: 'mark', cards: uniqueCards([ui.styleMarkStrokeCard, ui.styleMarkFillCard]) },
+        { target: 'line-background', cards: uniqueCards([ui.styleMarkLineBackgroundCard]) }
+    ];
+}
+
+export function setStyleSettingCardHoverState(target: StylePreviewTarget | null) {
+    document.querySelectorAll<HTMLElement>(`.style-injection-card.${STYLE_CARD_LINKED_HOVER_CLASS}`)
+        .forEach((card) => card.classList.remove(STYLE_CARD_LINKED_HOVER_CLASS));
+    if (!target) return;
+
+    const matched = getStyleSettingCardsByTarget().find((item) => item.target === target);
+    matched?.cards.forEach((card) => card.classList.add(STYLE_CARD_LINKED_HOVER_CLASS));
+}
+
+export function bindStyleSettingCardHoverInteractions() {
+    if (styleSettingCardHoverBound) return;
+    styleSettingCardHoverBound = true;
+
+    getStyleSettingCardsByTarget().forEach(({ target, cards }) => {
+        cards.forEach((card) => {
+            card.dataset.stylePreviewTarget = target;
+            card.addEventListener('mouseenter', () => {
+                setStyleSettingCardHoverState(target);
+                setStylePreviewHoverTarget(target);
+            });
+            card.addEventListener('mouseleave', (event) => {
+                const related = event.relatedTarget;
+                const stayingWithinSameTarget = related instanceof Node && cards.some((candidate) => candidate.contains(related));
+                if (stayingWithinSameTarget) return;
+                setStyleSettingCardHoverState(null);
+                setStylePreviewHoverTarget(null);
+            });
+        });
     });
 }
 
@@ -743,6 +799,7 @@ export function syncStyleTabDraftFromExtracted(extracted: ExtractedStylePayload)
 
 export function bindStyleTabEvents() {
     bindStyleInjectionTabEvents();
+    bindStyleSettingCardHoverInteractions();
 
     const syncLineBackgroundVisibility = (checked: boolean) => {
         ui.styleMarkLineBackgroundVisibleInput.checked = checked;
