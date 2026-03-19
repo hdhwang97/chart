@@ -4,10 +4,12 @@ import { collectColumns, setVariantProperty } from './shared';
 import { debugLog } from '../log';
 import {
     buildLineBundleMatrix,
+    detectLineSeriesCountInColumns,
     type LineBundle,
     type LineStructureIssue,
     type LineStructureIssueReason,
-    validateLineStructureOrError
+    validateLineStructureOrError,
+    isLineBundleFlat
 } from './line-structure';
 
 // ==========================================
@@ -144,6 +146,32 @@ function applyStrokeThickness(target: SceneNode, thickness: number) {
         t.strokeWeight = thickness;
     }
     return true;
+}
+
+function readStrokeThickness(target: SceneNode): number {
+    let maxThickness = 0;
+    if ('strokeWeight' in target && typeof target.strokeWeight === 'number') {
+        maxThickness = Math.max(maxThickness, target.strokeWeight);
+    }
+    if ('strokeTopWeight' in target && typeof target.strokeTopWeight === 'number') {
+        maxThickness = Math.max(maxThickness, target.strokeTopWeight);
+    }
+    if ('strokeRightWeight' in target && typeof target.strokeRightWeight === 'number') {
+        maxThickness = Math.max(maxThickness, target.strokeRightWeight);
+    }
+    if ('strokeBottomWeight' in target && typeof target.strokeBottomWeight === 'number') {
+        maxThickness = Math.max(maxThickness, target.strokeBottomWeight);
+    }
+    if ('strokeLeftWeight' in target && typeof target.strokeLeftWeight === 'number') {
+        maxThickness = Math.max(maxThickness, target.strokeLeftWeight);
+    }
+    return maxThickness;
+}
+
+function resolveLineStrokeThickness(lineRoot: SceneNode, fallback: number): number {
+    const segmentTargets = resolveLineSegmentTargets(lineRoot);
+    const maxThickness = segmentTargets.reduce((max, target) => Math.max(max, readStrokeThickness(target)), 0);
+    return maxThickness > 0 ? maxThickness : fallback;
 }
 
 function getLineStyleId(config: any, rowIndex: number): string | null {
@@ -311,7 +339,7 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
                 pBottom,
                 lineDirection,
                 fillDirection,
-                isFlat ? thickness : 0
+                isFlat ? (thickness / 2) : 0
             );
             if (layoutIssue) {
                 return buildLineApplyFailure('Line bundle layout injection failed.', [{
@@ -340,4 +368,22 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
         segmentCount,
         appliedSegments
     };
+}
+
+export function syncFlatLineFillBottomPadding(graph: SceneNode, precomputedCols?: ReturnType<typeof collectColumns>) {
+    const cols = (precomputedCols ?? collectColumns(graph)).filter((col) => col.node.visible);
+    if (cols.length === 0) return;
+
+    const detectedRows = detectLineSeriesCountInColumns(cols);
+    const matrix = buildLineBundleMatrix(cols, detectedRows);
+
+    matrix.forEach((row) => {
+        row.forEach((bundle) => {
+            if (!bundle || !isLineBundleFlat(bundle)) return;
+            if (!canSetPaddingBottom(bundle.lineNode) || !canSetPaddingBottom(bundle.fillBot)) return;
+            const basePadding = Math.max(0, bundle.lineNode.paddingBottom);
+            const strokeThickness = resolveLineStrokeThickness(bundle.lineNode, 0);
+            setPaddingBottom(bundle.fillBot, basePadding + (strokeThickness / 2));
+        });
+    });
 }

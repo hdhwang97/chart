@@ -3,7 +3,7 @@ import { loadChartData, loadLocalStyleOverrides, saveChartData, saveLocalStyleOv
 import { extractStyleFromNode } from './style';
 import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, applyYAxisEmptyVisibility, applyYAxisVisibility, applyColumnXEmptyVisibility, getChartLegendHeight, getGraphHeight, getPlotAreaWidth, getXEmptyHeight, hasVisibleXEmpty, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
 import { applyBar } from './drawing/bar';
-import { applyLine } from './drawing/line';
+import { applyLine, syncFlatLineFillBottomPadding } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
@@ -852,6 +852,9 @@ figma.ui.onmessage = async (msg) => {
 
         const strokeInjectionResult = await perf.step('stroke-injection', () => applyStrokeInjection(targetNode, runtimeStrokePayload, columns));
         debugLog('[chart-plugin][stroke-injection]', strokeInjectionResult);
+        if (type === 'line') {
+            await perf.step('flat-padding-sync', () => syncFlatLineFillBottomPadding(targetNode, columns));
+        }
 
         // 5. 스타일 자동 추출 및 전송
         const shouldUseFastStyleSync = msg.type === 'apply' && isStackedType(type);

@@ -8,7 +8,7 @@ import { loadChartData, loadLocalStyleOverrides } from './data-layer';
 import { extractChartColors, extractStyleFromNode } from './style';
 import { applyColumnXEmptyVisibility, applyYAxisEmptyVisibility, applyYAxisVisibility, collectColumns } from './drawing/shared';
 import { applyBar } from './drawing/bar';
-import { applyLine } from './drawing/line';
+import { applyLine, syncFlatLineFillBottomPadding } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
@@ -533,6 +533,9 @@ export async function initPluginUI(
                 ...(localOverrideState.mask.rowStrokeStyles ? { rowStrokeStyles: localOverrideState.overrides.rowStrokeStyles } : {}),
                 ...(localOverrideState.mask.colStrokeStyle ? { colStrokeStyle: localOverrideState.overrides.colStrokeStyle } : {})
             });
+            if (chartType === 'line') {
+                syncFlatLineFillBottomPadding(node);
+            }
         }
         figma.ui.postMessage({
             type: 'preview_plot_size_updated',
