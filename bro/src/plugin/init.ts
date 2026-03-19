@@ -4,6 +4,7 @@ import {
     VARIANT_MAPPING
 } from './constants';
 import { traverse, findActualPropKey, normalizeHexColor } from './utils';
+import { withLoadingOpacity } from './loading';
 import { loadChartData, loadLocalStyleOverrides } from './data-layer';
 import { extractChartColors, extractStyleFromNode } from './style';
 import { applyColumnXEmptyVisibility, applyYAxisEmptyVisibility, applyYAxisVisibility, collectColumns } from './drawing/shared';
@@ -418,142 +419,144 @@ export async function syncChartOnResize(
     const chartData = await loadChartData(node, chartType);
     if (!chartData.isSaved) return;
 
-    // 저장된 두께 값 로드
-    const lastStrokeWidth = node.getPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH);
-    const lastDrawingVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES);
-    const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
-    const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
-    const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
-    const mode = lastMode || 'raw';
-    const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
+    await withLoadingOpacity(node, async () => {
+        // 저장된 두께 값 로드
+        const lastStrokeWidth = node.getPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH);
+        const lastDrawingVals = node.getPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES);
+        const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
+        const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
+        const lastYMax = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
+        const mode = lastMode || 'raw';
+        const isStacked = chartType === 'stackedBar' || chartType === 'stacked';
 
-    let valuesToUse = chartData.values;
-    if (lastDrawingVals) {
-        try { valuesToUse = JSON.parse(lastDrawingVals); } catch (e) { }
-    } else if (isStacked && Array.isArray(chartData.values)) {
-        valuesToUse = chartData.values.slice(1);
-    }
-
-    const yMinInput = Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : 0;
-    const yMaxInput = lastYMax === '' ? null : (Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : null);
-    const rawYMaxAuto = mode === 'raw' && lastYMax === '';
-    const effectiveY = resolveEffectiveYRange({
-        chartType,
-        mode,
-        values: valuesToUse,
-        yMin: yMinInput,
-        yMax: yMaxInput,
-        rawYMaxAuto
-    });
-
-    const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
-    const assistLineVisible = resolveAssistLineVisibleFromNode(node);
-    const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
-    const yAxisVisible = resolveYAxisVisibleFromNode(node);
-    const localOverrideState = node.type === 'INSTANCE'
-        ? loadLocalStyleOverrides(node)
-        : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
-    const runtimeRowColors = localOverrideState.mask.rowColors ? localOverrideState.overrides.rowColors : undefined;
-    const runtimeRowColorModes = localOverrideState.mask.rowColorModes ? localOverrideState.overrides.rowColorModes : undefined;
-    const runtimeRowPaintStyleIds = localOverrideState.mask.rowPaintStyleIds ? localOverrideState.overrides.rowPaintStyleIds : undefined;
-    const runtimeColColors = localOverrideState.mask.colColors ? localOverrideState.overrides.colColors : undefined;
-    const runtimeColColorModes = localOverrideState.mask.colColorModes ? localOverrideState.overrides.colColorModes : undefined;
-    const runtimeColPaintStyleIds = localOverrideState.mask.colPaintStyleIds ? localOverrideState.overrides.colPaintStyleIds : undefined;
-    const runtimeColEnabled = localOverrideState.mask.colColorEnabled
-        ? localOverrideState.overrides.colColorEnabled
-        : undefined;
-    const runtimeMarkColorSource = localOverrideState.mask.markColorSource ? localOverrideState.overrides.markColorSource : undefined;
-    const runtimeAssistLineStyle = localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined;
-    const rowCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
-    const colCount = chartType === 'stackedBar' || chartType === 'stacked'
-        ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((acc, cur) => acc + (Number(cur) || 0), 0) : 0)
-        : (Array.isArray(valuesToUse) && Array.isArray(valuesToUse[0]) ? valuesToUse[0].length : 1);
-    const payload = {
-        type: chartType,
-        mode,
-        values: valuesToUse,
-        rawValues: chartData.values,
-        cols: 0,
-        cellCount: chartData.cellCount,
-        yMin: effectiveY.yMin,
-        yMax: effectiveY.yMax,
-        rawYMaxAuto: effectiveY.rawYMaxAuto,
-        markNum: chartData.markNum,
-        strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
-        markRatio: (chartType === 'bar' || chartType === 'stackedBar' || chartType === 'stacked')
-            ? resolveMarkRatioFromNode(node)
-            : undefined,
-        xAxisLabelsVisible,
-        yAxisVisible,
-        assistLineVisible,
-        assistLineEnabled,
-        rowColors: runtimeRowColors ?? resolveRowColorsFromNode(node, chartType, Math.max(1, rowCount)),
-        rowColorModes: runtimeRowColorModes ?? resolveRowColorModesFromNode(node, Math.max(1, rowCount)),
-        rowPaintStyleIds: runtimeRowPaintStyleIds ?? resolveRowPaintStyleIdsFromNode(node, Math.max(1, rowCount)),
-        colColors: runtimeColColors ?? resolveColColorsFromNode(node, Math.max(1, colCount)),
-        colColorModes: runtimeColColorModes ?? resolveColColorModesFromNode(node, Math.max(1, colCount)),
-        colPaintStyleIds: runtimeColPaintStyleIds ?? resolveColPaintStyleIdsFromNode(node, Math.max(1, colCount)),
-        colColorEnabled: runtimeColEnabled
-            ?? resolveColColorEnabledFromNode(node, Math.max(1, colCount)),
-        markColorSource: runtimeMarkColorSource,
-        assistLineStyle: runtimeAssistLineStyle,
-        reason: opts?.reason || 'auto-resize'
-    };
-
-    applyColumnXEmptyVisibility(node, xAxisLabelsVisible);
-    applyYAxisEmptyVisibility(node, xAxisLabelsVisible);
-    applyYAxisVisibility(node, yAxisVisible);
-    const H = getGraphHeight(node as FrameNode);
-    const xEmptyHeight = getXEmptyHeight(node as FrameNode);
-    if (chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
-    else if (chartType === 'bar') applyBar(payload, H, node);
-    else if (chartType === 'line') {
-        const lineResult = applyLine(payload, H, node);
-        if (!lineResult.ok) {
-            figma.notify('Line apply failed: required line structure is missing.');
-            console.error('[chart-plugin][line-apply-failed]', {
-                reason: opts?.reason || 'auto-resize',
-                targetNodeId: node.id,
-                targetNodeName: node.name,
-                lineResult
-            });
-            return;
+        let valuesToUse = chartData.values;
+        if (lastDrawingVals) {
+            try { valuesToUse = JSON.parse(lastDrawingVals); } catch (e) { }
+        } else if (isStacked && Array.isArray(chartData.values)) {
+            valuesToUse = chartData.values.slice(1);
         }
-    }
-    applyAssistLines(payload, node, H, { xEmptyHeight });
-    if (node.type === 'INSTANCE' && hasTruthyMask(localOverrideState.mask)) {
-        applyStrokeInjection(node, {
+
+        const yMinInput = Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : 0;
+        const yMaxInput = lastYMax === '' ? null : (Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : null);
+        const rawYMaxAuto = mode === 'raw' && lastYMax === '';
+        const effectiveY = resolveEffectiveYRange({
             chartType,
+            mode,
+            values: valuesToUse,
+            yMin: yMinInput,
+            yMax: yMaxInput,
+            rawYMaxAuto
+        });
+
+        const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
+        const assistLineVisible = resolveAssistLineVisibleFromNode(node);
+        const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
+        const yAxisVisible = resolveYAxisVisibleFromNode(node);
+        const localOverrideState = node.type === 'INSTANCE'
+            ? loadLocalStyleOverrides(node)
+            : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
+        const runtimeRowColors = localOverrideState.mask.rowColors ? localOverrideState.overrides.rowColors : undefined;
+        const runtimeRowColorModes = localOverrideState.mask.rowColorModes ? localOverrideState.overrides.rowColorModes : undefined;
+        const runtimeRowPaintStyleIds = localOverrideState.mask.rowPaintStyleIds ? localOverrideState.overrides.rowPaintStyleIds : undefined;
+        const runtimeColColors = localOverrideState.mask.colColors ? localOverrideState.overrides.colColors : undefined;
+        const runtimeColColorModes = localOverrideState.mask.colColorModes ? localOverrideState.overrides.colColorModes : undefined;
+        const runtimeColPaintStyleIds = localOverrideState.mask.colPaintStyleIds ? localOverrideState.overrides.colPaintStyleIds : undefined;
+        const runtimeColEnabled = localOverrideState.mask.colColorEnabled
+            ? localOverrideState.overrides.colColorEnabled
+            : undefined;
+        const runtimeMarkColorSource = localOverrideState.mask.markColorSource ? localOverrideState.overrides.markColorSource : undefined;
+        const runtimeAssistLineStyle = localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined;
+        const rowCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
+        const colCount = chartType === 'stackedBar' || chartType === 'stacked'
+            ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((acc, cur) => acc + (Number(cur) || 0), 0) : 0)
+            : (Array.isArray(valuesToUse) && Array.isArray(valuesToUse[0]) ? valuesToUse[0].length : 1);
+        const payload = {
+            type: chartType,
+            mode,
+            values: valuesToUse,
+            rawValues: chartData.values,
+            cols: 0,
+            cellCount: chartData.cellCount,
+            yMin: effectiveY.yMin,
+            yMax: effectiveY.yMax,
+            rawYMaxAuto: effectiveY.rawYMaxAuto,
             markNum: chartData.markNum,
-            ...(localOverrideState.mask.rowColors ? { rowColors: localOverrideState.overrides.rowColors } : {}),
-            ...(localOverrideState.mask.rowColorModes ? { rowColorModes: localOverrideState.overrides.rowColorModes } : {}),
-            ...(localOverrideState.mask.rowPaintStyleIds ? { rowPaintStyleIds: localOverrideState.overrides.rowPaintStyleIds } : {}),
-            ...(localOverrideState.mask.colColors ? { colColors: localOverrideState.overrides.colColors } : {}),
-            ...(localOverrideState.mask.colColorModes ? { colColorModes: localOverrideState.overrides.colColorModes } : {}),
-            ...(localOverrideState.mask.colPaintStyleIds ? { colPaintStyleIds: localOverrideState.overrides.colPaintStyleIds } : {}),
-            ...(localOverrideState.mask.colColorEnabled ? { colColorEnabled: localOverrideState.overrides.colColorEnabled } : {}),
-            ...(localOverrideState.mask.cellFillStyle ? { cellFillStyle: localOverrideState.overrides.cellFillStyle } : {}),
-            ...(localOverrideState.mask.lineBackgroundStyle ? { lineBackgroundStyle: localOverrideState.overrides.lineBackgroundStyle } : {}),
-            ...(localOverrideState.mask.cellTopStyle ? { cellTopStyle: localOverrideState.overrides.cellTopStyle } : {}),
-            ...(localOverrideState.mask.tabRightStyle ? { tabRightStyle: localOverrideState.overrides.tabRightStyle } : {}),
-            ...(localOverrideState.mask.gridContainerStyle ? { gridContainerStyle: localOverrideState.overrides.gridContainerStyle } : {}),
-            ...(localOverrideState.mask.assistLineStyle ? { assistLineStyle: localOverrideState.overrides.assistLineStyle } : {}),
-            ...(localOverrideState.mask.markStyle ? { markStyle: localOverrideState.overrides.markStyle } : {}),
-            ...(localOverrideState.mask.markStyles ? { markStyles: localOverrideState.overrides.markStyles } : {}),
-            ...(localOverrideState.mask.rowStrokeStyles ? { rowStrokeStyles: localOverrideState.overrides.rowStrokeStyles } : {}),
-            ...(localOverrideState.mask.colStrokeStyle ? { colStrokeStyle: localOverrideState.overrides.colStrokeStyle } : {})
-        });
-        if (chartType === 'line') {
-            syncFlatLineFillBottomPadding(node);
+            strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
+            markRatio: (chartType === 'bar' || chartType === 'stackedBar' || chartType === 'stacked')
+                ? resolveMarkRatioFromNode(node)
+                : undefined,
+            xAxisLabelsVisible,
+            yAxisVisible,
+            assistLineVisible,
+            assistLineEnabled,
+            rowColors: runtimeRowColors ?? resolveRowColorsFromNode(node, chartType, Math.max(1, rowCount)),
+            rowColorModes: runtimeRowColorModes ?? resolveRowColorModesFromNode(node, Math.max(1, rowCount)),
+            rowPaintStyleIds: runtimeRowPaintStyleIds ?? resolveRowPaintStyleIdsFromNode(node, Math.max(1, rowCount)),
+            colColors: runtimeColColors ?? resolveColColorsFromNode(node, Math.max(1, colCount)),
+            colColorModes: runtimeColColorModes ?? resolveColColorModesFromNode(node, Math.max(1, colCount)),
+            colPaintStyleIds: runtimeColPaintStyleIds ?? resolveColPaintStyleIdsFromNode(node, Math.max(1, colCount)),
+            colColorEnabled: runtimeColEnabled
+                ?? resolveColColorEnabledFromNode(node, Math.max(1, colCount)),
+            markColorSource: runtimeMarkColorSource,
+            assistLineStyle: runtimeAssistLineStyle,
+            reason: opts?.reason || 'auto-resize'
+        };
+
+        applyColumnXEmptyVisibility(node, xAxisLabelsVisible);
+        applyYAxisEmptyVisibility(node, xAxisLabelsVisible);
+        applyYAxisVisibility(node, yAxisVisible);
+        const H = getGraphHeight(node as FrameNode);
+        const xEmptyHeight = getXEmptyHeight(node as FrameNode);
+        if (chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
+        else if (chartType === 'bar') applyBar(payload, H, node);
+        else if (chartType === 'line') {
+            const lineResult = applyLine(payload, H, node);
+            if (!lineResult.ok) {
+                figma.notify('Line apply failed: required line structure is missing.');
+                console.error('[chart-plugin][line-apply-failed]', {
+                    reason: opts?.reason || 'auto-resize',
+                    targetNodeId: node.id,
+                    targetNodeName: node.name,
+                    lineResult
+                });
+                return;
+            }
         }
-    }
-    if (opts?.postPreviewUpdate) {
-        figma.ui.postMessage({
-            type: 'preview_plot_size_updated',
-            previewPlotWidth: getPlotAreaWidth(node),
-            previewPlotHeight: getGraphHeight(node as FrameNode)
-        });
-    }
+        applyAssistLines(payload, node, H, { xEmptyHeight });
+        if (node.type === 'INSTANCE' && hasTruthyMask(localOverrideState.mask)) {
+            applyStrokeInjection(node, {
+                chartType,
+                markNum: chartData.markNum,
+                ...(localOverrideState.mask.rowColors ? { rowColors: localOverrideState.overrides.rowColors } : {}),
+                ...(localOverrideState.mask.rowColorModes ? { rowColorModes: localOverrideState.overrides.rowColorModes } : {}),
+                ...(localOverrideState.mask.rowPaintStyleIds ? { rowPaintStyleIds: localOverrideState.overrides.rowPaintStyleIds } : {}),
+                ...(localOverrideState.mask.colColors ? { colColors: localOverrideState.overrides.colColors } : {}),
+                ...(localOverrideState.mask.colColorModes ? { colColorModes: localOverrideState.overrides.colColorModes } : {}),
+                ...(localOverrideState.mask.colPaintStyleIds ? { colPaintStyleIds: localOverrideState.overrides.colPaintStyleIds } : {}),
+                ...(localOverrideState.mask.colColorEnabled ? { colColorEnabled: localOverrideState.overrides.colColorEnabled } : {}),
+                ...(localOverrideState.mask.cellFillStyle ? { cellFillStyle: localOverrideState.overrides.cellFillStyle } : {}),
+                ...(localOverrideState.mask.lineBackgroundStyle ? { lineBackgroundStyle: localOverrideState.overrides.lineBackgroundStyle } : {}),
+                ...(localOverrideState.mask.cellTopStyle ? { cellTopStyle: localOverrideState.overrides.cellTopStyle } : {}),
+                ...(localOverrideState.mask.tabRightStyle ? { tabRightStyle: localOverrideState.overrides.tabRightStyle } : {}),
+                ...(localOverrideState.mask.gridContainerStyle ? { gridContainerStyle: localOverrideState.overrides.gridContainerStyle } : {}),
+                ...(localOverrideState.mask.assistLineStyle ? { assistLineStyle: localOverrideState.overrides.assistLineStyle } : {}),
+                ...(localOverrideState.mask.markStyle ? { markStyle: localOverrideState.overrides.markStyle } : {}),
+                ...(localOverrideState.mask.markStyles ? { markStyles: localOverrideState.overrides.markStyles } : {}),
+                ...(localOverrideState.mask.rowStrokeStyles ? { rowStrokeStyles: localOverrideState.overrides.rowStrokeStyles } : {}),
+                ...(localOverrideState.mask.colStrokeStyle ? { colStrokeStyle: localOverrideState.overrides.colStrokeStyle } : {})
+            });
+            if (chartType === 'line') {
+                syncFlatLineFillBottomPadding(node);
+            }
+        }
+        if (opts?.postPreviewUpdate) {
+            figma.ui.postMessage({
+                type: 'preview_plot_size_updated',
+                previewPlotWidth: getPlotAreaWidth(node),
+                previewPlotHeight: getGraphHeight(node as FrameNode)
+            });
+        }
+    });
 }
 
 export async function initPluginUI(

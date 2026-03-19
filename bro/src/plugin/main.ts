@@ -10,6 +10,7 @@ import { applyStrokeInjection } from './drawing/stroke-injection';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph, syncChartOnResize, type SelectionTargetMeta } from './init';
 import { normalizeHexColor, rgbToHex, traverse } from './utils';
+import { withLoadingOpacity } from './loading';
 import { deleteStyleTemplate, loadStyleTemplates, overwriteStyleTemplate, renameStyleTemplate, saveStyleTemplate } from './template-store';
 import { PerfTracker, shouldLogApplyPerf } from './perf';
 import { debugLog } from './log';
@@ -685,6 +686,7 @@ figma.ui.onmessage = async (msg) => {
         if (msg.type === 'apply') {
             activeTargetId = targetNode.id;
         }
+        await withLoadingOpacity(targetNode, async () => {
         const isTemplateMasterApply = msg.type === 'apply' && (targetNode as any).type === 'COMPONENT';
         const applyPolicy: ApplyPolicy = isTemplateMasterApply
             ? 'template-master'
@@ -1143,6 +1145,7 @@ figma.ui.onmessage = async (msg) => {
             if (msg.type === 'apply') {
                 figma.ui.postMessage({ type: 'apply_completed', targetId: targetNode.id });
             }
+        });
         });
         const perfReport = perf.done();
         if (shouldLogApplyPerf(msg.type, type)) {
