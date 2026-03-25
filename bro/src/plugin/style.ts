@@ -364,17 +364,31 @@ function toMarkStyleSnapshot(node: SceneNode): MarkInjectionStyle | null {
 }
 
 function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
-    let found: MarkInjectionStyle | null = null;
+    let lineStyle: MarkInjectionStyle | null = null;
+    let pointStyle: MarkInjectionStyle | null = null;
     traverse(node, (child) => {
-        if (found) return;
         if (child.id === node.id || !child.visible) return;
         const lower = child.name.toLowerCase();
         const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
         const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
-        if (!isPointLike && !isVectorLike) return;
-        found = toMarkStyleSnapshot(child);
+        if (isPointLike && !pointStyle) {
+            pointStyle = toMarkStyleSnapshot(child);
+            return;
+        }
+        if (isVectorLike && !lineStyle) {
+            lineStyle = toMarkStyleSnapshot(child);
+        }
     });
-    return found;
+    if (!lineStyle && !pointStyle) return null;
+    return {
+        fillColor: lineStyle?.fillColor,
+        strokeColor: lineStyle?.strokeColor,
+        linePointStrokeColor: pointStyle?.strokeColor || lineStyle?.strokeColor,
+        linePointFillColor: pointStyle?.fillColor || pointStyle?.strokeColor || lineStyle?.fillColor,
+        linePointThickness: pointStyle?.thickness ?? lineStyle?.thickness,
+        thickness: lineStyle?.thickness ?? pointStyle?.thickness,
+        strokeStyle: lineStyle?.strokeStyle ?? pointStyle?.strokeStyle
+    };
 }
 
 export function extractMarkStyles(graph: SceneNode, precomputedCols?: ColRef[]): MarkInjectionStyle[] {

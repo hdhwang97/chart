@@ -65,6 +65,9 @@ export type MarkStrokeSides = {
 export type MarkInjectionStyle = {
     fillColor?: string;
     strokeColor?: string;
+    linePointStrokeColor?: string;
+    linePointFillColor?: string;
+    linePointThickness?: number;
     lineBackgroundColor?: string;
     lineBackgroundOpacity?: number;
     lineBackgroundVisible?: boolean;

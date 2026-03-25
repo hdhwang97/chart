@@ -138,6 +138,11 @@ function getMarkDraftStyleFromState(seriesIndex: number) {
     const source = styles[idx] || fallback;
     const fill = normalizeHexColorInput(source.fillColor) || normalizeHexColorInput(fallback.fillColor) || '#3B82F6';
     const stroke = normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || fill;
+    const linePointStroke = normalizeHexColorInput(source.linePointStrokeColor) || stroke;
+    const linePointFill = normalizeHexColorInput(source.linePointFillColor) || fill;
+    const linePointThickness = Number.isFinite(Number(source.linePointThickness))
+        ? Math.max(0, Number(source.linePointThickness))
+        : Math.max(0, Number(fallback.linePointThickness) || 1);
     const lineBackground = normalizeHexColorInput(source.lineBackgroundColor) || stroke;
     const lineBackgroundOpacity = Number.isFinite(Number(source.lineBackgroundOpacity))
         ? Math.max(0, Math.min(100, Number(source.lineBackgroundOpacity)))
@@ -151,7 +156,18 @@ function getMarkDraftStyleFromState(seriesIndex: number) {
         ? Math.max(0, Number(source.thickness))
         : Math.max(0, Number(fallback.thickness) || 1);
     const strokeStyle = source.strokeStyle === 'dash' ? 'dash' : 'solid';
-    return { fillColor: fill, strokeColor: stroke, lineBackgroundColor: lineBackground, lineBackgroundOpacity, lineBackgroundVisible, thickness, strokeStyle };
+    return {
+        fillColor: fill,
+        strokeColor: stroke,
+        linePointStrokeColor: linePointStroke,
+        linePointFillColor: linePointFill,
+        linePointThickness,
+        lineBackgroundColor: lineBackground,
+        lineBackgroundOpacity,
+        lineBackgroundVisible,
+        thickness,
+        strokeStyle
+    };
 }
 
 function isMarkStrokeEnabled(seriesIndex: number): boolean {
@@ -860,16 +876,19 @@ function renderD3Preview(style: any) {
             applyStrokeExtras(path, draftStroke);
 
             if (state.linePointVisible) {
+                const pointStroke = draftStyle.linePointStrokeColor || draftStroke.color || baseColor;
+                const pointFill = draftStyle.linePointFillColor || draftStroke.color || baseColor;
                 lineData.forEach((val: number, i: number) => {
                     const dot = g.append('circle')
                         .attr('cx', xScale(i)!)
                         .attr('cy', yScale(val))
                         .attr('r', 3)
-                        .attr('fill', draftStroke.color || baseColor);
+                        .attr('fill', pointFill)
+                        .attr('stroke', pointStroke)
+                        .attr('stroke-width', Math.max(0, draftStyle.linePointThickness));
                     if (typeof draftStroke?.opacity === 'number') {
                         dot.attr('opacity', draftStroke.opacity);
                     }
-                    applyStroke(dot, draftStroke, 'none', 0);
                 });
             }
         }
@@ -1040,6 +1059,9 @@ export function generateD3CodeString(style: any): string {
                     weight: Math.max(1, draftStyle.thickness || strokeVal),
                     dashPattern: draftStyle.strokeStyle === 'dash' ? [4, 2] : []
                 },
+                pointStrokeColor: draftStyle.linePointStrokeColor || draftStyle.strokeColor || baseColor,
+                pointFillColor: draftStyle.linePointFillColor || draftStyle.fillColor || baseColor,
+                pointThickness: Math.max(0, draftStyle.linePointThickness),
                 areaColor: normalizeHexColorInput(draftStyle.lineBackgroundColor) || normalizeHexColorInput(draftStyle.strokeColor) || baseColor,
                 areaOpacity: Math.max(0, Math.min(1, Number(draftStyle.lineBackgroundOpacity) / 100)),
                 areaVisible: Boolean(draftStyle.lineBackgroundVisible)
@@ -1067,6 +1089,7 @@ export function generateD3CodeString(style: any): string {
             height: svgNaturalHeight,
             preserveAspectRatio: 'xMidYMid meet'
         },
+        linePointVisible: state.linePointVisible,
         layout: EXPORT_LAYOUT,
         axis: {
             colCount,
@@ -1364,6 +1387,18 @@ if (config.chartType === 'bar') {
       .attr('stroke-width', style?.stroke?.weight || config.marks.strokeWidth)
       .attr('d', line);
     applyStroke(path, style?.stroke || null, style?.stroke?.color || '#3B82F6', config.marks.strokeWidth);
+
+    if (config.linePointVisible) {
+      points.forEach((value, pointIndex) => {
+        plot.append('circle')
+          .attr('cx', xScale(pointIndex))
+          .attr('cy', yScale(value))
+          .attr('r', 3)
+          .attr('fill', style?.pointFillColor || style?.stroke?.color || config.marks.colors[seriesIndex] || '#3B82F6')
+          .attr('stroke', style?.pointStrokeColor || style?.stroke?.color || config.marks.colors[seriesIndex] || '#3B82F6')
+          .attr('stroke-width', typeof style?.pointThickness === 'number' ? style.pointThickness : 1);
+      });
+    }
   });
 } else if (config.chartType === 'stackedBar') {
   const xScale = d3.scaleBand()

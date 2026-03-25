@@ -223,6 +223,9 @@ export function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
     const source = value as MarkInjectionStyle;
     const fillColor = normalizeHexColorInput(source.fillColor);
     const strokeColor = normalizeHexColorInput(source.strokeColor);
+    const linePointStrokeColor = normalizeHexColorInput(source.linePointStrokeColor);
+    const linePointFillColor = normalizeHexColorInput(source.linePointFillColor);
+    const linePointThickness = Number.isFinite(Number(source.linePointThickness)) ? clampThickness(source.linePointThickness, DEFAULT_STYLE_INJECTION_DRAFT.mark.linePointThickness) : undefined;
     const lineBackgroundColor = normalizeHexColorInput(source.lineBackgroundColor);
     const lineBackgroundOpacityRaw = Number(source.lineBackgroundOpacity);
     const lineBackgroundOpacity = Number.isFinite(lineBackgroundOpacityRaw)
@@ -241,10 +244,13 @@ export function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
             right: source.sides.right !== false
         }
         : undefined;
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
+    if (!fillColor && !strokeColor && !linePointStrokeColor && !linePointFillColor && linePointThickness === undefined && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
+        linePointStrokeColor: linePointStrokeColor || undefined,
+        linePointFillColor: linePointFillColor || undefined,
+        linePointThickness,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity: lineBackgroundOpacity !== undefined ? lineBackgroundOpacity / 100 : undefined,
         lineBackgroundVisible,
@@ -309,10 +315,15 @@ export function draftItemFromAssistLineStyle(
 
 export function draftItemFromMarkStyle(style: MarkInjectionStyle | null, fallback: MarkStyleInjectionDraftItem): MarkStyleInjectionDraftItem {
     if (!style) return { ...fallback };
+    const fillColor = normalizeHexColorInput(style.fillColor) || fallback.fillColor;
+    const strokeColor = normalizeHexColorInput(style.strokeColor) || fallback.strokeColor;
     return {
-        fillColor: normalizeHexColorInput(style.fillColor) || fallback.fillColor,
-        strokeColor: normalizeHexColorInput(style.strokeColor) || fallback.strokeColor,
-        lineBackgroundColor: normalizeHexColorInput(style.lineBackgroundColor) || normalizeHexColorInput(style.strokeColor) || fallback.lineBackgroundColor,
+        fillColor,
+        strokeColor,
+        linePointStrokeColor: normalizeHexColorInput(style.linePointStrokeColor) || strokeColor,
+        linePointFillColor: normalizeHexColorInput(style.linePointFillColor) || fillColor,
+        linePointThickness: clampThickness(style.linePointThickness, fallback.linePointThickness),
+        lineBackgroundColor: normalizeHexColorInput(style.lineBackgroundColor) || strokeColor || fallback.lineBackgroundColor,
         lineBackgroundOpacity: clampOpacityPercent(
             typeof style.lineBackgroundOpacity === 'number' ? style.lineBackgroundOpacity * 100 : undefined,
             fallback.lineBackgroundOpacity
@@ -417,6 +428,11 @@ export function markStyleFromSnapshot(stroke: MarkInjectionStyle | null): MarkIn
     if (!stroke) return null;
     const fillColor = normalizeHexColorInput(stroke.fillColor);
     const strokeColor = normalizeHexColorInput(stroke.strokeColor);
+    const linePointStrokeColor = normalizeHexColorInput(stroke.linePointStrokeColor);
+    const linePointFillColor = normalizeHexColorInput(stroke.linePointFillColor);
+    const linePointThickness = Number.isFinite(Number(stroke.linePointThickness))
+        ? clampThickness(stroke.linePointThickness, DEFAULT_STYLE_INJECTION_DRAFT.mark.linePointThickness)
+        : undefined;
     const lineBackgroundColor = normalizeHexColorInput(stroke.lineBackgroundColor);
     const lineBackgroundOpacity = typeof stroke.lineBackgroundOpacity === 'number'
         ? Math.max(0, Math.min(1, stroke.lineBackgroundOpacity))
@@ -427,10 +443,13 @@ export function markStyleFromSnapshot(stroke: MarkInjectionStyle | null): MarkIn
         : undefined;
     const enabled = typeof stroke.enabled === 'boolean' ? stroke.enabled : undefined;
     const sides = stroke.sides ? normalizeMarkStrokeSides(stroke.sides) : undefined;
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && enabled === undefined && !sides) return null;
+    if (!fillColor && !strokeColor && !linePointStrokeColor && !linePointFillColor && linePointThickness === undefined && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
+        linePointStrokeColor: linePointStrokeColor || undefined,
+        linePointFillColor: linePointFillColor || undefined,
+        linePointThickness,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity,
         lineBackgroundVisible,
@@ -695,6 +714,9 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
         markStyle: {
             fillColor: allowMarkFill ? draft.mark.fillColor : undefined,
             strokeColor: activeStrokeSource.strokeColor,
+            linePointStrokeColor: draft.mark.linePointStrokeColor,
+            linePointFillColor: draft.mark.linePointFillColor,
+            linePointThickness: draft.mark.linePointThickness,
             lineBackgroundColor: allowLineBackground ? draft.mark.lineBackgroundColor : undefined,
             lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)) : undefined,
             lineBackgroundVisible: allowLineBackground ? draft.mark.lineBackgroundVisible : undefined,
@@ -706,6 +728,9 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
         markStyles: normalizedMarkStyles.map((item, index) => ({
             fillColor: allowMarkFill ? item.fillColor : undefined,
             strokeColor: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeColor : item.strokeColor,
+            linePointStrokeColor: item.linePointStrokeColor,
+            linePointFillColor: item.linePointFillColor,
+            linePointThickness: item.linePointThickness,
             lineBackgroundColor: allowLineBackground ? item.lineBackgroundColor : undefined,
             lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)) : undefined,
             lineBackgroundVisible: allowLineBackground ? item.lineBackgroundVisible : undefined,
@@ -964,6 +989,9 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             markStyle: {
                 fillColor: allowMarkFill ? draft.mark.fillColor : undefined,
                 strokeColor: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeColor : draft.mark.strokeColor,
+                linePointStrokeColor: draft.mark.linePointStrokeColor,
+                linePointFillColor: draft.mark.linePointFillColor,
+                linePointThickness: draft.mark.linePointThickness,
                 lineBackgroundColor: allowLineBackground ? draft.mark.lineBackgroundColor : undefined,
                 lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, draft.mark.lineBackgroundOpacity / 100)) : undefined,
                 lineBackgroundVisible: allowLineBackground ? draft.mark.lineBackgroundVisible : undefined,
@@ -975,6 +1003,9 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
             markStyles: normalizedMarkStyles.map((item, index) => ({
                 fillColor: allowMarkFill ? item.fillColor : undefined,
                 strokeColor: sharedStackedStroke ? sharedStackedStroke.sourceStyle.strokeColor : item.strokeColor,
+                linePointStrokeColor: item.linePointStrokeColor,
+                linePointFillColor: item.linePointFillColor,
+                linePointThickness: item.linePointThickness,
                 lineBackgroundColor: allowLineBackground ? item.lineBackgroundColor : undefined,
                 lineBackgroundOpacity: allowLineBackground ? Math.max(0, Math.min(1, item.lineBackgroundOpacity / 100)) : undefined,
                 lineBackgroundVisible: allowLineBackground ? item.lineBackgroundVisible : undefined,

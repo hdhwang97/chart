@@ -34,7 +34,7 @@ import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
 import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
-import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
+import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection } from '../shared/style-types';
 import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
@@ -871,6 +871,7 @@ function updateLineFeatureToggleUi() {
 
     syncButton(ui.linePointToggleBtn, state.linePointVisible, 'line point');
     syncButton(ui.lineFeature2ToggleBtn, state.lineFeature2Enabled, '기능 2');
+    syncMarkStyleCardVisibility();
 }
 
 function renderStylePreview() {

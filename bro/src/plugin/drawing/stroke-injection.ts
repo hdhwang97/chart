@@ -59,6 +59,9 @@ type ScopeResult = {
 type NormalizedMarkStyle = {
     fillColor?: string;
     strokeColor?: string;
+    linePointStrokeColor?: string;
+    linePointFillColor?: string;
+    linePointThickness?: number;
     lineBackgroundColor?: string;
     lineBackgroundOpacity?: number;
     lineBackgroundVisible?: boolean;
@@ -121,6 +124,9 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
     const source = input as MarkInjectionStyle;
     const fillColor = normalizeHexColor(source.fillColor);
     const strokeColor = normalizeHexColor(source.strokeColor);
+    const linePointStrokeColor = normalizeHexColor(source.linePointStrokeColor);
+    const linePointFillColor = normalizeHexColor(source.linePointFillColor);
+    const linePointThickness = normalizeThickness(source.linePointThickness);
     const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
     const lineBackgroundOpacityRaw = Number(source.lineBackgroundOpacity);
     const lineBackgroundOpacity = Number.isFinite(lineBackgroundOpacityRaw)
@@ -137,10 +143,13 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
             right: source.sides.right !== false
         }
         : undefined;
-    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
+    if (!fillColor && !strokeColor && !linePointStrokeColor && !linePointFillColor && linePointThickness === undefined && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
+        linePointStrokeColor: linePointStrokeColor || undefined,
+        linePointFillColor: linePointFillColor || undefined,
+        linePointThickness,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity,
         lineBackgroundVisible,
@@ -474,6 +483,17 @@ function enableIndividualStrokeWeights(node: SceneNode): boolean {
     }
 }
 
+function disableIndividualStrokeWeights(node: SceneNode): boolean {
+    if (!hasIndividualStrokeToggle(node)) return false;
+    try {
+        if (!node.individualStrokeWeights) return false;
+        node.individualStrokeWeights = false;
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function setStrokeWeight(node: StrokeWeightNode, thickness: number) {
     if (typeof node.strokeWeight === 'number' && nearlyEqual(node.strokeWeight, thickness)) return false;
     node.strokeWeight = thickness;
@@ -763,13 +783,34 @@ function applyLinePointTargets(
     skipStrokeColorForSeries: boolean,
     result: ScopeResult
 ) {
-    const pointStyle = !style.fillColor && !skipStrokeColorForSeries && style.strokeColor
-        ? { ...style, fillColor: style.strokeColor }
-        : style;
+    const resolvedPointStroke = style.linePointStrokeColor
+        || (!skipStrokeColorForSeries ? style.strokeColor : undefined);
+    const resolvedPointFill = style.linePointFillColor
+        || style.fillColor
+        || resolvedPointStroke;
+    const pointStyle: NormalizedMarkStyle = {
+        ...style,
+        fillColor: resolvedPointFill,
+        strokeColor: resolvedPointStroke,
+        thickness: typeof style.linePointThickness === 'number' ? style.linePointThickness : style.thickness,
+        sides: undefined
+    };
     targets.forEach((target) => {
         result.candidates += 1;
         try {
-            if (applyMarkStyleToNode(target, pointStyle, { skipFill: false, skipStrokeColor: skipStrokeColorForSeries })) {
+            let applied = false;
+            applied = disableIndividualStrokeWeights(target) || applied;
+            if (hasIndividualStrokeWeights(target) && typeof pointStyle.thickness === 'number') {
+                applied = setSideThickness(target, 'top', pointStyle.thickness) || applied;
+                applied = setSideThickness(target, 'right', pointStyle.thickness) || applied;
+                applied = setSideThickness(target, 'bottom', pointStyle.thickness) || applied;
+                applied = setSideThickness(target, 'left', pointStyle.thickness) || applied;
+            }
+            const skipPointStrokeColor = !style.linePointStrokeColor && skipStrokeColorForSeries;
+            if (applyMarkStyleToNode(target, pointStyle, { skipFill: false, skipStrokeColor: skipPointStrokeColor })) {
+                applied = true;
+            }
+            if (applied) {
                 result.applied += 1;
             } else {
                 result.skipped += 1;
@@ -1311,6 +1352,9 @@ function shouldSkipMarkStyleApply(payload: StrokeInjectionRuntimePayload, markSt
     const hasEffectiveStyle = markStyles.some((style) => (
         Boolean(style.fillColor)
         || Boolean(style.strokeColor)
+        || Boolean(style.linePointStrokeColor)
+        || Boolean(style.linePointFillColor)
+        || typeof style.linePointThickness === 'number'
         || typeof style.thickness === 'number'
         || Boolean(style.strokeStyle)
         || Boolean(style.sides)

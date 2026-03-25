@@ -262,15 +262,39 @@ function applyLineColorAndStroke(targetNode: SceneNode, rowColor: string | null,
     });
 }
 
-function applyLinePointColors(targetNode: SceneNode, rowColor: string | null) {
-    if (!rowColor) return;
+function resolveLinePointStyle(config: any, rowIndex: number, fallbackColor: string | null, fallbackThickness: number) {
+    const styles = Array.isArray(config?.markStyles) ? config.markStyles : [];
+    const fallbackStyle = config?.markStyle && typeof config.markStyle === 'object' ? config.markStyle : null;
+    const source = styles[rowIndex] || fallbackStyle || null;
+    const strokeColor = normalizeHexColor(source?.linePointStrokeColor)
+        || normalizeHexColor(source?.strokeColor)
+        || fallbackColor;
+    const fillColor = normalizeHexColor(source?.linePointFillColor)
+        || normalizeHexColor(source?.fillColor)
+        || fallbackColor
+        || strokeColor;
+    const thicknessRaw = Number(source?.linePointThickness);
+    const thickness = Number.isFinite(thicknessRaw) ? Math.max(0, thicknessRaw) : Math.max(0, fallbackThickness);
+    return {
+        strokeColor,
+        fillColor,
+        thickness
+    };
+}
+
+function applyLinePointColors(
+    targetNode: SceneNode,
+    style: { strokeColor: string | null; fillColor: string | null; thickness: number }
+) {
+    if (!style.strokeColor && !style.fillColor) return;
     traverse(targetNode, (child) => {
         if (child.id === targetNode.id || !child.visible) return;
         const lower = child.name.toLowerCase();
         const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
         if (!isPointLike) return;
-        tryApplyFill(child, rowColor);
-        tryApplyStroke(child, rowColor);
+        if (style.fillColor) tryApplyFill(child, style.fillColor);
+        if (style.strokeColor) tryApplyStroke(child, style.strokeColor);
+        applyStrokeThickness(child, style.thickness);
     });
 }
 
@@ -446,7 +470,7 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
             if (!deferSegmentStrokeStyling) {
                 applyLineColorAndStroke(bundle.lineNode, rowColor, rowStyleId, thickness);
             }
-            applyLinePointColors(bundle.lineNode, rowColor);
+            applyLinePointColors(bundle.lineNode, resolveLinePointStyle(config, r, rowColor, thickness));
             setLineStrokeVisibility(bundle.lineNode, !isFlat);
             const layoutIssue = applyLineBundleLayout(
                 bundle,

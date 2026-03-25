@@ -42,6 +42,9 @@ export type LineBackgroundStyleInjectionDraftItem = {
 export type MarkStyleInjectionDraftItem = {
     fillColor: string;
     strokeColor: string;
+    linePointStrokeColor: string;
+    linePointFillColor: string;
+    linePointThickness: number;
     lineBackgroundColor: string;
     lineBackgroundOpacity: number;
     lineBackgroundVisible: boolean;
@@ -106,6 +109,9 @@ export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
     mark: {
         fillColor: '#3B82F6',
         strokeColor: '#3B82F6',
+        linePointStrokeColor: '#3B82F6',
+        linePointFillColor: '#3B82F6',
+        linePointThickness: 1,
         lineBackgroundColor: '#3B82F6',
         lineBackgroundOpacity: 12,
         lineBackgroundVisible: false,
@@ -181,6 +187,9 @@ export const state = {
         mark: {
             fillColor: '#3B82F6',
             strokeColor: '#3B82F6',
+            linePointStrokeColor: '#3B82F6',
+            linePointFillColor: '#3B82F6',
+            linePointThickness: 1,
             lineBackgroundColor: '#3B82F6',
             lineBackgroundOpacity: 12,
             lineBackgroundVisible: false,
@@ -192,6 +201,9 @@ export const state = {
     markStylesDraft: [{
         fillColor: '#3B82F6',
         strokeColor: '#3B82F6',
+        linePointStrokeColor: '#3B82F6',
+        linePointFillColor: '#3B82F6',
+        linePointThickness: 1,
         lineBackgroundColor: '#3B82F6',
         lineBackgroundOpacity: 12,
         lineBackgroundVisible: false,
@@ -482,6 +494,10 @@ function normalizeMarkStyleItem(
 ): MarkStyleInjectionDraftItem {
     const fillColor = normalizeHexColorInput(input?.fillColor) || fallbackColor;
     const strokeColor = normalizeHexColorInput(input?.strokeColor) || fillColor;
+    const linePointStrokeColor = normalizeHexColorInput(input?.linePointStrokeColor) || strokeColor;
+    const linePointFillColor = normalizeHexColorInput(input?.linePointFillColor) || fillColor;
+    const rawLinePointThickness = Number(input?.linePointThickness);
+    const linePointThickness = Number.isFinite(rawLinePointThickness) ? Math.max(0, Math.round(rawLinePointThickness * 100) / 100) : 1;
     const lineBackgroundColor = normalizeHexColorInput(input?.lineBackgroundColor) || strokeColor;
     const rawOpacity = Number(input?.lineBackgroundOpacity);
     const lineBackgroundOpacity = Number.isFinite(rawOpacity) ? Math.max(0, Math.min(100, Math.round(rawOpacity))) : 12;
@@ -489,7 +505,7 @@ function normalizeMarkStyleItem(
     const rawThickness = Number(input?.thickness);
     const thickness = Number.isFinite(rawThickness) ? Math.max(0, Math.round(rawThickness * 100) / 100) : 1;
     const strokeStyle = input?.strokeStyle === 'dash' ? 'dash' : 'solid';
-    return { fillColor, strokeColor, lineBackgroundColor, lineBackgroundOpacity, lineBackgroundVisible, thickness, strokeStyle };
+    return { fillColor, strokeColor, linePointStrokeColor, linePointFillColor, linePointThickness, lineBackgroundColor, lineBackgroundOpacity, lineBackgroundVisible, thickness, strokeStyle };
 }
 
 export function deriveRowColorsFromMarkStyles(

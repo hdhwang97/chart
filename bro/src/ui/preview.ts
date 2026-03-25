@@ -345,10 +345,17 @@ function getMarkDraftStyle(seriesIndex: number) {
     const fallback = state.styleInjectionDraft.mark;
     const idx = Math.max(0, Math.min(seriesIndex, Math.max(0, styles.length - 1)));
     const source = styles[idx] || fallback;
+    const fillColor = normalizeHexColorInput(source.fillColor) || normalizeHexColorInput(fallback.fillColor) || '#3B82F6';
+    const strokeColor = normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || '#3B82F6';
     return {
-        fillColor: normalizeHexColorInput(source.fillColor) || normalizeHexColorInput(fallback.fillColor) || '#3B82F6',
-        strokeColor: normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || '#3B82F6',
-        lineBackgroundColor: normalizeHexColorInput(source.lineBackgroundColor) || normalizeHexColorInput(source.strokeColor) || normalizeHexColorInput(fallback.strokeColor) || '#3B82F6',
+        fillColor,
+        strokeColor,
+        linePointStrokeColor: normalizeHexColorInput(source.linePointStrokeColor) || strokeColor,
+        linePointFillColor: normalizeHexColorInput(source.linePointFillColor) || fillColor,
+        linePointThickness: Number.isFinite(Number(source.linePointThickness))
+            ? Math.max(0, Number(source.linePointThickness))
+            : Math.max(0, Number(fallback.linePointThickness) || 1),
+        lineBackgroundColor: normalizeHexColorInput(source.lineBackgroundColor) || strokeColor || '#3B82F6',
         lineBackgroundOpacity: Number.isFinite(Number(source.lineBackgroundOpacity))
             ? Math.max(0, Math.min(100, Number(source.lineBackgroundOpacity)))
             : Math.max(0, Math.min(100, Number((fallback as any).lineBackgroundOpacity ?? 12))),
@@ -1148,6 +1155,7 @@ function renderLinePreview(
 
         const rowDots: any[] = [];
         if (state.linePointVisible) {
+            const pointStyle = getMarkDraftStyle(r);
             lineData.forEach((val: number, i: number) => {
                 const isColHighlighted = activeHighlight?.type === 'col' && activeHighlight.index === i;
                 const isCellHighlighted = activeHighlight?.type === 'cell' && activeHighlight.row === r && activeHighlight.col === i;
@@ -1162,7 +1170,9 @@ function renderLinePreview(
                     .attr('cx', xScale(i)!)
                     .attr('cy', yScale(val))
                     .attr('r', dotRadius)
-                    .attr('fill', pathStrokeColor)
+                    .attr('fill', pointStyle.linePointFillColor)
+                    .attr('stroke', pointStyle.linePointStrokeColor)
+                    .attr('stroke-width', Math.max(0, pointStyle.linePointThickness))
                     .attr('opacity', dotOpacity)
                     .attr('data-base-opacity', dotOpacity);
 
@@ -1190,7 +1200,6 @@ function renderLinePreview(
                     markStyleTargetSeries(hitDot, r, mode);
                 }
 
-                applyStroke(dot, rowStroke, 'none', 0);
                 rowDots.push(dot);
             });
         }

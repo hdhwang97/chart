@@ -872,6 +872,12 @@ figma.ui.onmessage = async (msg) => {
         const drawAssistLineStyle = !isDataOnlyApply
             ? assistLineStyle
             : (effectiveLocalMask.assistLineStyle ? effectiveLocalOverrides.assistLineStyle : undefined);
+        const drawMarkStyle = !isDataOnlyApply
+            ? markStyle
+            : (effectiveLocalMask.markStyle ? effectiveLocalOverrides.markStyle : undefined);
+        const drawMarkStyles = !isDataOnlyApply
+            ? markStyles
+            : (effectiveLocalMask.markStyles ? effectiveLocalOverrides.markStyles : undefined);
 
         const drawConfig = {
             values: drawValues,
@@ -896,6 +902,8 @@ figma.ui.onmessage = async (msg) => {
             assistLineVisible,
             assistLineEnabled,
             assistLineStyle: drawAssistLineStyle,
+            markStyle: drawMarkStyle,
+            markStyles: drawMarkStyles,
             deferLineSegmentStrokeStyling: type === 'line'
         };
 
