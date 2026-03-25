@@ -257,6 +257,13 @@ export function setStyleSettingCardHoverState(target: StylePreviewTarget | null)
     matched?.cards.forEach((card) => card.classList.add(STYLE_CARD_LINKED_HOVER_CLASS));
 }
 
+function setStyleSettingCardHoverStateForCard(card: HTMLElement | null) {
+    document.querySelectorAll<HTMLElement>(`.style-injection-card.${STYLE_CARD_LINKED_HOVER_CLASS}`)
+        .forEach((candidate) => candidate.classList.remove(STYLE_CARD_LINKED_HOVER_CLASS));
+    if (!card) return;
+    card.classList.add(STYLE_CARD_LINKED_HOVER_CLASS);
+}
+
 export function bindStyleSettingCardHoverInteractions() {
     if (styleSettingCardHoverBound) return;
     styleSettingCardHoverBound = true;
@@ -265,14 +272,11 @@ export function bindStyleSettingCardHoverInteractions() {
         cards.forEach((card) => {
             card.dataset.stylePreviewTarget = target;
             card.addEventListener('mouseenter', () => {
-                setStyleSettingCardHoverState(target);
+                setStyleSettingCardHoverStateForCard(card);
                 setStylePreviewHoverTarget(target);
             });
-            card.addEventListener('mouseleave', (event) => {
-                const related = event.relatedTarget;
-                const stayingWithinSameTarget = related instanceof Node && cards.some((candidate) => candidate.contains(related));
-                if (stayingWithinSameTarget) return;
-                setStyleSettingCardHoverState(null);
+            card.addEventListener('mouseleave', () => {
+                setStyleSettingCardHoverStateForCard(null);
                 setStylePreviewHoverTarget(null);
             });
         });
