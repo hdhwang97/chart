@@ -313,6 +313,7 @@ export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
             ctr: state.assistLineEnabled.ctr
         },
         linePointVisible: state.linePointVisible,
+        lineFeature2Enabled: state.lineFeature2Enabled,
         rowStrokeStyles: state.rowStrokeStyles,
         colStrokeStyle: state.colStrokeStyle,
         localStyleOverrides: state.isInstanceTarget ? state.localStyleOverrides : undefined,

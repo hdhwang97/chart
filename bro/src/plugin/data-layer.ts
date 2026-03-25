@@ -470,6 +470,10 @@ export function saveChartData(
         PLUGIN_DATA_KEYS.LAST_LINE_POINT_VISIBLE,
         String(msg.linePointVisible !== false)
     );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_LINE_CURVE_ENABLED,
+        String(msg.lineFeature2Enabled === true)
+    );
     if (!skipDataKeys) {
         const rowCount = Number.isFinite(Number(msg.rows))
             ? Number(msg.rows)

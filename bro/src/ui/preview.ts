@@ -1040,6 +1040,7 @@ function renderLinePreview(
     containerId: string
 ) {
     const cols = getGridColsForChart('line', state.cols);
+    const lineCurveEnabled = state.lineFeature2Enabled === true;
     const baseStroke = getLineBaseStrokeWidth();
     const highlightStroke = getLineHighlightStrokeWidth(baseStroke, LINE_HIGHLIGHT_MULTIPLIER);
     const highlightedRows = new Set<number>();
@@ -1064,6 +1065,9 @@ function renderLinePreview(
         const line = d3.line()
             .x((_: any, i: number) => xScale(i)!)
             .y((d: number) => yScale(d));
+        if (lineCurveEnabled) {
+            line.curve(d3.curveMonotoneX);
+        }
 
         const styleMark = getMarkDraftStyle(r);
         const rowStroke = mode === 'style' ? getMarkDraftStroke(r) : (getRowStroke(r) || state.colStrokeStyle);
@@ -1084,6 +1088,9 @@ function renderLinePreview(
                 .x((_: any, i: number) => xScale(i)!)
                 .y0(() => yScale(yBase))
                 .y1((d: number) => yScale(d));
+            if (lineCurveEnabled) {
+                area.curve(d3.curveMonotoneX);
+            }
             const areaPath = g.append('path')
                 .attr('class', 'preview-mark')
                 .datum(lineData)
@@ -1140,55 +1147,53 @@ function renderLinePreview(
         applyStrokeExtras(path, rowStroke);
 
         const rowDots: any[] = [];
-        // TODO: line preview pointer는 추후 업데이트 예정.
-        // pointer 재활성화 시 fill 색상은 line stroke 색상(pathStrokeColor)과 동일하게 유지.
-        /*
-        lineData.forEach((val: number, i: number) => {
-            const isColHighlighted = activeHighlight?.type === 'col' && activeHighlight.index === i;
-            const isCellHighlighted = activeHighlight?.type === 'cell' && activeHighlight.row === r && activeHighlight.col === i;
-            const dotOpacity = activeHighlight
-                ? (activeHighlight.type === 'cell'
-                    ? (isCellHighlighted ? 1 : 0.2)
-                    : (relatedRow || isColHighlighted ? 1 : 0.2))
-                : 1;
-            const dotRadius = activeHighlight ? (relatedRow || isColHighlighted ? 3 * LINE_HIGHLIGHT_MULTIPLIER : 3) : 3;
-            const dot = g.append('circle')
-                .attr('class', 'preview-mark')
-                .attr('cx', xScale(i)!)
-                .attr('cy', yScale(val))
-                .attr('r', dotRadius)
-                .attr('fill', pathStrokeColor)
-                .attr('opacity', dotOpacity)
-                .attr('data-base-opacity', dotOpacity);
-
-            if (mode === 'data') {
-                dot.on('mouseenter', function () {
-                    highlightGridCellFromMark(r, i);
-                    dimOtherMarks(containerId, this as SVGElement);
-                    dimDataContextLines(containerId);
-                });
-                dot.on('mouseleave', () => {
-                    clearGridHighlightFromMark();
-                    restoreMarkOpacityFromBase(containerId);
-                    restoreDataContextLineOpacity(containerId);
-                });
-            } else {
-                markStyleTarget(dot, 'mark', mode);
-                markStyleTargetSeries(dot, r, mode);
-                const hitDot = g.append('circle')
+        if (state.linePointVisible) {
+            lineData.forEach((val: number, i: number) => {
+                const isColHighlighted = activeHighlight?.type === 'col' && activeHighlight.index === i;
+                const isCellHighlighted = activeHighlight?.type === 'cell' && activeHighlight.row === r && activeHighlight.col === i;
+                const dotOpacity = activeHighlight
+                    ? (activeHighlight.type === 'cell'
+                        ? (isCellHighlighted ? 1 : 0.2)
+                        : (relatedRow || isColHighlighted ? 1 : 0.2))
+                    : 1;
+                const dotRadius = activeHighlight ? (relatedRow || isColHighlighted ? 3 * LINE_HIGHLIGHT_MULTIPLIER : 3) : 3;
+                const dot = g.append('circle')
+                    .attr('class', 'preview-mark')
                     .attr('cx', xScale(i)!)
                     .attr('cy', yScale(val))
-                    .attr('r', LINE_STYLE_HIT_RADIUS)
-                    .attr('fill', 'transparent')
-                    .attr('opacity', 0.01);
-                markStyleTarget(hitDot, 'mark', mode);
-                markStyleTargetSeries(hitDot, r, mode);
-            }
+                    .attr('r', dotRadius)
+                    .attr('fill', pathStrokeColor)
+                    .attr('opacity', dotOpacity)
+                    .attr('data-base-opacity', dotOpacity);
 
-            applyStroke(dot, rowStroke, 'none', 0);
-            rowDots.push(dot);
-        });
-        */
+                if (mode === 'data') {
+                    dot.on('mouseenter', function () {
+                        highlightGridCellFromMark(r, i);
+                        dimOtherMarks(containerId, this as SVGElement);
+                        dimDataContextLines(containerId);
+                    });
+                    dot.on('mouseleave', () => {
+                        clearGridHighlightFromMark();
+                        restoreMarkOpacityFromBase(containerId);
+                        restoreDataContextLineOpacity(containerId);
+                    });
+                } else {
+                    markStyleTarget(dot, 'mark', mode);
+                    markStyleTargetSeries(dot, r, mode);
+                    const hitDot = g.append('circle')
+                        .attr('cx', xScale(i)!)
+                        .attr('cy', yScale(val))
+                        .attr('r', LINE_STYLE_HIT_RADIUS)
+                        .attr('fill', 'transparent')
+                        .attr('opacity', 0.01);
+                    markStyleTarget(hitDot, 'mark', mode);
+                    markStyleTargetSeries(hitDot, r, mode);
+                }
+
+                applyStroke(dot, rowStroke, 'none', 0);
+                rowDots.push(dot);
+            });
+        }
         rowLayers.push({ row: r, path, dots: rowDots });
     }
 

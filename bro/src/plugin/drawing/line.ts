@@ -1,6 +1,6 @@
-import { LINE_VARIANT_KEY_DEFAULT, LINE_VARIANT_VALUES } from '../constants';
+import { LINE_VARIANT_KEY_DEFAULT, LINE_VARIANT_VALUES, VARIANT_PROPERTY_LINE_NUM } from '../constants';
 import { clamp, normalizeHexColor, traverse, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
-import { collectColumns, setVariantProperty } from './shared';
+import { collectColumns } from './shared';
 import { debugLog } from '../log';
 import {
     buildLineBundleMatrix,
@@ -8,6 +8,7 @@ import {
     type LineBundle,
     type LineStructureIssue,
     type LineStructureIssueReason,
+    readInstanceVariantValue,
     validateLineStructureOrError,
     isLineBundleFlat
 } from './line-structure';
@@ -32,6 +33,11 @@ export type LineApplyResult =
 
 const LINE_POINT_PROPERTY_KEY = 'line_point';
 const LINE_LAST_POINT_PROPERTY_KEY = 'last_point';
+const LINE_FILL_TYPE_PROPERTY_KEY = 'lineType';
+const LINE_NUM_DEFAULT_VALUE = '1';
+const LINE_NUM_CURVE_VALUE = '2';
+const LINE_FILL_TYPE_DEFAULT_VALUE = 'Default';
+const LINE_FILL_TYPE_CURVE_VALUE = 'R';
 
 function canSetPaddingTop(node: SceneNode): node is SceneNode & { paddingTop: number } {
     return 'paddingTop' in node;
@@ -120,14 +126,38 @@ function readBooleanComponentProperty(node: SceneNode, key: string): boolean | n
     return null;
 }
 
-function setBooleanComponentProperty(node: SceneNode, key: string, value: boolean): boolean {
-    if (node.type !== 'INSTANCE') return false;
+function readStringComponentProperty(node: SceneNode, key: string): string | null {
+    if (node.type !== 'INSTANCE') return null;
     const propKey = getComponentPropKey(node, key);
-    if (!propKey) return false;
-    const current = readBooleanComponentProperty(node, key);
-    if (current === value) return true;
+    if (!propKey) return null;
+    const rawValue = node.componentProperties?.[propKey]?.value;
+    if (typeof rawValue === 'string') return rawValue;
+    if (typeof rawValue === 'number') return String(rawValue);
+    return null;
+}
+
+function setComponentProperties(
+    node: SceneNode,
+    updates: Record<string, string | boolean>
+): boolean {
+    if (node.type !== 'INSTANCE') return false;
+    const resolved: Record<string, string | boolean> = {};
+    let hasAnyKey = false;
+
+    Object.entries(updates).forEach(([logicalKey, value]) => {
+        const propKey = getComponentPropKey(node, logicalKey);
+        if (!propKey) return;
+        hasAnyKey = true;
+        const current = node.componentProperties?.[propKey]?.value;
+        if (current === value) return;
+        resolved[propKey] = value;
+    });
+
+    if (!hasAnyKey) return false;
+    if (Object.keys(resolved).length === 0) return true;
+
     try {
-        node.setProperties({ [propKey]: value });
+        node.setProperties(resolved);
         return true;
     } catch {
         return false;
@@ -251,12 +281,23 @@ function setLineStrokeVisibility(lineRoot: SceneNode, visible: boolean) {
     });
 }
 
-function setLinePointVisibility(bundle: LineBundle, visible: boolean): boolean {
-    return setBooleanComponentProperty(bundle.lineNode, LINE_POINT_PROPERTY_KEY, visible);
-}
-
 function resolveBundleLinePointVisible(bundle: LineBundle): boolean | null {
     return readBooleanComponentProperty(bundle.lineNode, LINE_POINT_PROPERTY_KEY);
+}
+
+function resolveBundleLineCurveEnabled(bundle: LineBundle): boolean | null {
+    const lineNumValue = readInstanceVariantValue(bundle.lineNode, VARIANT_PROPERTY_LINE_NUM)?.trim();
+    const fillTypeValue = readInstanceVariantValue(bundle.fillNode, LINE_FILL_TYPE_PROPERTY_KEY)?.trim().toLowerCase();
+    if (lineNumValue === LINE_NUM_CURVE_VALUE || fillTypeValue === LINE_FILL_TYPE_CURVE_VALUE.toLowerCase()) {
+        return true;
+    }
+    if (lineNumValue === LINE_NUM_DEFAULT_VALUE || fillTypeValue === LINE_FILL_TYPE_DEFAULT_VALUE.toLowerCase()) {
+        return false;
+    }
+    if (lineNumValue !== null || fillTypeValue !== null) {
+        return false;
+    }
+    return null;
 }
 
 function applyLineBundleLayout(
@@ -265,15 +306,37 @@ function applyLineBundleLayout(
     pBottom: number,
     lineDirection: string,
     fillDirection: string,
-    fillBottomOffset = 0
+    fillBottomOffset = 0,
+    options?: {
+        linePointVisible?: boolean;
+        lastPointVisible?: boolean;
+        curveEnabled?: boolean;
+    }
 ): LineStructureIssueReason | null {
     if (!setPaddingTop(bundle.lineNode, pTop) || !setPaddingBottom(bundle.lineNode, pBottom)) {
         return 'line_padding_unsupported';
     }
     if (!setPaddingTop(bundle.fillTop, pTop)) return 'fill_top_padding_unsupported';
     if (!setPaddingBottom(bundle.fillBot, pBottom + fillBottomOffset)) return 'fill_bot_padding_unsupported';
-    if (!setDirectionVariant(bundle.lineNode, lineDirection)) return 'line_direction_variant_missing';
-    if (!setDirectionVariant(bundle.fillNode, fillDirection)) return 'fill_direction_variant_missing';
+
+    const curveEnabled = options?.curveEnabled === true;
+    const lineResult = setComponentProperties(bundle.lineNode, {
+        [LINE_VARIANT_KEY_DEFAULT]: lineDirection,
+        [VARIANT_PROPERTY_LINE_NUM]: curveEnabled ? LINE_NUM_CURVE_VALUE : LINE_NUM_DEFAULT_VALUE,
+        [LINE_POINT_PROPERTY_KEY]: options?.linePointVisible !== false,
+        [LINE_LAST_POINT_PROPERTY_KEY]: options?.lastPointVisible === true
+    });
+    if (!lineResult) return 'line_direction_variant_missing';
+
+    const fillTypeValue = curveEnabled && fillDirection !== LINE_VARIANT_VALUES.FLAT
+        ? LINE_FILL_TYPE_CURVE_VALUE
+        : LINE_FILL_TYPE_DEFAULT_VALUE;
+    const fillResult = setComponentProperties(bundle.fillNode, {
+        [LINE_VARIANT_KEY_DEFAULT]: fillDirection,
+        [LINE_FILL_TYPE_PROPERTY_KEY]: fillTypeValue
+    });
+    if (!fillResult) return 'fill_direction_variant_missing';
+
     return null;
 }
 
@@ -311,6 +374,7 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
     const rowCount = values.length;
     const thickness = Number.isFinite(Number(config?.strokeWidth)) ? Number(config.strokeWidth) : 2;
     const linePointVisible = config?.linePointVisible !== false;
+    const lineCurveEnabled = config?.lineFeature2Enabled === true;
     const deferSegmentStrokeStyling = config?.deferLineSegmentStrokeStyling === true;
     const cols = collectColumns(graph).filter((col) => col.node.visible);
     const maxSegmentsFromValues = values.reduce((max: number, row: any) => {
@@ -379,12 +443,6 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
             bundle.container.visible = true;
             bundle.lineNode.visible = true;
             bundle.fillNode.visible = true;
-            setLinePointVisibility(bundle, linePointVisible);
-            setBooleanComponentProperty(
-                bundle.lineNode,
-                LINE_LAST_POINT_PROPERTY_KEY,
-                linePointVisible && c === rowSegmentCount - 1
-            );
             if (!deferSegmentStrokeStyling) {
                 applyLineColorAndStroke(bundle.lineNode, rowColor, rowStyleId, thickness);
             }
@@ -396,7 +454,12 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
                 pBottom,
                 lineDirection,
                 fillDirection,
-                isFlat ? (thickness / 2) : 0
+                isFlat ? (thickness / 2) : 0,
+                {
+                    linePointVisible,
+                    lastPointVisible: linePointVisible && c === rowSegmentCount - 1,
+                    curveEnabled: lineCurveEnabled
+                }
             );
             if (layoutIssue) {
                 return buildLineApplyFailure('Line bundle layout injection failed.', [{
@@ -459,4 +522,20 @@ export function resolveLinePointVisible(graph: SceneNode, precomputedCols?: Retu
         }
     }
     return true;
+}
+
+export function resolveLineFeature2Enabled(graph: SceneNode, precomputedCols?: ReturnType<typeof collectColumns>): boolean {
+    const cols = (precomputedCols ?? collectColumns(graph)).filter((col) => col.node.visible);
+    const searchCols = cols.length > 0 ? cols : (precomputedCols ?? collectColumns(graph));
+    const rowCount = Math.max(1, detectLineSeriesCountInColumns(searchCols));
+    const matrix = buildLineBundleMatrix(searchCols, rowCount);
+    for (const row of matrix) {
+        for (const bundle of row) {
+            if (!bundle) continue;
+            const enabled = resolveBundleLineCurveEnabled(bundle);
+            if (enabled === null) continue;
+            return enabled;
+        }
+    }
+    return false;
 }

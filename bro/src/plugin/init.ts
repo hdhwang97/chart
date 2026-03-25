@@ -9,7 +9,7 @@ import { loadChartData, loadLocalStyleOverrides } from './data-layer';
 import { extractChartColors, extractStyleFromNode } from './style';
 import { applyColumnXEmptyVisibility, applyYAxisEmptyVisibility, applyYAxisVisibility, collectColumns } from './drawing/shared';
 import { applyBar } from './drawing/bar';
-import { applyLine, resolveLinePointVisible, syncFlatLineFillBottomPadding } from './drawing/line';
+import { applyLine, resolveLineFeature2Enabled, resolveLinePointVisible, syncFlatLineFillBottomPadding } from './drawing/line';
 import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
@@ -102,6 +102,12 @@ function resolveLinePointVisibleFromNode(node: SceneNode, precomputedCols?: Retu
     const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_LINE_POINT_VISIBLE);
     if (raw) return raw !== 'false';
     return resolveLinePointVisible(node, precomputedCols);
+}
+
+function resolveLineFeature2EnabledFromNode(node: SceneNode, precomputedCols?: ReturnType<typeof collectColumns>) {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_LINE_CURVE_ENABLED);
+    if (raw) return raw === 'true';
+    return resolveLineFeature2Enabled(node, precomputedCols);
 }
 
 function parseSavedSideStyleFromNode(node: SceneNode, key: string): SideStrokeInjectionStyle | null {
@@ -462,6 +468,7 @@ export async function syncChartOnResize(
         const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
         const yAxisVisible = resolveYAxisVisibleFromNode(node);
         const linePointVisible = resolveLinePointVisibleFromNode(node);
+        const lineFeature2Enabled = resolveLineFeature2EnabledFromNode(node);
         const localOverrideState = node.type === 'INSTANCE'
             ? loadLocalStyleOverrides(node)
             : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
@@ -498,6 +505,7 @@ export async function syncChartOnResize(
             xAxisLabelsVisible,
             yAxisVisible,
             linePointVisible,
+            lineFeature2Enabled,
             assistLineVisible,
             assistLineEnabled,
             rowColors: runtimeRowColors ?? resolveRowColorsFromNode(node, chartType, Math.max(1, rowCount)),
@@ -639,6 +647,7 @@ export async function initPluginUI(
     const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
     const yAxisVisible = resolveYAxisVisibleFromNode(node);
     const linePointVisible = resolveLinePointVisibleFromNode(node, cols);
+    const lineFeature2Enabled = resolveLineFeature2EnabledFromNode(node, cols);
     const savedCellTopStyle =
         parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE)
         || parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
@@ -765,6 +774,7 @@ export async function initPluginUI(
         xAxisLabelsVisible,
         yAxisVisible,
         linePointVisible,
+        lineFeature2Enabled,
         assistLineVisible,
         assistLineEnabled,
         savedCellTopStyle: isInstanceTarget

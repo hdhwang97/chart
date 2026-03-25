@@ -1165,6 +1165,7 @@ function handlePluginMessage(msg: any) {
         state.assistLineVisible = normalizeAssistLineVisibleInput(msg.assistLineVisible);
         state.assistLineEnabled = normalizeAssistLineEnabledInput(msg.assistLineEnabled);
         state.linePointVisible = msg.linePointVisible !== false;
+        state.lineFeature2Enabled = msg.lineFeature2Enabled === true;
         ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
         closeAllAssistLinePopovers();
         updateAssistLineToggleUi();
@@ -1425,6 +1426,9 @@ function handlePluginMessage(msg: any) {
         if (msg.payload?.linePointVisible !== undefined) {
             state.linePointVisible = msg.payload.linePointVisible !== false;
         }
+        if (msg.payload?.lineFeature2Enabled !== undefined) {
+            state.lineFeature2Enabled = msg.payload.lineFeature2Enabled === true;
+        }
         updateAssistLineToggleUi();
         updateLineFeatureToggleUi();
         ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
@@ -1538,10 +1542,16 @@ function bindUiEvents() {
     ui.linePointToggleBtn.addEventListener('click', () => {
         state.linePointVisible = !state.linePointVisible;
         updateLineFeatureToggleUi();
+        renderPreview();
+        renderStylePreview();
+        refreshExportPreview();
     });
     ui.lineFeature2ToggleBtn.addEventListener('click', () => {
         state.lineFeature2Enabled = !state.lineFeature2Enabled;
         updateLineFeatureToggleUi();
+        renderPreview();
+        renderStylePreview();
+        refreshExportPreview();
     });
     ui.styleAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);

@@ -38,6 +38,8 @@ function buildPreviewStyleFromState() {
         markNum: state.chartType === 'stackedBar' ? state.groupStructure : state.rows,
         yCount: state.cellCount,
         colCount: state.cols,
+        linePointVisible: state.linePointVisible,
+        lineFeature2Enabled: state.lineFeature2Enabled,
         xAxisLabelsVisible: state.xAxisLabelsVisible,
         yAxisVisible: state.yAxisVisible,
         assistLineVisible: state.assistLineVisible,
@@ -769,6 +771,9 @@ function renderD3Preview(style: any) {
     });
     const yScale = d3.scaleLinear().domain([yDomain.yMin, yDomain.yMax]).range([h, 0]);
     const isLine = chartType === 'line';
+    const lineCurveEnabled = style?.lineFeature2Enabled !== undefined
+        ? Boolean(style.lineFeature2Enabled)
+        : state.lineFeature2Enabled;
     const lineTickValues = isLine
         ? Array.from({ length: flatCols }, (_, i) => i)
         : undefined;
@@ -817,10 +822,16 @@ function renderD3Preview(style: any) {
             const line = d3.line()
                 .x((_: any, i: number) => xScale(i)!)
                 .y((d: number) => yScale(d));
+            if (lineCurveEnabled) {
+                line.curve(d3.curveMonotoneX);
+            }
             const area = d3.area()
                 .x((_: any, i: number) => xScale(i)!)
                 .y0(() => yScale(yDomain.yMin))
                 .y1((d: number) => yScale(d));
+            if (lineCurveEnabled) {
+                area.curve(d3.curveMonotoneX);
+            }
 
             const draftStyle = getMarkDraftStyleFromState(r);
             const baseColor = resolveSeriesStyleColor(rowColors, r, 'line', 'fill');
@@ -848,17 +859,19 @@ function renderD3Preview(style: any) {
                 .attr('d', line);
             applyStrokeExtras(path, draftStroke);
 
-            // Preview pointer (line dots) disabled for export tab.
-            // lineData.forEach((val: number, i: number) => {
-            //     const dot = g.append('circle')
-            //         .attr('cx', xScale(i)!)
-            //         .attr('cy', yScale(val))
-            //         .attr('r', 3)
-            //         .attr('fill', baseColor);
-            //     if (typeof draftStroke?.opacity === 'number') {
-            //         dot.attr('opacity', draftStroke.opacity);
-            //     }
-            // });
+            if (state.linePointVisible) {
+                lineData.forEach((val: number, i: number) => {
+                    const dot = g.append('circle')
+                        .attr('cx', xScale(i)!)
+                        .attr('cy', yScale(val))
+                        .attr('r', 3)
+                        .attr('fill', draftStroke.color || baseColor);
+                    if (typeof draftStroke?.opacity === 'number') {
+                        dot.attr('opacity', draftStroke.opacity);
+                    }
+                    applyStroke(dot, draftStroke, 'none', 0);
+                });
+            }
         }
     } else if (chartType === 'stackedBar') {
         const ratio = normalizeMarkRatio(style.markRatio);
@@ -920,6 +933,9 @@ export function generateD3CodeString(style: any): string {
     const radiusVal = Number(style.cornerRadius) || 0;
     const requestedPlotWidth = Number(style?.previewPlotWidth);
     const requestedPlotHeight = Number(style?.previewPlotHeight);
+    const lineCurveEnabled = style?.lineFeature2Enabled !== undefined
+        ? Boolean(style.lineFeature2Enabled)
+        : state.lineFeature2Enabled;
     const plotWidth = Number.isFinite(requestedPlotWidth) && requestedPlotWidth > 0
         ? requestedPlotWidth
         : Math.max(0, containerWidth - EXPORT_LAYOUT.margin.left - EXPORT_LAYOUT.margin.right);
@@ -1074,6 +1090,7 @@ export function generateD3CodeString(style: any): string {
             padding: paddingVal,
             strokeWidth: strokeVal,
             cornerRadius: radiusVal,
+            lineCurveEnabled,
             colors: rowColors
         },
         series: {
@@ -1326,6 +1343,10 @@ if (config.chartType === 'bar') {
       .x((d, index) => xScale(index))
       .y0(() => yScale(config.axis.yDomain.yMin))
       .y1((d) => yScale(d));
+    if (config.marks.lineCurveEnabled) {
+      line.curve(d3.curveMonotoneX);
+      area.curve(d3.curveMonotoneX);
+    }
 
     if (style && style.areaVisible) {
       plot.append('path')
