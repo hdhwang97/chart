@@ -16,6 +16,7 @@ import { applyStrokeInjection } from './drawing/stroke-injection';
 import { getGraphHeight, getPlotAreaWidth, getXEmptyHeight } from './drawing/shared';
 import { detectLineSeriesCountInColumns, hasLineBundleStructureInColumns } from './drawing/line-structure';
 import { resolveEffectiveYRange } from './drawing/y-range';
+import { PerfTracker, logApplyPerf } from './perf';
 import type {
     AssistLineInjectionStyle,
     CellFillInjectionStyle,
@@ -415,8 +416,10 @@ export async function syncChartOnResize(
     node: SceneNode,
     opts?: { reason?: 'selection' | 'auto-resize'; postPreviewUpdate?: boolean }
 ) {
+    const perf = new PerfTracker();
+    const reason = opts?.reason || 'auto-resize';
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
-    const chartData = await loadChartData(node, chartType);
+    const chartData = await perf.step('load-chart-data', () => loadChartData(node, chartType));
     if (!chartData.isSaved) return;
 
     await withLoadingOpacity(node, async () => {
@@ -439,14 +442,14 @@ export async function syncChartOnResize(
         const yMinInput = Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : 0;
         const yMaxInput = lastYMax === '' ? null : (Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : null);
         const rawYMaxAuto = mode === 'raw' && lastYMax === '';
-        const effectiveY = resolveEffectiveYRange({
+        const effectiveY = await perf.step('resolve-y-range', () => resolveEffectiveYRange({
             chartType,
             mode,
             values: valuesToUse,
             yMin: yMinInput,
             yMax: yMaxInput,
             rawYMaxAuto
-        });
+        }));
 
         const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
         const assistLineVisible = resolveAssistLineVisibleFromNode(node);
@@ -499,32 +502,41 @@ export async function syncChartOnResize(
                 ?? resolveColColorEnabledFromNode(node, Math.max(1, colCount)),
             markColorSource: runtimeMarkColorSource,
             assistLineStyle: runtimeAssistLineStyle,
-            reason: opts?.reason || 'auto-resize'
+            deferLineSegmentStrokeStyling: chartType === 'line',
+            reason
         };
 
-        applyColumnXEmptyVisibility(node, xAxisLabelsVisible);
-        applyYAxisEmptyVisibility(node, xAxisLabelsVisible);
-        applyYAxisVisibility(node, yAxisVisible);
+        await perf.step('basic-setup', () => {
+            applyColumnXEmptyVisibility(node, xAxisLabelsVisible);
+            applyYAxisEmptyVisibility(node, xAxisLabelsVisible);
+            applyYAxisVisibility(node, yAxisVisible);
+        });
         const H = getGraphHeight(node as FrameNode);
         const xEmptyHeight = getXEmptyHeight(node as FrameNode);
-        if (chartType === 'stackedBar' || chartType === 'stacked') applyStackedBar(payload, H, node);
-        else if (chartType === 'bar') applyBar(payload, H, node);
-        else if (chartType === 'line') {
-            const lineResult = applyLine(payload, H, node);
-            if (!lineResult.ok) {
-                figma.notify('Line apply failed: required line structure is missing.');
-                console.error('[chart-plugin][line-apply-failed]', {
-                    reason: opts?.reason || 'auto-resize',
-                    targetNodeId: node.id,
-                    targetNodeName: node.name,
-                    lineResult
-                });
-                return;
+        await perf.step('draw-chart', () => {
+            if (chartType === 'stackedBar' || chartType === 'stacked') {
+                applyStackedBar(payload, H, node);
+            } else if (chartType === 'bar') {
+                applyBar(payload, H, node);
+            } else if (chartType === 'line') {
+                const lineResult = applyLine(payload, H, node);
+                if (!lineResult.ok) {
+                    figma.notify('Line apply failed: required line structure is missing.');
+                    console.error('[chart-plugin][line-apply-failed]', {
+                        reason,
+                        targetNodeId: node.id,
+                        targetNodeName: node.name,
+                        lineResult
+                    });
+                    return;
+                }
             }
-        }
-        applyAssistLines(payload, node, H, { xEmptyHeight });
-        if (node.type === 'INSTANCE' && hasTruthyMask(localOverrideState.mask)) {
-            applyStrokeInjection(node, {
+            applyAssistLines(payload, node, H, { xEmptyHeight });
+        });
+        const hasLocalStyleOverrides = node.type === 'INSTANCE' && hasTruthyMask(localOverrideState.mask);
+        const shouldApplyResizeStyleInjection = hasLocalStyleOverrides && reason !== 'auto-resize';
+        if (shouldApplyResizeStyleInjection) {
+            await perf.step('stroke-injection', () => applyStrokeInjection(node, {
                 chartType,
                 markNum: chartData.markNum,
                 ...(localOverrideState.mask.rowColors ? { rowColors: localOverrideState.overrides.rowColors } : {}),
@@ -544,18 +556,27 @@ export async function syncChartOnResize(
                 ...(localOverrideState.mask.markStyles ? { markStyles: localOverrideState.overrides.markStyles } : {}),
                 ...(localOverrideState.mask.rowStrokeStyles ? { rowStrokeStyles: localOverrideState.overrides.rowStrokeStyles } : {}),
                 ...(localOverrideState.mask.colStrokeStyle ? { colStrokeStyle: localOverrideState.overrides.colStrokeStyle } : {})
-            });
-            if (chartType === 'line') {
-                syncFlatLineFillBottomPadding(node);
-            }
+            }));
+        }
+        if (hasLocalStyleOverrides && chartType === 'line') {
+            await perf.step('flat-padding-sync', () => syncFlatLineFillBottomPadding(node));
         }
         if (opts?.postPreviewUpdate) {
-            figma.ui.postMessage({
+            await perf.step('post-preview-update', () => figma.ui.postMessage({
                 type: 'preview_plot_size_updated',
                 previewPlotWidth: getPlotAreaWidth(node),
                 previewPlotHeight: getGraphHeight(node as FrameNode)
-            });
+            }));
         }
+    });
+    logApplyPerf(perf.done(), {
+        messageType: 'sync-chart',
+        chartType,
+        targetNodeId: node.id,
+        targetNodeName: node.name,
+        targetNodeType: node.type,
+        applyPolicy: node.type === 'COMPONENT' ? 'template-master' : (node.type === 'INSTANCE' ? 'instance-data' : 'default'),
+        reason
     });
 }
 
@@ -572,8 +593,9 @@ export async function initPluginUI(
         return;
     }
 
+    const perf = new PerfTracker();
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
-    const chartData = await loadChartData(node, chartType);
+    const chartData = await perf.step('load-chart-data', () => loadChartData(node, chartType));
 
     // 저장된 두께 값 로드
     const lastStrokeWidth = node.getPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH);
@@ -584,8 +606,21 @@ export async function initPluginUI(
     const lastYLabelFormat = normalizeYLabelFormatMode(node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_LABEL_FORMAT));
     const parsedLastYMin = lastYMin !== '' && Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : undefined;
     const parsedLastYMax = lastYMax !== '' && Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : undefined;
-    const extractedColors = extractChartColors(node, chartType);
-    const styleInfo = extractStyleFromNode(node, chartType);
+    const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
+    const colCount = chartType === 'stackedBar' || chartType === 'stacked'
+        ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((a, b) => a + b, 0) : 0)
+        : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
+    const cols = await perf.step('collect-columns', () => collectColumns(node));
+    const shouldUseSelectionFastPath = Boolean(
+        chartData.isSaved
+        && opts?.reason === 'selection'
+        && Math.max(colCount, cols.length) >= 40
+    );
+    const styleInfo = await perf.step('style-extract', () => extractStyleFromNode(node, chartType, {
+        columns: cols,
+        fastPath: shouldUseSelectionFastPath
+    }));
+    const extractedColors = styleInfo.colors;
     const isInstanceTarget = node.type === 'INSTANCE';
     const localOverrideState = isInstanceTarget
         ? loadLocalStyleOverrides(node)
@@ -609,16 +644,16 @@ export async function initPluginUI(
     const savedXAxisLabels = parseSavedXAxisLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS);
     const previewPlotWidth = getPlotAreaWidth(node);
     const previewPlotHeight = getGraphHeight(node as FrameNode);
-    const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
     const extractedRowColors = Array.from({ length: Math.max(1, rowColorCount) }, (_, i) =>
         normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
     );
-    const colCount = chartType === 'stackedBar' || chartType === 'stacked'
-        ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((a, b) => a + b, 0) : 0)
-        : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
     const extractedColColors = Array.from({ length: Math.max(1, colCount) }, () => extractedRowColors[0] || '#3B82F6');
     const extractedColEnabled = Array.from({ length: Math.max(1, colCount) }, () => false);
     const shouldUseSavedPaletteForInstance = isInstanceTarget && chartData.isSaved;
+    const fallbackCellFillStyle = savedCellFillStyle || styleInfo.cellFillStyle || null;
+    const fallbackLineBackgroundStyle = savedLineBackgroundStyle || styleInfo.lineBackgroundStyle || null;
+    const fallbackMarkStyle = savedMarkStyle || styleInfo.markStyle || null;
+    const fallbackMarkStyles = savedMarkStyles || styleInfo.markStyles || [];
     const baseUiSnapshot: LocalStyleOverrides = isInstanceTarget
         ? {
             rowColors: shouldUseSavedPaletteForInstance
@@ -645,14 +680,14 @@ export async function initPluginUI(
             markColorSource: shouldUseSavedPaletteForInstance
                 ? (node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row')
                 : 'row',
-            cellFillStyle: styleInfo.cellFillStyle || undefined,
-            lineBackgroundStyle: styleInfo.lineBackgroundStyle || undefined,
+            cellFillStyle: fallbackCellFillStyle || undefined,
+            lineBackgroundStyle: fallbackLineBackgroundStyle || undefined,
             cellTopStyle: undefined,
             tabRightStyle: undefined,
             gridContainerStyle: undefined,
             assistLineStyle: undefined,
-            markStyle: styleInfo.markStyle || undefined,
-            markStyles: styleInfo.markStyles || [],
+            markStyle: fallbackMarkStyle || undefined,
+            markStyles: fallbackMarkStyles,
             rowStrokeStyles: styleInfo.rowStrokeStyles || [],
             colStrokeStyle: styleInfo.colStrokeStyle || null
         }
@@ -689,7 +724,7 @@ export async function initPluginUI(
     const activeTargetId = typeof opts?.activeTargetId === 'string' ? opts.activeTargetId : node.id;
     const activeTargetIndex = selectionTargets.findIndex((target) => target.id === activeTargetId);
 
-    figma.ui.postMessage({
+    await perf.step('post-message', () => figma.ui.postMessage({
         type: 'init',
         uiMode: 'edit',
         chartType: chartType,
@@ -751,10 +786,10 @@ export async function initPluginUI(
         previewPlotWidth,
         previewPlotHeight,
 
-        cellFillStyle: effectiveUiSnapshot.cellFillStyle || styleInfo.cellFillStyle || null,
-        lineBackgroundStyle: effectiveUiSnapshot.lineBackgroundStyle || styleInfo.lineBackgroundStyle || null,
-        markStyle: effectiveUiSnapshot.markStyle || styleInfo.markStyle || null,
-        markStyles: effectiveUiSnapshot.markStyles || styleInfo.markStyles || [],
+        cellFillStyle: effectiveUiSnapshot.cellFillStyle || fallbackCellFillStyle,
+        lineBackgroundStyle: effectiveUiSnapshot.lineBackgroundStyle || fallbackLineBackgroundStyle,
+        markStyle: effectiveUiSnapshot.markStyle || fallbackMarkStyle,
+        markStyles: effectiveUiSnapshot.markStyles || fallbackMarkStyles,
         colStrokeStyle: effectiveUiSnapshot.colStrokeStyle || styleInfo.colStrokeStyle || null,
         chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
         assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
@@ -772,10 +807,10 @@ export async function initPluginUI(
             colPaintStyleIds: Array.from({ length: Math.max(1, colCount) }, () => null as string | null),
             colColorEnabled: extractedColEnabled,
             markColorSource: 'row',
-            cellFillStyle: styleInfo.cellFillStyle || null,
-            lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
-            markStyle: styleInfo.markStyle || null,
-            markStyles: styleInfo.markStyles || [],
+            cellFillStyle: fallbackCellFillStyle,
+            lineBackgroundStyle: fallbackLineBackgroundStyle,
+            markStyle: fallbackMarkStyle,
+            markStyles: fallbackMarkStyles,
             rowStrokeStyles: styleInfo.rowStrokeStyles || [],
             colStrokeStyle: styleInfo.colStrokeStyle || null,
             chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
@@ -783,6 +818,15 @@ export async function initPluginUI(
         },
         localStyleOverrides: localOverrideState.overrides,
         localStyleOverrideMask: localOverrideState.mask
+    }));
+    logApplyPerf(perf.done(), {
+        messageType: 'init-ui',
+        chartType,
+        targetNodeId: node.id,
+        targetNodeName: node.name,
+        targetNodeType: node.type,
+        applyPolicy: node.type === 'COMPONENT' ? 'template-master' : (node.type === 'INSTANCE' ? 'instance-data' : 'default'),
+        reason: opts?.reason || 'selection'
     });
 }
 

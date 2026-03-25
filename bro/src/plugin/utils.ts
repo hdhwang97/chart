@@ -74,12 +74,36 @@ export function buildSolidPaint(hex: string, opacity?: number): SolidPaint | nul
     };
 }
 
+function nearlyEqual(a: number, b: number, epsilon = 1e-6) {
+    return Math.abs(a - b) <= epsilon;
+}
+
+function solidPaintEquals(paint: Paint, next: SolidPaint) {
+    return (
+        paint.type === 'SOLID'
+        && nearlyEqual(paint.color.r, next.color.r)
+        && nearlyEqual(paint.color.g, next.color.g)
+        && nearlyEqual(paint.color.b, next.color.b)
+        && nearlyEqual(paint.opacity ?? 1, next.opacity ?? 1)
+        && paint.visible === next.visible
+        && paint.blendMode === next.blendMode
+    );
+}
+
+function solidPaintListEquals(current: ReadonlyArray<Paint>, next: SolidPaint) {
+    return current.length === 1 && solidPaintEquals(current[0], next);
+}
+
 export function tryApplyFill(node: SceneNode, hex: string, opacity?: number) {
     if (!('fills' in node)) return false;
     const paint = buildSolidPaint(hex, opacity);
     if (!paint) return false;
     try {
-        (node as SceneNode & GeometryMixin).fills = [paint];
+        const target = node as SceneNode & GeometryMixin;
+        if (Array.isArray(target.fills) && solidPaintListEquals(target.fills, paint)) {
+            return false;
+        }
+        target.fills = [paint];
         return true;
     } catch (e) {
         console.warn('[chart-plugin][color] fill override skipped', {
@@ -96,7 +120,11 @@ export function tryApplyStroke(node: SceneNode, hex: string, opacity?: number) {
     const paint = buildSolidPaint(hex, opacity);
     if (!paint) return false;
     try {
-        (node as SceneNode & GeometryMixin).strokes = [paint];
+        const target = node as SceneNode & GeometryMixin;
+        if (Array.isArray(target.strokes) && solidPaintListEquals(target.strokes, paint)) {
+            return false;
+        }
+        target.strokes = [paint];
         return true;
     } catch (e) {
         console.warn('[chart-plugin][color] stroke override skipped', {
@@ -147,7 +175,15 @@ export function tryApplyStrokeStyleLink(node: SceneNode, styleId: string) {
 export function tryApplyDashPattern(node: SceneNode, pattern: number[]) {
     if (!('dashPattern' in node)) return false;
     try {
-        (node as SceneNode & GeometryMixin).dashPattern = [...pattern];
+        const target = node as SceneNode & GeometryMixin;
+        const current = Array.isArray(target.dashPattern) ? target.dashPattern : [];
+        if (
+            current.length === pattern.length
+            && current.every((value, index) => nearlyEqual(value, pattern[index]))
+        ) {
+            return false;
+        }
+        target.dashPattern = [...pattern];
         return true;
     } catch {
         return false;

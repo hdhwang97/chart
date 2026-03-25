@@ -55,7 +55,9 @@ function hasDirectionVariant(instance: InstanceNode): boolean {
 function setPaddingTop(node: SceneNode, value: number): boolean {
     if (!canSetPaddingTop(node)) return false;
     try {
-        node.paddingTop = Math.max(0, value);
+        const next = Math.max(0, value);
+        if (Math.abs(node.paddingTop - next) <= 1e-6) return true;
+        node.paddingTop = next;
         return true;
     } catch {
         return false;
@@ -65,7 +67,9 @@ function setPaddingTop(node: SceneNode, value: number): boolean {
 function setPaddingBottom(node: SceneNode, value: number): boolean {
     if (!canSetPaddingBottom(node)) return false;
     try {
-        node.paddingBottom = Math.max(0, value);
+        const next = Math.max(0, value);
+        if (Math.abs(node.paddingBottom - next) <= 1e-6) return true;
+        node.paddingBottom = next;
         return true;
     } catch {
         return false;
@@ -77,6 +81,7 @@ function setStrokeVisibility(node: SceneNode, visible: boolean): boolean {
     try {
         const target = node as SceneNode & GeometryMixin;
         if (!Array.isArray(target.strokes)) return false;
+        if (target.strokes.every((paint) => paint.visible === visible)) return false;
         target.strokes = target.strokes.map((paint) => ({ ...paint, visible }));
         return true;
     } catch {
@@ -194,7 +199,9 @@ function applyLineColorAndStroke(targetNode: SceneNode, rowColor: string | null,
         }
         if (rowColor) tryApplyStroke(target, rowColor);
     });
+}
 
+function applyLinePointColors(targetNode: SceneNode, rowColor: string | null) {
     if (!rowColor) return;
     traverse(targetNode, (child) => {
         if (child.id === targetNode.id || !child.visible) return;
@@ -264,6 +271,7 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
     const values = Array.isArray(config?.values) ? config.values : [];
     const rowCount = values.length;
     const thickness = Number.isFinite(Number(config?.strokeWidth)) ? Number(config.strokeWidth) : 2;
+    const deferSegmentStrokeStyling = config?.deferLineSegmentStrokeStyling === true;
     const cols = collectColumns(graph).filter((col) => col.node.visible);
     const maxSegmentsFromValues = values.reduce((max: number, row: any) => {
         const count = Array.isArray(row) ? Math.max(0, row.length - 1) : 0;
@@ -331,7 +339,10 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
             bundle.container.visible = true;
             bundle.lineNode.visible = true;
             bundle.fillNode.visible = true;
-            applyLineColorAndStroke(bundle.lineNode, rowColor, rowStyleId, thickness);
+            if (!deferSegmentStrokeStyling) {
+                applyLineColorAndStroke(bundle.lineNode, rowColor, rowStyleId, thickness);
+            }
+            applyLinePointColors(bundle.lineNode, rowColor);
             setLineStrokeVisibility(bundle.lineNode, !isFlat);
             const layoutIssue = applyLineBundleLayout(
                 bundle,

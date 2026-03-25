@@ -12,7 +12,7 @@ import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromG
 import { normalizeHexColor, rgbToHex, traverse } from './utils';
 import { withLoadingOpacity } from './loading';
 import { deleteStyleTemplate, loadStyleTemplates, overwriteStyleTemplate, renameStyleTemplate, saveStyleTemplate } from './template-store';
-import { PerfTracker, shouldLogApplyPerf } from './perf';
+import { PerfTracker, logApplyPerf } from './perf';
 import { debugLog } from './log';
 import type {
     ColorMode,
@@ -31,6 +31,11 @@ figma.showUI(__html__, { width: 600, height: 800 });
 let selectedChartTargets: SceneNode[] = [];
 let activeTargetId: string | null = null;
 const trackedTargetSizes = new Map<string, { width: number; height: number }>();
+const autoResizeSyncQueue = new Map<string, {
+    inFlight: boolean;
+    pending: boolean;
+    pendingPostPreviewUpdate: boolean;
+}>();
 type ApplyPolicy = 'template-master' | 'instance-data' | 'default';
 
 function normalizeMarkRatio(value: unknown): number | null {
@@ -431,6 +436,65 @@ function rebuildTrackedTargetSizes(targets: readonly SceneNode[]) {
     });
 }
 
+async function flushAutoResizeSync(targetId: string) {
+    const state = autoResizeSyncQueue.get(targetId);
+    if (!state || state.inFlight) return;
+
+    state.inFlight = true;
+    try {
+        while (state.pending) {
+            const postPreviewUpdate = state.pendingPostPreviewUpdate;
+            state.pending = false;
+            state.pendingPostPreviewUpdate = false;
+
+            const tracked = figma.getNodeById(targetId);
+            if (!tracked || tracked.type === 'PAGE' || tracked.type === 'DOCUMENT') {
+                trackedTargetSizes.delete(targetId);
+                autoResizeSyncQueue.delete(targetId);
+                return;
+            }
+
+            const trackedScene = tracked as SceneNode;
+            if (!isRecognizedChartSelection(trackedScene)) {
+                trackedTargetSizes.delete(targetId);
+                autoResizeSyncQueue.delete(targetId);
+                return;
+            }
+
+            await syncChartOnResize(trackedScene, {
+                reason: 'auto-resize',
+                postPreviewUpdate
+            });
+        }
+    } catch (error) {
+        console.error('[chart-plugin][auto-resize-sync-failed]', {
+            targetId,
+            error
+        });
+    } finally {
+        state.inFlight = false;
+        if (state.pending) {
+            void flushAutoResizeSync(targetId);
+        } else if (autoResizeSyncQueue.get(targetId) === state) {
+            autoResizeSyncQueue.delete(targetId);
+        }
+    }
+}
+
+function queueAutoResizeSync(target: SceneNode, postPreviewUpdate: boolean) {
+    const state = autoResizeSyncQueue.get(target.id) ?? {
+        inFlight: false,
+        pending: false,
+        pendingPostPreviewUpdate: false
+    };
+    state.pending = true;
+    state.pendingPostPreviewUpdate = state.pendingPostPreviewUpdate || postPreviewUpdate;
+    autoResizeSyncQueue.set(target.id, state);
+    if (!state.inFlight) {
+        void flushAutoResizeSync(target.id);
+    }
+}
+
 function getSelectionTargetsMeta(targets: readonly SceneNode[]): SelectionTargetMeta[] {
     return targets.map((target) => buildSelectionTargetMeta(target));
 }
@@ -827,7 +891,8 @@ figma.ui.onmessage = async (msg) => {
             markColorSource: drawMarkColorSource,
             assistLineVisible,
             assistLineEnabled,
-            assistLineStyle: drawAssistLineStyle
+            assistLineStyle: drawAssistLineStyle,
+            deferLineSegmentStrokeStyling: type === 'line'
         };
 
         const lineApplyResult = await perf.step('draw-chart', () => {
@@ -945,7 +1010,7 @@ figma.ui.onmessage = async (msg) => {
         }
 
         // 5. 스타일 자동 추출 및 전송
-        const shouldUseFastStyleSync = msg.type === 'apply' && isStackedType(type);
+        const shouldUseFastStyleSync = msg.type === 'apply' && (isStackedType(type) || isDataOnlyApply);
         const styleInfo = await perf.step('style-payload-build', () => extractStyleFromNode(
             targetNode,
             type,
@@ -1073,35 +1138,31 @@ figma.ui.onmessage = async (msg) => {
             strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
             cellFillStyle: effectiveLocalMask.cellFillStyle
                 ? (effectiveLocalOverrides.cellFillStyle || styleInfo.cellFillStyle || null)
-                : ((isDataOnlyApply ? styleInfo.cellFillStyle : cellFillStyle) || styleInfo.cellFillStyle || null),
+                : (cellFillStyle || styleInfo.cellFillStyle || null),
             lineBackgroundStyle: effectiveLocalMask.lineBackgroundStyle
                 ? (effectiveLocalOverrides.lineBackgroundStyle || styleInfo.lineBackgroundStyle || null)
-                : ((isDataOnlyApply ? styleInfo.lineBackgroundStyle : lineBackgroundStyle) || styleInfo.lineBackgroundStyle || null),
+                : (lineBackgroundStyle || styleInfo.lineBackgroundStyle || null),
             markStyle: effectiveLocalMask.markStyle
                 ? (effectiveLocalOverrides.markStyle || styleInfo.markStyle || null)
-                : ((isDataOnlyApply ? styleInfo.markStyle : markStyle) || styleInfo.markStyle || null),
+                : (markStyle || styleInfo.markStyle || null),
             markStyles: effectiveLocalMask.markStyles
                 ? (effectiveLocalOverrides.markStyles || styleInfo.markStyles || [])
-                : (isDataOnlyApply
-                    ? (styleInfo.markStyles || [])
-                    : (Array.isArray(markStyles) && markStyles.length > 0 ? markStyles : (styleInfo.markStyles || []))),
+                : (Array.isArray(markStyles) && markStyles.length > 0 ? markStyles : (styleInfo.markStyles || [])),
             colStrokeStyle: effectiveLocalMask.colStrokeStyle
                 ? (effectiveLocalOverrides.colStrokeStyle || styleInfo.colStrokeStyle || null)
-                : ((isDataOnlyApply ? styleInfo.colStrokeStyle : colStrokeStyle) || styleInfo.colStrokeStyle || null),
+                : (colStrokeStyle || styleInfo.colStrokeStyle || null),
             chartContainerStrokeStyle: effectiveLocalMask.gridContainerStyle
                 ? (effectiveLocalOverrides.gridContainerStyle || styleInfo.chartContainerStrokeStyle || null)
-                : ((isDataOnlyApply ? styleInfo.chartContainerStrokeStyle : colStrokeStyle) || styleInfo.chartContainerStrokeStyle || null),
+                : (gridContainerStyle || styleInfo.chartContainerStrokeStyle || null),
             assistLineStrokeStyle: effectiveLocalMask.assistLineStyle
                 ? (effectiveLocalOverrides.assistLineStyle || styleInfo.assistLineStrokeStyle || null)
-                : (styleInfo.assistLineStrokeStyle || null),
+                : (assistLineStyle || styleInfo.assistLineStrokeStyle || null),
             previewPlotWidth: getPlotAreaWidth(targetNode),
             previewPlotHeight: getGraphHeight(targetNode as FrameNode),
             cellStrokeStyles: styleInfo.cellStrokeStyles || [],
             rowStrokeStyles: effectiveLocalMask.rowStrokeStyles
                 ? (effectiveLocalOverrides.rowStrokeStyles || styleInfo.rowStrokeStyles || [])
-                : (isDataOnlyApply
-                    ? (styleInfo.rowStrokeStyles || [])
-                    : (Array.isArray(rowStrokeStyles) ? rowStrokeStyles : (styleInfo.rowStrokeStyles || []))),
+                : (Array.isArray(rowStrokeStyles) ? rowStrokeStyles : (styleInfo.rowStrokeStyles || [])),
             isInstanceTarget: targetNode.type === 'INSTANCE',
             isTemplateMasterTarget: applyPolicy === 'template-master',
             extractedStyleSnapshot: {
@@ -1148,9 +1209,14 @@ figma.ui.onmessage = async (msg) => {
         });
         });
         const perfReport = perf.done();
-        if (shouldLogApplyPerf(msg.type, type)) {
-            debugLog('[chart-plugin][perf][apply][stacked]', perfReport);
-        }
+        logApplyPerf(perfReport, {
+            messageType: msg.type,
+            chartType: type,
+            targetNodeId: targetNode.id,
+            targetNodeName: targetNode.name,
+            targetNodeType: targetNode.type,
+            applyPolicy
+        });
 
         if (msg.type === 'generate') {
             figma.notify("Chart Generated!");
@@ -1537,10 +1603,7 @@ setInterval(() => {
                 prevHeight: prevSize.height,
                 nextHeight: trackedScene.height
             });
-            syncChartOnResize(trackedScene, {
-                reason: 'auto-resize',
-                postPreviewUpdate: trackedScene.id === activeTargetId
-            });
+            queueAutoResizeSync(trackedScene, trackedScene.id === activeTargetId);
             trackedTargetSizes.set(targetId, {
                 width: trackedScene.width,
                 height: trackedScene.height

@@ -13,7 +13,7 @@ import type {
 import { normalizeHexColor, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
 import { debugLog } from '../log';
 import { collectColumns, type ColRef } from './shared';
-import { collectLineBundlesInColumn, isLineBundleFlat } from './line-structure';
+import { collectLineBundlesInColumn, isLineBundleFlat, type LineBundle } from './line-structure';
 
 type SideName = 'top' | 'right' | 'bottom' | 'left';
 
@@ -154,6 +154,26 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
 type IndividualStrokeNode = SceneNode & IndividualStrokesMixin;
 type StrokeWeightNode = SceneNode & GeometryMixin;
 type IndividualStrokeToggleNode = SceneNode & { individualStrokeWeights: boolean };
+type CellNodeRef = {
+    node: SceneNode;
+    rowIndex: number;
+};
+type LineBundleStyleTargets = {
+    rowIndex: number;
+    bundle: LineBundle;
+    isFlat: boolean;
+    strokeTargets: SceneNode[];
+    pointTargets: SceneNode[];
+    backgroundTargets: SceneNode[];
+};
+type ColumnStrokeContext = {
+    ref: ColRef;
+    visible: boolean;
+    tabNode: SceneNode | null;
+    cells: CellNodeRef[];
+    lastVisibleCellIndex: number | null;
+    lineBundles: LineBundleStyleTargets[];
+};
 
 function createScopeResult(): ScopeResult {
     return {
@@ -162,6 +182,10 @@ function createScopeResult(): ScopeResult {
         skipped: 0,
         errors: 0
     };
+}
+
+function nearlyEqual(a: number, b: number, epsilon = 1e-6) {
+    return Math.abs(a - b) <= epsilon;
 }
 
 function normalizeThickness(value: unknown): number | undefined {
@@ -262,11 +286,97 @@ function applyStrokeStyleMode(node: SceneNode, mode: 'solid' | 'dash' | undefine
     return tryApplyDashPattern(node, []);
 }
 
+function isPointLikeNode(node: SceneNode) {
+    const lower = node.name.toLowerCase();
+    return node.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+}
+
+function isVectorLikeNode(node: SceneNode) {
+    return node.type === 'VECTOR' || node.type === 'LINE' || node.type === 'POLYGON' || node.type === 'RECTANGLE';
+}
+
+function collectColumnCells(colNode: SceneNode): CellNodeRef[] {
+    const cells: CellNodeRef[] = [];
+    traverse(colNode, (node) => {
+        const match = MARK_NAME_PATTERNS.CEL.exec(node.name);
+        if (!match) return;
+        const rowIndex = Number.parseInt(match[1], 10);
+        if (!Number.isFinite(rowIndex)) return;
+        cells.push({ node, rowIndex });
+    });
+    return cells;
+}
+
+function collectLineStyleTargets(root: SceneNode): { strokeTargets: SceneNode[]; pointTargets: SceneNode[] } {
+    const strokeTargets: SceneNode[] = [];
+    const pointTargets: SceneNode[] = [];
+    const pushTarget = (node: SceneNode) => {
+        if (isPointLikeNode(node)) {
+            pointTargets.push(node);
+            return;
+        }
+        if (isVectorLikeNode(node)) {
+            strokeTargets.push(node);
+        }
+    };
+
+    if (root.type === 'INSTANCE' || 'children' in root) {
+        traverse(root, (child) => {
+            if (child.id === root.id || !child.visible) return;
+            pushTarget(child);
+        });
+        return { strokeTargets, pointTargets };
+    }
+
+    if (root.visible) pushTarget(root);
+    return { strokeTargets, pointTargets };
+}
+
+function buildColumnStrokeContexts(columns: ColRef[], chartType?: string): ColumnStrokeContext[] {
+    return columns.map((ref) => {
+        const cells = collectColumnCells(ref.node);
+        const tabNode = 'children' in ref.node
+            ? ((ref.node as SceneNode & ChildrenMixin).children.find((child) => child.name === 'tab') || null)
+            : null;
+        const lastVisibleCellIndex = cells.reduce<number | null>((max, cell) => {
+            if (!cell.node.visible) return max;
+            return max === null || cell.rowIndex > max ? cell.rowIndex : max;
+        }, null);
+        const lineBundles = chartType === 'line'
+            ? Array.from(collectLineBundlesInColumn(ref.node, Math.max(0, ref.index - 1)).entries())
+                .sort((a, b) => a[0] - b[0])
+                .map(([rowIndex, bundle]) => {
+                    const { strokeTargets, pointTargets } = collectLineStyleTargets(bundle.lineNode);
+                    const isFlat = isLineBundleFlat(bundle);
+                    return {
+                        rowIndex,
+                        bundle,
+                        isFlat,
+                        strokeTargets,
+                        pointTargets,
+                        backgroundTargets: (isFlat ? [bundle.fillBot] : [bundle.triNode, bundle.fillBot])
+                            .filter((target): target is SceneNode => Boolean(target))
+                    };
+                })
+            : [];
+
+        return {
+            ref,
+            visible: ref.node.visible,
+            tabNode,
+            cells,
+            lastVisibleCellIndex,
+            lineBundles
+        };
+    });
+}
+
 function setNodeStrokeVisibility(node: SceneNode, visible: boolean) {
     if (!('strokes' in node)) return false;
     try {
         const target = node as SceneNode & GeometryMixin;
         if (!Array.isArray(target.strokes)) return false;
+        if (target.strokes.every((paint) => paint.visible === visible)) return false;
         target.strokes = target.strokes.map((paint) => ({ ...paint, visible }));
         return true;
     } catch {
@@ -279,6 +389,7 @@ function setNodeFillVisibility(node: SceneNode, visible: boolean) {
     try {
         const target = node as SceneNode & GeometryMixin;
         if (!Array.isArray(target.fills)) return false;
+        if (target.fills.every((paint) => paint.visible === visible)) return false;
         target.fills = target.fills.map((paint) => ({ ...paint, visible }));
         return true;
     } catch {
@@ -355,6 +466,7 @@ function hasIndividualStrokeToggle(node: SceneNode): node is IndividualStrokeTog
 function enableIndividualStrokeWeights(node: SceneNode): boolean {
     if (!hasIndividualStrokeToggle(node)) return false;
     try {
+        if (node.individualStrokeWeights) return false;
         node.individualStrokeWeights = true;
         return true;
     } catch {
@@ -362,11 +474,38 @@ function enableIndividualStrokeWeights(node: SceneNode): boolean {
     }
 }
 
+function setStrokeWeight(node: StrokeWeightNode, thickness: number) {
+    if (typeof node.strokeWeight === 'number' && nearlyEqual(node.strokeWeight, thickness)) return false;
+    node.strokeWeight = thickness;
+    return true;
+}
+
 function setSideThickness(node: IndividualStrokeNode, side: SideName, thickness: number) {
+    const current = side === 'top'
+        ? node.strokeTopWeight
+        : side === 'right'
+            ? node.strokeRightWeight
+            : side === 'bottom'
+                ? node.strokeBottomWeight
+                : node.strokeLeftWeight;
+    if (nearlyEqual(current, thickness)) return false;
     if (side === 'top') node.strokeTopWeight = thickness;
     else if (side === 'right') node.strokeRightWeight = thickness;
     else if (side === 'bottom') node.strokeBottomWeight = thickness;
     else node.strokeLeftWeight = thickness;
+    return true;
+}
+
+function clearNodeStrokes(node: SceneNode) {
+    if (!('strokes' in node)) return false;
+    try {
+        const target = node as SceneNode & GeometryMixin;
+        if (!Array.isArray(target.strokes) || target.strokes.length === 0) return false;
+        target.strokes = [];
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 function applySideStrokeStyle(node: SceneNode, side: SideName, style: NormalizedSideStyle): boolean {
@@ -383,11 +522,9 @@ function applySideStrokeStyle(node: SceneNode, side: SideName, style: Normalized
     const targetThickness = style.visible === false ? 0 : style.thickness;
     if (typeof targetThickness === 'number') {
         if (hasIndividualStrokeWeights(node)) {
-            setSideThickness(node, side, targetThickness);
-            applied = true;
+            applied = setSideThickness(node, side, targetThickness) || applied;
         } else if (hasStrokeWeight(node)) {
-            node.strokeWeight = targetThickness;
-            applied = true;
+            applied = setStrokeWeight(node, targetThickness) || applied;
         }
     }
 
@@ -418,47 +555,27 @@ function applyGridStrokeStyle(node: SceneNode, style: NormalizedGridStyle): bool
 
     if (!hasIndividualStrokeWeights(node)) {
         if (allSidesSelected && hasStrokeWeight(node)) {
-            node.strokeWeight = targetThickness;
-            return true;
+            return setStrokeWeight(node, targetThickness) || applied;
         }
         return applied;
     }
 
-    let sideApplied = false;
-    node.strokeTopWeight = style.sides.top ? targetThickness : 0;
-    node.strokeRightWeight = style.sides.right ? targetThickness : 0;
-    node.strokeBottomWeight = style.sides.bottom ? targetThickness : 0;
-    node.strokeLeftWeight = style.sides.left ? targetThickness : 0;
-    sideApplied = true;
+    const sideApplied =
+        setSideThickness(node, 'top', style.sides.top ? targetThickness : 0)
+        || setSideThickness(node, 'right', style.sides.right ? targetThickness : 0)
+        || setSideThickness(node, 'bottom', style.sides.bottom ? targetThickness : 0)
+        || setSideThickness(node, 'left', style.sides.left ? targetThickness : 0);
     return applied || sideApplied;
 }
 
-function applyCellTopStroke(columns: ColRef[], style: NormalizedSideStyle): ScopeResult {
+function applyCellTopStroke(columns: ColumnStrokeContext[], style: NormalizedSideStyle): ScopeResult {
     const result = createScopeResult();
 
     columns.forEach((col) => {
-        const lastVisibleCellIndex = (() => {
-            let maxIndex: number | null = null;
-            traverse(col.node, (node) => {
-                if (!node.visible) return;
-                const match = MARK_NAME_PATTERNS.CEL.exec(node.name);
-                if (!match) return;
-                const idx = Number.parseInt(match[1], 10);
-                if (!Number.isFinite(idx)) return;
-                if (maxIndex === null || idx > maxIndex) {
-                    maxIndex = idx;
-                }
-            });
-            return maxIndex;
-        })();
-
-        traverse(col.node, (node) => {
-            const match = MARK_NAME_PATTERNS.CEL.exec(node.name);
-            if (!match) return;
+        col.cells.forEach(({ node, rowIndex }) => {
             result.candidates += 1;
             try {
-                const idx = Number.parseInt(match[1], 10);
-                const isLastVisibleCell = Number.isFinite(idx) && lastVisibleCellIndex !== null && idx === lastVisibleCellIndex;
+                const isLastVisibleCell = col.lastVisibleCellIndex !== null && rowIndex === col.lastVisibleCellIndex;
                 const effectiveStyle = isLastVisibleCell
                     ? { ...style, visible: false, thickness: 0 }
                     : style;
@@ -474,7 +591,7 @@ function applyCellTopStroke(columns: ColRef[], style: NormalizedSideStyle): Scop
     return result;
 }
 
-function applyCellFill(columns: ColRef[], style: { color?: string }, chartType?: string): ScopeResult {
+function applyCellFill(columns: ColumnStrokeContext[], style: { color?: string }, chartType?: string): ScopeResult {
     const result = createScopeResult();
     if (!style.color) return result;
 
@@ -483,13 +600,9 @@ function applyCellFill(columns: ColRef[], style: { color?: string }, chartType?:
     columns.forEach((col) => {
         if (isLineChart) {
             result.candidates += 1;
-            let tabNode: SceneNode | null = null;
-            if ('children' in col.node) {
-                tabNode = (col.node as SceneNode & ChildrenMixin).children.find((child) => child.name === 'tab') || null;
-            }
-            if (tabNode) {
+            if (col.tabNode) {
                 try {
-                    if (tryApplyFill(tabNode, style.color!)) result.applied += 1;
+                    if (tryApplyFill(col.tabNode, style.color!)) result.applied += 1;
                     else result.skipped += 1;
                 } catch {
                     result.errors += 1;
@@ -499,14 +612,12 @@ function applyCellFill(columns: ColRef[], style: { color?: string }, chartType?:
             }
 
             // In line charts, background is tab fill. Keep CEL strokes but disable CEL fill visibility.
-            traverse(col.node, (node) => {
-                if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
+            col.cells.forEach(({ node }) => {
                 setNodeFillVisibility(node, false);
             });
             return;
         }
-        traverse(col.node, (node) => {
-            if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
+        col.cells.forEach(({ node }) => {
             result.candidates += 1;
             try {
                 if (tryApplyFill(node, style.color!)) result.applied += 1;
@@ -587,67 +698,59 @@ function isLineLikeNode(node: SceneNode): boolean {
     return false;
 }
 
-function applyLineSeriesStyleTargets(
-    root: SceneNode,
+function applyLineSeriesStrokeTargets(
+    targets: SceneNode[],
+    style: NormalizedMarkStyle,
+    skipStrokeColorForSeries: boolean,
+    rowStyleId: string | null,
+    result: ScopeResult
+) {
+    targets.forEach((target) => {
+        result.candidates += 1;
+        try {
+            let applied = false;
+            if (rowStyleId) {
+                applied = tryApplyStrokeStyleLink(target, rowStyleId) || applied;
+            }
+            if (applyMarkStyleToNode(target, style, {
+                skipFill: true,
+                skipStrokeColor: skipStrokeColorForSeries || Boolean(rowStyleId)
+            })) applied = true;
+            if (applied) result.applied += 1;
+            else result.skipped += 1;
+        } catch {
+            result.errors += 1;
+        }
+    });
+}
+
+function applyLinePointTargets(
+    targets: SceneNode[],
     style: NormalizedMarkStyle,
     skipStrokeColorForSeries: boolean,
     result: ScopeResult
 ) {
-    if (root.type === 'INSTANCE' || 'children' in root) {
-        traverse(root, (child) => {
-            if (child.id === root.id || !child.visible) return;
-            const lower = child.name.toLowerCase();
-            const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
-            const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
-            if (!isPointLike && !isVectorLike) return;
-            result.candidates += 1;
-            try {
-                if (applyMarkStyleToNode(child, style, {
-                    skipFill: true,
-                    skipStrokeColor: skipStrokeColorForSeries
-                })) result.applied += 1;
-                else result.skipped += 1;
-            } catch {
-                result.errors += 1;
+    const pointStyle = !style.fillColor && !skipStrokeColorForSeries && style.strokeColor
+        ? { ...style, fillColor: style.strokeColor }
+        : style;
+    targets.forEach((target) => {
+        result.candidates += 1;
+        try {
+            if (applyMarkStyleToNode(target, pointStyle, { skipFill: false, skipStrokeColor: skipStrokeColorForSeries })) {
+                result.applied += 1;
+            } else {
+                result.skipped += 1;
             }
-        });
-        return;
-    }
-
-    const lower = root.name.toLowerCase();
-    const isPointLike = root.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
-    const isVectorLike = root.type === 'VECTOR' || root.type === 'LINE' || root.type === 'POLYGON' || root.type === 'RECTANGLE';
-    if (!isPointLike && !isVectorLike) return;
-    result.candidates += 1;
-    try {
-        if (applyMarkStyleToNode(root, style, {
-            skipFill: true,
-            skipStrokeColor: skipStrokeColorForSeries
-        })) result.applied += 1;
-        else result.skipped += 1;
-    } catch {
-        result.errors += 1;
-    }
+        } catch {
+            result.errors += 1;
+        }
+    });
 }
 
-function setLineSeriesStrokeVisibility(root: SceneNode, visible: boolean) {
-    if (root.type === 'INSTANCE' || 'children' in root) {
-        traverse(root, (child) => {
-            if (child.id === root.id || !child.visible) return;
-            const lower = child.name.toLowerCase();
-            const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
-            const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
-            if (!isPointLike && !isVectorLike) return;
-            setNodeStrokeVisibility(child, visible);
-        });
-        return;
-    }
-
-    const lower = root.name.toLowerCase();
-    const isPointLike = root.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
-    const isVectorLike = root.type === 'VECTOR' || root.type === 'LINE' || root.type === 'POLYGON' || root.type === 'RECTANGLE';
-    if (!isPointLike && !isVectorLike) return;
-    setNodeStrokeVisibility(root, visible);
+function setLineSeriesStrokeVisibility(targets: SceneNode[], visible: boolean) {
+    targets.forEach((target) => {
+        setNodeStrokeVisibility(target, visible);
+    });
 }
 
 function applyFlatLineFillBotStyle(
@@ -671,33 +774,30 @@ function applyFlatLineFillBotStyle(
 }
 
 function applyLineBundleStylesForColumn(
-    colNode: SceneNode,
-    colIndex: number,
+    column: ColumnStrokeContext,
     styles: NormalizedMarkStyle[],
     rowColorModes: ColorMode[] | undefined,
     payload: StrokeInjectionRuntimePayload | undefined,
     result: ScopeResult
 ) {
-    const bundles = collectLineBundlesInColumn(colNode, colIndex);
-    const sorted = Array.from(bundles.entries()).sort((a, b) => a[0] - b[0]);
-    sorted.forEach(([rowIndex, bundle]) => {
-        const seriesIndex = rowIndex + 1;
+    column.lineBundles.forEach((entry) => {
+        const seriesIndex = entry.rowIndex + 1;
         const style = getMarkStyleBySeries(styles, seriesIndex);
         if (!style) return;
 
         const skipStrokeColorForSeries =
             Array.isArray(rowColorModes)
             && rowColorModes[seriesIndex - 1] === 'paint_style';
+        const rowStyleId = getRowPaintStyleId(payload, seriesIndex);
 
-        applyLineSeriesStyleTargets(bundle.lineNode, style, skipStrokeColorForSeries, result);
-        const isFlat = isLineBundleFlat(bundle);
-        setLineSeriesStrokeVisibility(bundle.lineNode, !isFlat);
-        if (!isFlat) return;
+        applyLineSeriesStrokeTargets(entry.strokeTargets, style, skipStrokeColorForSeries, rowStyleId, result);
+        applyLinePointTargets(entry.pointTargets, style, skipStrokeColorForSeries, result);
+        setLineSeriesStrokeVisibility([...entry.strokeTargets, ...entry.pointTargets], !entry.isFlat);
+        if (!entry.isFlat) return;
 
         result.candidates += 1;
         try {
-            const rowStyleId = getRowPaintStyleId(payload, seriesIndex);
-            if (applyFlatLineFillBotStyle(bundle.fillBot, style, rowStyleId, skipStrokeColorForSeries)) {
+            if (applyFlatLineFillBotStyle(entry.bundle.fillBot, style, rowStyleId, skipStrokeColorForSeries)) {
                 result.applied += 1;
             } else {
                 result.skipped += 1;
@@ -709,7 +809,7 @@ function applyLineBundleStylesForColumn(
 }
 
 function applyLineBackgroundStyles(
-    columns: ColRef[],
+    columns: ColumnStrokeContext[],
     style: NormalizedLineBackgroundStyle | null,
     markStyles: NormalizedMarkStyle[],
     options?: { chartType?: string }
@@ -718,19 +818,15 @@ function applyLineBackgroundStyles(
     if (options?.chartType !== 'line') return result;
 
     columns.forEach((col) => {
-        const bundles = collectLineBundlesInColumn(col.node, col.index - 1);
-        const sorted = Array.from(bundles.entries()).sort((a, b) => a[0] - b[0]);
-        sorted.forEach(([rowIndex, bundle]) => {
-            const seriesIndex = rowIndex + 1;
+        col.lineBundles.forEach((entry) => {
+            const seriesIndex = entry.rowIndex + 1;
             const markStyle = getMarkStyleBySeries(markStyles, seriesIndex);
             const color = markStyle?.lineBackgroundColor || markStyle?.fillColor || markStyle?.strokeColor || style?.color;
             const opacity = typeof markStyle?.lineBackgroundOpacity === 'number' ? markStyle.lineBackgroundOpacity : undefined;
             const visible = typeof markStyle?.lineBackgroundVisible === 'boolean' ? markStyle.lineBackgroundVisible : style?.visible;
-            const targets = (isLineBundleFlat(bundle) ? [bundle.fillBot] : [bundle.triNode, bundle.fillBot])
-                .filter((target): target is SceneNode => Boolean(target));
-            if (targets.length === 0) return;
+            if (entry.backgroundTargets.length === 0) return;
 
-            targets.forEach((target) => {
+            entry.backgroundTargets.forEach((target) => {
                 result.candidates += 1;
                 try {
                     let applied = false;
@@ -762,26 +858,14 @@ function applyMarkStyleToNode(
 ): boolean {
     let applied = false;
     if (style.enabled === false) {
-        if ('strokes' in node) {
-            try {
-                const target = node as SceneNode & GeometryMixin;
-                if (Array.isArray(target.strokes)) {
-                    target.strokes = [];
-                    applied = true;
-                }
-            } catch {
-                // fall through to weight-zero fallback
-            }
-        }
+        applied = clearNodeStrokes(node) || applied;
         if (hasIndividualStrokeWeights(node)) {
-            node.strokeTopWeight = 0;
-            node.strokeRightWeight = 0;
-            node.strokeBottomWeight = 0;
-            node.strokeLeftWeight = 0;
-            applied = true;
+            applied = setSideThickness(node, 'top', 0) || applied;
+            applied = setSideThickness(node, 'right', 0) || applied;
+            applied = setSideThickness(node, 'bottom', 0) || applied;
+            applied = setSideThickness(node, 'left', 0) || applied;
         } else if (hasStrokeWeight(node)) {
-            node.strokeWeight = 0;
-            applied = true;
+            applied = setStrokeWeight(node, 0) || applied;
         }
         if (applyStrokeStyleMode(node, 'solid')) applied = true;
         return applied;
@@ -797,20 +881,18 @@ function applyMarkStyleToNode(
         const targetThickness = typeof style.thickness === 'number'
             ? style.thickness
             : (hasStrokeWeight(node) && typeof node.strokeWeight === 'number' ? node.strokeWeight : 0);
-        node.strokeTopWeight = style.sides.top ? targetThickness : 0;
-        node.strokeRightWeight = style.sides.right ? targetThickness : 0;
-        node.strokeLeftWeight = style.sides.left ? targetThickness : 0;
-        node.strokeBottomWeight = 0;
-        applied = true;
+        applied = setSideThickness(node, 'top', style.sides.top ? targetThickness : 0) || applied;
+        applied = setSideThickness(node, 'right', style.sides.right ? targetThickness : 0) || applied;
+        applied = setSideThickness(node, 'left', style.sides.left ? targetThickness : 0) || applied;
+        applied = setSideThickness(node, 'bottom', 0) || applied;
     } else if (typeof style.thickness === 'number' && hasStrokeWeight(node)) {
-        node.strokeWeight = style.thickness;
-        applied = true;
+        applied = setStrokeWeight(node, style.thickness) || applied;
     }
     return applied;
 }
 
 function applyMarkStyles(
-    columns: ColRef[],
+    columns: ColumnStrokeContext[],
     styles: NormalizedMarkStyle[],
     options?: {
         chartType?: string;
@@ -825,7 +907,7 @@ function applyMarkStyles(
         const sharedStyle = resolveStackedSharedMarkStyle(styles);
         if (!sharedStyle) return result;
         columns.forEach((col) => {
-            traverse(col.node, (node) => {
+            traverse(col.ref.node, (node) => {
                 if (!node.visible || !isStackedSubInstanceNode(node)) return;
                 result.candidates += 1;
                 try {
@@ -839,13 +921,13 @@ function applyMarkStyles(
         return result;
     }
     columns.forEach((col) => {
-        const colIndex = Math.max(0, col.index - 1);
+        const colIndex = Math.max(0, col.ref.index - 1);
         const skipColorForColumn = options?.chartType === 'bar' && Boolean(options?.colColorEnabled?.[colIndex]);
         if (options?.chartType === 'line') {
-            applyLineBundleStylesForColumn(col.node, colIndex, styles, options?.rowColorModes, options, result);
+            applyLineBundleStylesForColumn(col, styles, options?.rowColorModes, options, result);
             return;
         }
-        traverse(col.node, (node) => {
+        traverse(col.ref.node, (node) => {
             if (!node.visible) return;
 
             const seriesIndex = parseMarkSeriesIndex(node.name);
@@ -1108,19 +1190,14 @@ function applyLegendMarkSync(
     return { result, enabled: true };
 }
 
-function applyTabRightStroke(columns: ColRef[], style: NormalizedSideStyle): ScopeResult {
+function applyTabRightStroke(columns: ColumnStrokeContext[], style: NormalizedSideStyle): ScopeResult {
     const result = createScopeResult();
-    const visibleColumns = columns.filter((col) => col.node.visible);
+    const visibleColumns = columns.filter((col) => col.visible);
     const targetColumns = visibleColumns;
     result.candidates = targetColumns.length;
 
     targetColumns.forEach((col) => {
-        if (!('children' in col.node)) {
-            result.skipped += 1;
-            return;
-        }
-
-        const tab = (col.node as SceneNode & ChildrenMixin).children.find((child) => child.name === 'tab');
+        const tab = col.tabNode;
         if (!tab) {
             result.skipped += 1;
             return;
@@ -1208,6 +1285,7 @@ function shouldSkipMarkStyleApply(payload: StrokeInjectionRuntimePayload, markSt
 
 export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionRuntimePayload, precomputedCols?: ColRef[]): StrokeInjectionResult {
     const columns = precomputedCols ?? collectColumns(graph);
+    const contexts = buildColumnStrokeContexts(columns, payload.chartType);
     const cellFillStyle = resolveCellFillStyle(payload);
     const lineBackgroundStyle = resolveLineBackgroundStyle(payload);
     const markStyles = resolveMarkStyles(payload);
@@ -1218,19 +1296,19 @@ export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionR
     const skipMarkStyleApply = shouldSkipMarkStyleApply(payload, markStyles);
 
     return {
-        cellFill: cellFillStyle ? applyCellFill(columns, cellFillStyle, payload.chartType) : createScopeResult(),
-        lineBackground: applyLineBackgroundStyles(columns, lineBackgroundStyle, markStyles, { chartType: payload.chartType }),
+        cellFill: cellFillStyle ? applyCellFill(contexts, cellFillStyle, payload.chartType) : createScopeResult(),
+        lineBackground: applyLineBackgroundStyles(contexts, lineBackgroundStyle, markStyles, { chartType: payload.chartType }),
         mark: skipMarkStyleApply
             ? createScopeResult()
-            : applyMarkStyles(columns, markStyles, {
+            : applyMarkStyles(contexts, markStyles, {
                 chartType: payload.chartType,
                 colColorEnabled: payload.colColorEnabled,
                 rowColorModes: payload.rowColorModes,
                 rowPaintStyleIds: payload.rowPaintStyleIds
             }),
         legend: legendSync.result,
-        cellTop: cellTopStyle ? applyCellTopStroke(columns, cellTopStyle) : createScopeResult(),
-        tabRight: tabRightStyle ? applyTabRightStroke(columns, tabRightStyle) : createScopeResult(),
+        cellTop: cellTopStyle ? applyCellTopStroke(contexts, cellTopStyle) : createScopeResult(),
+        tabRight: tabRightStyle ? applyTabRightStroke(contexts, tabRightStyle) : createScopeResult(),
         gridContainer: gridContainerStyle ? applyGridContainerStroke(graph, gridContainerStyle) : createScopeResult(),
         resolved: {
             cellFill: Boolean(cellFillStyle),
