@@ -483,6 +483,10 @@ export async function syncChartOnResize(
             : undefined;
         const runtimeMarkColorSource = localOverrideState.mask.markColorSource ? localOverrideState.overrides.markColorSource : undefined;
         const runtimeAssistLineStyle = localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined;
+        const savedMarkStyle = parseSavedMarkStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLE);
+        const savedMarkStyles = parseSavedMarkStylesFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLES);
+        const runtimeMarkStyle = localOverrideState.mask.markStyle ? localOverrideState.overrides.markStyle : undefined;
+        const runtimeMarkStyles = localOverrideState.mask.markStyles ? localOverrideState.overrides.markStyles : undefined;
         const rowCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
         const colCount = chartType === 'stackedBar' || chartType === 'stacked'
             ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((acc, cur) => acc + (Number(cur) || 0), 0) : 0)
@@ -517,6 +521,8 @@ export async function syncChartOnResize(
             colColorEnabled: runtimeColEnabled
                 ?? resolveColColorEnabledFromNode(node, Math.max(1, colCount)),
             markColorSource: runtimeMarkColorSource,
+            markStyle: runtimeMarkStyle ?? savedMarkStyle ?? undefined,
+            markStyles: runtimeMarkStyles ?? savedMarkStyles ?? undefined,
             assistLineStyle: runtimeAssistLineStyle,
             deferLineSegmentStrokeStyling: chartType === 'line',
             reason
