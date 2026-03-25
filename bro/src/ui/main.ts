@@ -61,6 +61,8 @@ let rowColorDraftHex: string | null = null;
 let rowColorDraftMode: ColorMode | null = null;
 let rowColorDraftStyleId: string | null = null;
 let rowColorDraftColReset = false;
+const inactiveToggleClass = 'min-w-[72px] px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+const activeToggleClass = 'min-w-[72px] px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer';
 
 function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
@@ -855,6 +857,22 @@ function updateAssistLineToggleUi() {
     ui.styleAssistLineVisibleInput.checked = state.assistLineVisible;
 }
 
+function updateLineFeatureToggleUi() {
+    const isLineChart = state.chartType === 'line';
+    ui.lineFeatureToggleGroup.classList.toggle('hidden', !isLineChart);
+    ui.lineFeatureToggleGroup.classList.toggle('flex', isLineChart);
+
+    const syncButton = (button: HTMLButtonElement, enabled: boolean, label: string) => {
+        button.textContent = label;
+        button.className = enabled ? activeToggleClass : inactiveToggleClass;
+        button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        button.title = `${label} ${enabled ? '활성화' : '비활성화'}`;
+    };
+
+    syncButton(ui.linePointToggleBtn, state.linePointVisible, 'line point');
+    syncButton(ui.lineFeature2ToggleBtn, state.lineFeature2Enabled, '기능 2');
+}
+
 function renderStylePreview() {
     renderPreview({
         containerId: 'style-preview-container',
@@ -989,6 +1007,7 @@ function handlePluginMessage(msg: any) {
             closeAllAssistLinePopovers();
             closeRowColorPopover();
             updateAssistLineToggleUi();
+            updateLineFeatureToggleUi();
             state.colStrokeStyle = null;
             state.cellStrokeStyles = [];
             state.rowStrokeStyles = [];
@@ -1032,6 +1051,7 @@ function handlePluginMessage(msg: any) {
         ui.chartTypeWrapper.classList.remove('hidden');
         ui.chartTypeIcon.innerHTML = CHART_ICONS[msg.chartType] || '';
         ui.chartTypeDisplay.textContent = msg.chartType === 'stackedBar' ? 'Stacked' : msg.chartType;
+        updateLineFeatureToggleUi();
 
         // Edit mode button
         if (msg.uiMode === 'edit') {
@@ -1144,9 +1164,11 @@ function handlePluginMessage(msg: any) {
         state.markRatio = normalizeMarkRatio(msg.markRatio);
         state.assistLineVisible = normalizeAssistLineVisibleInput(msg.assistLineVisible);
         state.assistLineEnabled = normalizeAssistLineEnabledInput(msg.assistLineEnabled);
+        state.linePointVisible = msg.linePointVisible !== false;
         ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
         closeAllAssistLinePopovers();
         updateAssistLineToggleUi();
+        updateLineFeatureToggleUi();
         state.colStrokeStyle = msg.colStrokeStyle || null;
         state.cellStrokeStyles = msg.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.rowStrokeStyles || [];
@@ -1400,7 +1422,11 @@ function handlePluginMessage(msg: any) {
         if (msg.payload?.assistLineEnabled) {
             state.assistLineEnabled = normalizeAssistLineEnabledInput(msg.payload.assistLineEnabled);
         }
+        if (msg.payload?.linePointVisible !== undefined) {
+            state.linePointVisible = msg.payload.linePointVisible !== false;
+        }
         updateAssistLineToggleUi();
+        updateLineFeatureToggleUi();
         ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
         state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
@@ -1508,6 +1534,14 @@ function bindUiEvents() {
     });
     ui.previewAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);
+    });
+    ui.linePointToggleBtn.addEventListener('click', () => {
+        state.linePointVisible = !state.linePointVisible;
+        updateLineFeatureToggleUi();
+    });
+    ui.lineFeature2ToggleBtn.addEventListener('click', () => {
+        state.lineFeature2Enabled = !state.lineFeature2Enabled;
+        updateLineFeatureToggleUi();
     });
     ui.styleAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);
@@ -1805,6 +1839,7 @@ function initializeUi() {
     bindUiEvents();
     initGraphSettingTooltip();
     updateAssistLineToggleUi();
+    updateLineFeatureToggleUi();
     requestPaintStyleList();
     setDataTabRenderer(() => {
         renderGrid();

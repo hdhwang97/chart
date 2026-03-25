@@ -646,6 +646,7 @@ figma.ui.onmessage = async (msg) => {
             rowHeaderLabels,
             markColorSource,
             rawYMaxAuto,
+            linePointVisible,
             assistLineVisible,
             assistLineEnabled,
             assistLineStyle,
@@ -889,6 +890,7 @@ figma.ui.onmessage = async (msg) => {
             colPaintStyleIds: drawColPaintStyleIds,
             colColorEnabled: drawColColorEnabled,
             markColorSource: drawMarkColorSource,
+            linePointVisible: linePointVisible !== false,
             assistLineVisible,
             assistLineEnabled,
             assistLineStyle: drawAssistLineStyle,
@@ -1132,6 +1134,7 @@ figma.ui.onmessage = async (msg) => {
             assistLineEnabled: effectiveLocalMask.assistLineEnabled
                 ? (effectiveLocalOverrides.assistLineEnabled || { min: false, max: false, avg: false, ctr: false })
                 : (assistLineEnabled || { min: false, max: false, avg: false, ctr: false }),
+            linePointVisible: linePointVisible !== false,
             xAxisLabelsVisible: xAxisLabelsVisible !== false,
             yAxisVisible: yAxisVisible !== false,
             cornerRadius: cornerRadiusForUi,

@@ -133,6 +133,8 @@ export const state = {
     markRatio: 0.8,
     xAxisLabelsVisible: true,
     yAxisVisible: true,
+    linePointVisible: true,
+    lineFeature2Enabled: false,
     // Compatibility alias: derived from markStylesDraft for runtime sync/output.
     rowColors: DEFAULT_ROW_COLORS.slice(0, 3),
     rowColorModes: ['hex', 'hex', 'hex'] as ColorMode[],

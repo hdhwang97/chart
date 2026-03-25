@@ -30,6 +30,9 @@ export type LineApplyResult =
         missing: LineStructureIssue[];
     };
 
+const LINE_POINT_PROPERTY_KEY = 'line_point';
+const LINE_LAST_POINT_PROPERTY_KEY = 'last_point';
+
 function canSetPaddingTop(node: SceneNode): node is SceneNode & { paddingTop: number } {
     return 'paddingTop' in node;
 }
@@ -38,7 +41,7 @@ function canSetPaddingBottom(node: SceneNode): node is SceneNode & { paddingBott
     return 'paddingBottom' in node;
 }
 
-function getVariantPropKey(instance: InstanceNode, key: string): string | null {
+function getComponentPropKey(instance: InstanceNode, key: string): string | null {
     try {
         const props = instance.componentProperties || {};
         const found = Object.keys(props).find((rawKey) => rawKey === key || rawKey.startsWith(`${key}#`));
@@ -49,7 +52,7 @@ function getVariantPropKey(instance: InstanceNode, key: string): string | null {
 }
 
 function hasDirectionVariant(instance: InstanceNode): boolean {
-    return Boolean(getVariantPropKey(instance, LINE_VARIANT_KEY_DEFAULT));
+    return Boolean(getComponentPropKey(instance, LINE_VARIANT_KEY_DEFAULT));
 }
 
 function setPaddingTop(node: SceneNode, value: number): boolean {
@@ -91,12 +94,40 @@ function setStrokeVisibility(node: SceneNode, visible: boolean): boolean {
 
 function setDirectionVariant(target: SceneNode, direction: string): boolean {
     if (target.type !== 'INSTANCE') return false;
-    const propKey = getVariantPropKey(target, LINE_VARIANT_KEY_DEFAULT);
+    const propKey = getComponentPropKey(target, LINE_VARIANT_KEY_DEFAULT);
     if (!propKey) return false;
     const current = target.componentProperties?.[propKey]?.value;
     if (current === direction) return true;
     try {
         target.setProperties({ [propKey]: direction });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function readBooleanComponentProperty(node: SceneNode, key: string): boolean | null {
+    if (node.type !== 'INSTANCE') return null;
+    const propKey = getComponentPropKey(node, key);
+    if (!propKey) return null;
+    const rawValue = node.componentProperties?.[propKey]?.value;
+    if (typeof rawValue === 'boolean') return rawValue;
+    if (typeof rawValue === 'string') {
+        const normalized = rawValue.trim().toLowerCase();
+        if (normalized === 'true') return true;
+        if (normalized === 'false') return false;
+    }
+    return null;
+}
+
+function setBooleanComponentProperty(node: SceneNode, key: string, value: boolean): boolean {
+    if (node.type !== 'INSTANCE') return false;
+    const propKey = getComponentPropKey(node, key);
+    if (!propKey) return false;
+    const current = readBooleanComponentProperty(node, key);
+    if (current === value) return true;
+    try {
+        node.setProperties({ [propKey]: value });
         return true;
     } catch {
         return false;
@@ -220,6 +251,14 @@ function setLineStrokeVisibility(lineRoot: SceneNode, visible: boolean) {
     });
 }
 
+function setLinePointVisibility(bundle: LineBundle, visible: boolean): boolean {
+    return setBooleanComponentProperty(bundle.lineNode, LINE_POINT_PROPERTY_KEY, visible);
+}
+
+function resolveBundleLinePointVisible(bundle: LineBundle): boolean | null {
+    return readBooleanComponentProperty(bundle.lineNode, LINE_POINT_PROPERTY_KEY);
+}
+
 function applyLineBundleLayout(
     bundle: LineBundle,
     pTop: number,
@@ -271,6 +310,7 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
     const values = Array.isArray(config?.values) ? config.values : [];
     const rowCount = values.length;
     const thickness = Number.isFinite(Number(config?.strokeWidth)) ? Number(config.strokeWidth) : 2;
+    const linePointVisible = config?.linePointVisible !== false;
     const deferSegmentStrokeStyling = config?.deferLineSegmentStrokeStyling === true;
     const cols = collectColumns(graph).filter((col) => col.node.visible);
     const maxSegmentsFromValues = values.reduce((max: number, row: any) => {
@@ -339,6 +379,12 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
             bundle.container.visible = true;
             bundle.lineNode.visible = true;
             bundle.fillNode.visible = true;
+            setLinePointVisibility(bundle, linePointVisible);
+            setBooleanComponentProperty(
+                bundle.lineNode,
+                LINE_LAST_POINT_PROPERTY_KEY,
+                linePointVisible && c === rowSegmentCount - 1
+            );
             if (!deferSegmentStrokeStyling) {
                 applyLineColorAndStroke(bundle.lineNode, rowColor, rowStyleId, thickness);
             }
@@ -397,4 +443,20 @@ export function syncFlatLineFillBottomPadding(graph: SceneNode, precomputedCols?
             setPaddingBottom(bundle.fillBot, basePadding + (strokeThickness / 2));
         });
     });
+}
+
+export function resolveLinePointVisible(graph: SceneNode, precomputedCols?: ReturnType<typeof collectColumns>): boolean {
+    const cols = (precomputedCols ?? collectColumns(graph)).filter((col) => col.node.visible);
+    const searchCols = cols.length > 0 ? cols : (precomputedCols ?? collectColumns(graph));
+    const rowCount = Math.max(1, detectLineSeriesCountInColumns(searchCols));
+    const matrix = buildLineBundleMatrix(searchCols, rowCount);
+    for (const row of matrix) {
+        for (const bundle of row) {
+            if (!bundle) continue;
+            const visible = resolveBundleLinePointVisible(bundle);
+            if (visible === null) continue;
+            return visible;
+        }
+    }
+    return true;
 }

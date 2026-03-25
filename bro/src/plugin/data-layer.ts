@@ -466,6 +466,10 @@ export function saveChartData(
         PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE,
         String(Boolean(msg.assistLineVisible))
     );
+    node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_LINE_POINT_VISIBLE,
+        String(msg.linePointVisible !== false)
+    );
     if (!skipDataKeys) {
         const rowCount = Number.isFinite(Number(msg.rows))
             ? Number(msg.rows)

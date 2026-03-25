@@ -64,6 +64,7 @@ export const PLUGIN_DATA_KEYS = {
     LAST_MARK_COLOR_SOURCE: "lastMarkColorSource",
     LAST_CORNER_RADIUS: "lastCornerRadius",
     LAST_STROKE_WIDTH: "lastStrokeWidth",
+    LAST_LINE_POINT_VISIBLE: "lastLinePointVisible",
     LAST_ASSIST_LINE_ENABLED: "lastAssistLineEnabled",
     LAST_ASSIST_LINE_VISIBLE: "lastAssistLineVisible",
     LAST_ASSIST_LINE_STYLE: "lastAssistLineStyle",

@@ -131,9 +131,13 @@ export function selectType(type: string) {
     if (type === 'line') {
         ui.containerStrokeWidth.classList.remove('hidden');
         ui.spacerStroke.classList.add('hidden');
+        ui.lineFeatureToggleGroup.classList.remove('hidden');
+        ui.lineFeatureToggleGroup.classList.add('flex');
     } else {
         ui.containerStrokeWidth.classList.add('hidden');
         ui.spacerStroke.classList.remove('hidden');
+        ui.lineFeatureToggleGroup.classList.add('hidden');
+        ui.lineFeatureToggleGroup.classList.remove('flex');
     }
 
     const totalCols = type === 'stackedBar' ? getTotalStackedCols() : getGridColsForChart(type, state.cols);
@@ -308,6 +312,7 @@ export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
             avg: state.assistLineEnabled.avg,
             ctr: state.assistLineEnabled.ctr
         },
+        linePointVisible: state.linePointVisible,
         rowStrokeStyles: state.rowStrokeStyles,
         colStrokeStyle: state.colStrokeStyle,
         localStyleOverrides: state.isInstanceTarget ? state.localStyleOverrides : undefined,
