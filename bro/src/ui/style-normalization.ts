@@ -350,6 +350,16 @@ export function sideStyleFromSnapshot(stroke: StrokeStyleSnapshot | null, side: 
     };
 }
 
+function scaleSideStyleThickness(style: SideStrokeInjectionStyle | null, factor: number): SideStrokeInjectionStyle | null {
+    if (!style || typeof style.thickness !== 'number') return style;
+    const thickness = clampThickness(style.thickness * factor, style.thickness);
+    return {
+        ...style,
+        thickness,
+        visible: thickness > 0
+    };
+}
+
 export function gridStyleFromSnapshot(stroke: StrokeStyleSnapshot | null): GridStrokeInjectionStyle | null {
     if (!stroke) return null;
     const color = normalizeHexColorInput(stroke.color);
@@ -523,7 +533,7 @@ export function buildDraftFromPayload(
     const rowZeroStroke = resolveRowZeroStroke(rowStrokeStyles);
 
     const extractedCellTop = sideStyleFromSnapshot(rowZeroStroke, 'top');
-    const extractedTabRight = sideStyleFromSnapshot(colStroke, 'right');
+    const extractedTabRight = scaleSideStyleThickness(sideStyleFromSnapshot(colStroke, 'right'), 2);
     const extractedGrid = gridStyleFromSnapshot(chartContainerStroke || colStroke);
     const extractedAssistLine = assistLineStyleFromSnapshot(assistLineStroke);
 

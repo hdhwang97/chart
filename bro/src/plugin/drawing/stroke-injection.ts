@@ -531,6 +531,39 @@ function applySideStrokeStyle(node: SceneNode, side: SideName, style: Normalized
     return applied;
 }
 
+function applyDistributedTabRightStrokeStyle(
+    node: SceneNode,
+    style: NormalizedSideStyle,
+    options: { isFirst: boolean; isLast: boolean }
+): boolean {
+    let applied = false;
+
+    if (style.color && tryApplyStroke(node, style.color)) {
+        applied = true;
+    }
+
+    if (applyStrokeStyleMode(node, style.strokeStyle)) {
+        applied = true;
+    }
+
+    const targetThickness = style.visible === false ? 0 : style.thickness;
+    if (typeof targetThickness !== 'number') {
+        return applied;
+    }
+
+    enableIndividualStrokeWeights(node);
+    if (!hasIndividualStrokeWeights(node)) {
+        return applied;
+    }
+
+    const halfThickness = targetThickness / 2;
+    applied = setSideThickness(node, 'top', 0) || applied;
+    applied = setSideThickness(node, 'bottom', 0) || applied;
+    applied = setSideThickness(node, 'left', options.isFirst ? 0 : halfThickness) || applied;
+    applied = setSideThickness(node, 'right', options.isLast ? 0 : halfThickness) || applied;
+    return applied;
+}
+
 function applyGridStrokeStyle(node: SceneNode, style: NormalizedGridStyle): boolean {
     let applied = false;
     const allSidesSelected = style.sides.top && style.sides.right && style.sides.bottom && style.sides.left;
@@ -1196,7 +1229,7 @@ function applyTabRightStroke(columns: ColumnStrokeContext[], style: NormalizedSi
     const targetColumns = visibleColumns;
     result.candidates = targetColumns.length;
 
-    targetColumns.forEach((col) => {
+    targetColumns.forEach((col, index) => {
         const tab = col.tabNode;
         if (!tab) {
             result.skipped += 1;
@@ -1204,7 +1237,10 @@ function applyTabRightStroke(columns: ColumnStrokeContext[], style: NormalizedSi
         }
 
         try {
-            if (applySideStrokeStyle(tab, 'right', style)) result.applied += 1;
+            if (applyDistributedTabRightStrokeStyle(tab, style, {
+                isFirst: index === 0,
+                isLast: index === targetColumns.length - 1
+            })) result.applied += 1;
             else result.skipped += 1;
         } catch {
             result.errors += 1;
