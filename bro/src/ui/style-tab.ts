@@ -140,6 +140,7 @@ export function syncMarkStyleCardVisibility() {
 
 function syncVisibleControlledStyleCards() {
     const visibleInputs = [
+        ui.styleCellFillVisibleInput,
         ui.styleLineBackgroundVisibleInput,
         ui.styleCellTopVisibleInput,
         ui.styleTabRightVisibleInput,
@@ -377,6 +378,7 @@ export function syncAllHexPreviewsFromDom() {
 export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSelectElement> {
     return [
         ui.styleCellFillColorInput,
+        ui.styleCellFillVisibleInput,
         ui.styleLineBackgroundColorInput,
         ui.styleLineBackgroundVisibleInput,
         ui.styleMarkLineBackgroundVisibleInput,
@@ -497,6 +499,7 @@ export function emitStyleDraftUpdated() {
 export function hydrateStyleTab(draft: StyleInjectionDraft) {
     syncMarkStyleCardVisibility();
     ui.styleCellFillColorInput.value = draft.cellFill.color;
+    ui.styleCellFillVisibleInput.checked = draft.cellFill.visible;
     ui.styleLineBackgroundColorInput.value = draft.lineBackground.color;
     ui.styleLineBackgroundVisibleInput.checked = draft.lineBackground.visible;
     ui.styleMarkLineBackgroundVisibleInput.checked = draft.lineBackground.visible;
@@ -638,7 +641,10 @@ export function readStyleTabDraft(): StyleInjectionDraft {
     state.activeMarkStyleIndex = idx;
 
     return {
-        cellFill: { color: cellFillColor },
+        cellFill: {
+            color: cellFillColor,
+            visible: ui.styleCellFillVisibleInput.checked
+        },
         lineBackground: allowLineBackground
             ? {
                 color: normalizeHexColorInput(mark.lineBackgroundColor) || normalizeHexColorInput(mark.strokeColor) || state.styleInjectionDraft.lineBackground.color,
@@ -757,7 +763,10 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
 
     return {
         draft: {
-            cellFill: { color: normalizeHexColorInput(ui.styleCellFillColorInput.value) || draft.cellFill.color },
+            cellFill: {
+                color: normalizeHexColorInput(ui.styleCellFillColorInput.value) || draft.cellFill.color,
+                visible: ui.styleCellFillVisibleInput.checked
+            },
             lineBackground: allowLineBackground
                 ? {
                     color: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor,
@@ -872,7 +881,7 @@ export function bindStyleTabEvents() {
     ui.styleLineBackgroundVisibleInput.addEventListener('change', () => {
         syncLineBackgroundVisibility(ui.styleLineBackgroundVisibleInput.checked);
     });
-    [ui.styleCellTopVisibleInput, ui.styleTabRightVisibleInput, ui.styleGridVisibleInput, ui.styleAssistLineVisibleInput].forEach((input) => {
+    [ui.styleCellFillVisibleInput, ui.styleCellTopVisibleInput, ui.styleTabRightVisibleInput, ui.styleGridVisibleInput, ui.styleAssistLineVisibleInput].forEach((input) => {
         input.addEventListener('change', () => {
             syncVisibleControlledStyleCards();
         });

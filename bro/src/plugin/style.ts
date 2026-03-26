@@ -243,11 +243,15 @@ export function extractCellFillStyle(graph: SceneNode, precomputedCols?: ColRef[
             if (!tab || !('fills' in tab) || !Array.isArray(tab.fills) || tab.fills.length === 0) continue;
             const first = tab.fills[0];
             if (first.type !== 'SOLID') continue;
-            return { color: rgbToHex(first.color.r, first.color.g, first.color.b) };
+            return {
+                color: rgbToHex(first.color.r, first.color.g, first.color.b),
+                visible: resolveLayerVisible(tab)
+            };
         }
     }
     for (const col of columns) {
         let fillColor: string | null = null;
+        let visible: boolean | undefined;
         traverse(col.node, (node) => {
             if (fillColor) return;
             if (!MARK_NAME_PATTERNS.CEL.test(node.name)) return;
@@ -255,9 +259,15 @@ export function extractCellFillStyle(graph: SceneNode, precomputedCols?: ColRef[
             const first = node.fills[0];
             if (first.type === 'SOLID') {
                 fillColor = rgbToHex(first.color.r, first.color.g, first.color.b);
+                visible = resolveLayerVisible(node);
             }
         });
-        if (fillColor) return { color: fillColor };
+        if (fillColor || visible !== undefined) {
+            return {
+                ...(fillColor ? { color: fillColor } : {}),
+                ...(visible !== undefined ? { visible } : {})
+            };
+        }
     }
     return null;
 }

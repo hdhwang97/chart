@@ -376,7 +376,7 @@ function drawTabBackgroundLayer(g: any, w: number, h: number, mode: PreviewInter
         .attr('width', w)
         .attr('height', h)
         .attr('fill', state.styleInjectionDraft.cellFill.color)
-        .attr('fill-opacity', TAB_BACKGROUND_OPACITY);
+        .attr('fill-opacity', state.styleInjectionDraft.cellFill.visible ? TAB_BACKGROUND_OPACITY : 0);
     markDataContextLine(rect);
     markStyleTarget(rect, 'cell-fill', mode);
 }

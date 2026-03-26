@@ -417,7 +417,7 @@ function drawTabBackgroundLayer(g: any, w: number, h: number) {
         .attr('width', w)
         .attr('height', h)
         .attr('fill', state.styleInjectionDraft.cellFill.color)
-        .attr('fill-opacity', 1);
+        .attr('fill-opacity', state.styleInjectionDraft.cellFill.visible ? 1 : 0);
 }
 
 function getAssistLineStyle() {
@@ -1123,7 +1123,7 @@ export function generateD3CodeString(style: any): string {
         },
         groups,
         grid: {
-            backgroundColor: state.styleInjectionDraft.cellFill.color,
+            backgroundColor: state.styleInjectionDraft.cellFill.visible ? state.styleInjectionDraft.cellFill.color : 'none',
             verticalStroke,
             horizontalStroke,
             container: gridContainer

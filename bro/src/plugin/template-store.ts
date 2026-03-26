@@ -81,8 +81,12 @@ function normalizeCellFillStyle(value: unknown): CellFillInjectionStyle | undefi
     if (!value || typeof value !== 'object') return undefined;
     const source = value as CellFillInjectionStyle;
     const color = normalizeHexColor(source.color);
-    if (!color) return undefined;
-    return { color };
+    const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+    if (!color && visible === undefined) return undefined;
+    return {
+        color: color || undefined,
+        visible
+    };
 }
 
 function normalizeLineBackgroundStyle(value: unknown): LineBackgroundInjectionStyle | undefined {

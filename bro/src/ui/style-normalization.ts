@@ -148,8 +148,12 @@ export function normalizeCellFillStyle(value: unknown): CellFillInjectionStyle |
     if (!value || typeof value !== 'object') return null;
     const source = value as CellFillInjectionStyle;
     const color = normalizeHexColorInput(source.color);
-    if (!color) return null;
-    return { color };
+    const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+    if (!color && visible === undefined) return null;
+    return {
+        color: color || undefined,
+        visible
+    };
 }
 
 export function extractSideThickness(stroke: StrokeStyleSnapshot | null, side: 'top' | 'right' | 'bottom' | 'left'): number | undefined {
@@ -659,7 +663,14 @@ export function buildDraftFromPayload(
     state.activeMarkStyleIndex = Math.max(0, Math.min(state.activeMarkStyleIndex, resolvedMarkStyles.length - 1));
 
     return {
-        cellFill: { color: (savedCellFill?.color || extractedCellFill?.color || DEFAULT_STYLE_INJECTION_DRAFT.cellFill.color) as string },
+        cellFill: {
+            color: (savedCellFill?.color || extractedCellFill?.color || DEFAULT_STYLE_INJECTION_DRAFT.cellFill.color) as string,
+            visible: typeof savedCellFill?.visible === 'boolean'
+                ? savedCellFill.visible
+                : (typeof extractedCellFill?.visible === 'boolean'
+                    ? extractedCellFill.visible
+                    : DEFAULT_STYLE_INJECTION_DRAFT.cellFill.visible)
+        },
         lineBackground: draftItemFromLineBackgroundStyle(
             savedLineBackground || extractedLineBackground,
             DEFAULT_STYLE_INJECTION_DRAFT.lineBackground
@@ -703,7 +714,8 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
         : draft.mark;
     return {
         cellFillStyle: {
-            color: draft.cellFill.color
+            color: draft.cellFill.color,
+            visible: draft.cellFill.visible
         },
         ...(allowLineBackground ? {
             lineBackgroundStyle: {
@@ -870,7 +882,10 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
 
     return {
         draft: {
-            cellFill: { color: normalizeHexColorInput(ui.styleCellFillColorInput.value) || draft.cellFill.color },
+            cellFill: {
+                color: normalizeHexColorInput(ui.styleCellFillColorInput.value) || draft.cellFill.color,
+                visible: ui.styleCellFillVisibleInput.checked
+            },
             lineBackground: allowLineBackground
                 ? {
                     color: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.strokeColor,
@@ -948,7 +963,8 @@ export function buildLocalStyleOverridesFromDraft(draft: StyleInjectionDraft): {
                 state.rowColors
             ),
             cellFillStyle: {
-                color: draft.cellFill.color
+                color: draft.cellFill.color,
+                visible: draft.cellFill.visible
             },
             ...(allowLineBackground ? {
                 lineBackgroundStyle: {

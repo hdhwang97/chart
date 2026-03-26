@@ -207,6 +207,7 @@ export const ui = {
     get styleAssistLineStrokeStyleInput() { return byId<HTMLSelectElement>('style-assist-line-stroke-style'); },
     get styleLineBackgroundSection() { return byId<HTMLElement>('style-line-background-section'); },
     get styleLineBackgroundColorInput() { return byId<HTMLInputElement>('style-line-background-color'); },
+    get styleCellFillVisibleInput() { return byId<HTMLInputElement>('style-cell-fill-visible'); },
     get styleLineBackgroundVisibleInput() { return byId<HTMLInputElement>('style-line-background-visible'); },
     get styleMarkLineBackgroundVisibleInput() { return byId<HTMLInputElement>('style-mark-line-background-visible'); },
     get styleMarkFillColorInput() { return byId<HTMLInputElement>('style-mark-fill-color'); },

@@ -386,7 +386,8 @@ export function getStylePopoverConfigForTarget(
         return {
             title: 'Background',
             primaryLabel: 'Background (HEX)',
-            primaryInput: ui.styleCellFillColorInput
+            primaryInput: ui.styleCellFillColorInput,
+            visibleInput: ui.styleCellFillVisibleInput
         };
     }
     if (target === 'line-background') {

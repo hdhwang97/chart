@@ -99,12 +99,16 @@ export type StrokeInjectionResult = {
     };
 };
 
-function normalizeCellFillStyle(input: unknown): { color?: string } | null {
+function normalizeCellFillStyle(input: unknown): { color?: string; visible?: boolean } | null {
     if (!input || typeof input !== 'object') return null;
     const source = input as CellFillInjectionStyle;
     const color = normalizeHexColor(source.color);
-    if (!color) return null;
-    return { color };
+    const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+    if (!color && visible === undefined) return null;
+    return {
+        color: color || undefined,
+        visible
+    };
 }
 
 function normalizeLineBackgroundStyle(input: unknown): NormalizedLineBackgroundStyle | null {
@@ -416,7 +420,7 @@ function resolveCellTopStyle(payload: StrokeInjectionRuntimePayload): Normalized
     return toSideStyleFromSnapshot(payload.colStrokeStyle || null, 'top');
 }
 
-function resolveCellFillStyle(payload: StrokeInjectionRuntimePayload): { color?: string } | null {
+function resolveCellFillStyle(payload: StrokeInjectionRuntimePayload): { color?: string; visible?: boolean } | null {
     const preferred = normalizeCellFillStyle(payload.cellFillStyle);
     if (preferred) return preferred;
     return null;
@@ -644,9 +648,9 @@ function applyCellTopStroke(columns: ColumnStrokeContext[], style: NormalizedSid
     return result;
 }
 
-function applyCellFill(columns: ColumnStrokeContext[], style: { color?: string }, chartType?: string): ScopeResult {
+function applyCellFill(columns: ColumnStrokeContext[], style: { color?: string; visible?: boolean }, chartType?: string): ScopeResult {
     const result = createScopeResult();
-    if (!style.color) return result;
+    if (!style.color && typeof style.visible !== 'boolean') return result;
 
     const isLineChart = chartType === 'line';
 
@@ -655,7 +659,14 @@ function applyCellFill(columns: ColumnStrokeContext[], style: { color?: string }
             result.candidates += 1;
             if (col.tabNode) {
                 try {
-                    if (tryApplyFill(col.tabNode, style.color!)) result.applied += 1;
+                    let applied = false;
+                    if (style.color) {
+                        applied = tryApplyFill(col.tabNode, style.color) || applied;
+                    }
+                    if (typeof style.visible === 'boolean') {
+                        applied = setNodeFillVisibility(col.tabNode, style.visible) || applied;
+                    }
+                    if (applied) result.applied += 1;
                     else result.skipped += 1;
                 } catch {
                     result.errors += 1;
@@ -673,7 +684,14 @@ function applyCellFill(columns: ColumnStrokeContext[], style: { color?: string }
         col.cells.forEach(({ node }) => {
             result.candidates += 1;
             try {
-                if (tryApplyFill(node, style.color!)) result.applied += 1;
+                let applied = false;
+                if (style.color) {
+                    applied = tryApplyFill(node, style.color) || applied;
+                }
+                if (typeof style.visible === 'boolean') {
+                    applied = setNodeFillVisibility(node, style.visible) || applied;
+                }
+                if (applied) result.applied += 1;
                 else result.skipped += 1;
             } catch {
                 result.errors += 1;

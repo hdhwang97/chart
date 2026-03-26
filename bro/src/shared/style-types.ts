@@ -43,6 +43,7 @@ export type SideStrokeInjectionStyle = {
 
 export type CellFillInjectionStyle = {
     color?: string;
+    visible?: boolean;
 };
 
 export type LineBackgroundInjectionStyle = {

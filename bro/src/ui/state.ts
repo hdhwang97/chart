@@ -70,6 +70,7 @@ export type GridStyleInjectionDraftItem = StyleInjectionDraftItem & {
 export type StyleInjectionDraft = {
     cellFill: {
         color: string;
+        visible: boolean;
     };
     lineBackground: LineBackgroundStyleInjectionDraftItem;
     cellTop: StyleInjectionDraftItem;
@@ -93,7 +94,7 @@ export const DEFAULT_STYLE_INJECTION_ITEM: StyleInjectionDraftItem = {
 };
 
 export const DEFAULT_STYLE_INJECTION_DRAFT: StyleInjectionDraft = {
-    cellFill: { color: '#FFFFFF' },
+    cellFill: { color: '#FFFFFF', visible: true },
     lineBackground: { color: '#3B82F6', opacity: 1, visible: false },
     cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
     tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },
@@ -171,7 +172,7 @@ export const state = {
     localStyleOverrideMask: {} as LocalStyleOverrideMask,
     effectiveStyleSnapshot: {} as LocalStyleOverrides,
     styleInjectionDraft: {
-        cellFill: { color: '#FFFFFF' },
+        cellFill: { color: '#FFFFFF', visible: true },
         lineBackground: { color: '#3B82F6', opacity: 1, visible: false },
         cellTop: { ...DEFAULT_STYLE_INJECTION_ITEM },
         tabRight: { ...DEFAULT_STYLE_INJECTION_ITEM },

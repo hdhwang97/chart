@@ -330,8 +330,12 @@ function normalizeCellFillStyle(value: unknown): CellFillInjectionStyle | null {
     if (!value || typeof value !== 'object') return null;
     const source = value as CellFillInjectionStyle;
     const color = normalizeHexColor(source.color);
-    if (!color) return null;
-    return { color };
+    const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
+    if (!color && visible === undefined) return null;
+    return {
+        color: color || undefined,
+        visible
+    };
 }
 
 function normalizeLineBackgroundStyle(value: unknown): LineBackgroundInjectionStyle | null {
