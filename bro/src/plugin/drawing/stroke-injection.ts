@@ -617,11 +617,11 @@ function applyGridStrokeStyle(node: SceneNode, style: NormalizedGridStyle): bool
         return applied;
     }
 
-    const sideApplied =
-        setSideThickness(node, 'top', style.sides.top ? targetThickness : 0)
-        || setSideThickness(node, 'right', style.sides.right ? targetThickness : 0)
-        || setSideThickness(node, 'bottom', style.sides.bottom ? targetThickness : 0)
-        || setSideThickness(node, 'left', style.sides.left ? targetThickness : 0);
+    let sideApplied = false;
+    sideApplied = setSideThickness(node, 'top', style.sides.top ? targetThickness : 0) || sideApplied;
+    sideApplied = setSideThickness(node, 'right', style.sides.right ? targetThickness : 0) || sideApplied;
+    sideApplied = setSideThickness(node, 'bottom', style.sides.bottom ? targetThickness : 0) || sideApplied;
+    sideApplied = setSideThickness(node, 'left', style.sides.left ? targetThickness : 0) || sideApplied;
     return applied || sideApplied;
 }
 
