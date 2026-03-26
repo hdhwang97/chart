@@ -143,13 +143,10 @@
             <div class="flex items-center justify-between gap-3">
                 <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Graph Setting</h2>
                 <div id="line-feature-toggle-group" class="hidden items-center gap-1.5">
-                    <span class="text-[10px] font-semibold text-text-sub uppercase tracking-wide">Line Feature</span>
-                    <button id="line-point-toggle"
-                        class="min-w-[72px] px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
-                        type="button">line point</button>
+                    <span class="text-xxs font-semibold text-text-sub whitespace-nowrap">curve graph</span>
                     <button id="line-feature-2-toggle"
-                        class="min-w-[72px] px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
-                        type="button">기능 2</button>
+                        class="line-switch-toggle"
+                        type="button"></button>
                 </div>
             </div>
             <div id="graph-setting-panel" class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
@@ -252,12 +249,18 @@
                     <div class="flex items-center justify-between gap-3">
                         <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
                         <div class="flex items-center gap-3">
+                            <div id="line-point-toggle-container" class="hidden items-center gap-1.5">
+                                <span class="text-xxs font-semibold text-text-sub whitespace-nowrap">line point</span>
+                                <button id="line-point-toggle"
+                                    class="line-switch-toggle"
+                                    type="button"></button>
+                            </div>
                             <div id="y-label-format-control" class="flex items-center gap-1.5">
                                 <span id="y-label-format-label"
                                     class="text-xxs font-semibold text-text-sub whitespace-nowrap">소수점 표시</span>
                                 <button id="y-label-format-toggle"
-                                    class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
-                                    type="button">OFF</button>
+                                    class="line-switch-toggle"
+                                    type="button"></button>
                                 <select id="setting-y-label-format" class="hidden" aria-hidden="true" tabindex="-1">
                                     <option value="integer" selected>Integer</option>
                                     <option value="decimal">Decimal</option>
@@ -268,8 +271,8 @@
                                     class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2"
                                     type="button">축 표시</button>
                                 <button id="preview-axis-toggle"
-                                    class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer"
-                                    type="button">ON</button>
+                                    class="line-switch-toggle"
+                                    type="button"></button>
                                 <div id="preview-axis-popover"
                                     class="hidden absolute top-6 right-0 z-30 w-24 rounded border border-border bg-white shadow-md p-2">
                                     <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
@@ -287,8 +290,8 @@
                                     class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2"
                                     type="button">guide line</button>
                                 <button id="preview-assist-line-toggle"
-                                    class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
-                                    type="button">OFF</button>
+                                    class="line-switch-toggle"
+                                    type="button"></button>
                                 <div id="preview-assist-line-popover"
                                     class="hidden absolute top-6 right-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">
                                     <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
@@ -428,8 +431,8 @@
                         class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2"
                         type="button">guide line</button>
                     <button id="style-assist-line-toggle"
-                        class="w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer"
-                        type="button">OFF</button>
+                        class="line-switch-toggle"
+                        type="button"></button>
                     <div id="style-assist-line-popover"
                         class="hidden absolute top-6 right-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">
                         <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">

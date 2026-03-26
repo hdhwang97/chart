@@ -61,8 +61,7 @@ let rowColorDraftHex: string | null = null;
 let rowColorDraftMode: ColorMode | null = null;
 let rowColorDraftStyleId: string | null = null;
 let rowColorDraftColReset = false;
-const inactiveToggleClass = 'min-w-[72px] px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
-const activeToggleClass = 'min-w-[72px] px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer';
+const lineSwitchToggleClass = 'line-switch-toggle';
 
 function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
@@ -767,22 +766,24 @@ function closeAllAssistLinePopovers() {
     closeStyleAssistLinePopover();
 }
 
+function syncSwitchButtonUi(button: HTMLButtonElement, enabled: boolean, label: string) {
+    button.className = lineSwitchToggleClass;
+    button.textContent = '';
+    button.dataset.checked = enabled ? 'true' : 'false';
+    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    button.title = `${label} ${enabled ? '활성화' : '비활성화'}`;
+}
+
 function updateYLabelFormatUi() {
     const current = normalizeYLabelFormatMode(state.yLabelFormat);
     const isDecimal = current === 'decimal';
     ui.settingYLabelFormat.value = current;
-    ui.yLabelFormatToggleBtn.textContent = isDecimal ? 'ON' : 'OFF';
-    ui.yLabelFormatToggleBtn.className = isDecimal
-        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
-        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+    syncSwitchButtonUi(ui.yLabelFormatToggleBtn, isDecimal, '소수점 표시');
 }
 
 function updateAxisVisibilityUi() {
     const axisVisible = state.xAxisLabelsVisible || state.yAxisVisible;
-    ui.previewAxisToggleBtn.textContent = axisVisible ? 'ON' : 'OFF';
-    ui.previewAxisToggleBtn.className = axisVisible
-        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
-        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+    syncSwitchButtonUi(ui.previewAxisToggleBtn, axisVisible, '축 표시');
     ui.previewAxisXCheck.checked = state.xAxisLabelsVisible;
     ui.previewAxisYCheck.checked = state.yAxisVisible;
 }
@@ -821,10 +822,6 @@ function setAxisVisible(next: boolean) {
 }
 
 function updateAssistLineToggleUi() {
-    const toggleClass = state.assistLineVisible
-        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
-        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
-    const toggleLabel = state.assistLineVisible ? 'ON' : 'OFF';
     const syncAssistLineControl = (
         toggleBtn: HTMLButtonElement,
         minCheck: HTMLInputElement,
@@ -832,8 +829,7 @@ function updateAssistLineToggleUi() {
         avgCheck: HTMLInputElement,
         ctrCheck: HTMLInputElement
     ) => {
-        toggleBtn.textContent = toggleLabel;
-        toggleBtn.className = toggleClass;
+        syncSwitchButtonUi(toggleBtn, state.assistLineVisible, 'guide line');
         minCheck.checked = state.assistLineEnabled.min;
         maxCheck.checked = state.assistLineEnabled.max;
         avgCheck.checked = state.assistLineEnabled.avg;
@@ -861,16 +857,11 @@ function updateLineFeatureToggleUi() {
     const isLineChart = state.chartType === 'line';
     ui.lineFeatureToggleGroup.classList.toggle('hidden', !isLineChart);
     ui.lineFeatureToggleGroup.classList.toggle('flex', isLineChart);
+    ui.linePointToggleContainer.classList.toggle('hidden', !isLineChart);
+    ui.linePointToggleContainer.classList.toggle('flex', isLineChart);
 
-    const syncButton = (button: HTMLButtonElement, enabled: boolean, label: string) => {
-        button.textContent = label;
-        button.className = enabled ? activeToggleClass : inactiveToggleClass;
-        button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-        button.title = `${label} ${enabled ? '활성화' : '비활성화'}`;
-    };
-
-    syncButton(ui.linePointToggleBtn, state.linePointVisible, 'line point');
-    syncButton(ui.lineFeature2ToggleBtn, state.lineFeature2Enabled, '기능 2');
+    syncSwitchButtonUi(ui.linePointToggleBtn, state.linePointVisible, 'line point');
+    syncSwitchButtonUi(ui.lineFeature2ToggleBtn, state.lineFeature2Enabled, 'curve graph');
     syncMarkStyleCardVisibility();
 }
 

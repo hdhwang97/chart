@@ -33,6 +33,7 @@ export const ui = {
     get settingMarkSelect() { return byId<HTMLSelectElement>('setting-mark-select'); },
     get graphSettingPanel() { return byId<HTMLElement>('graph-setting-panel'); },
     get lineFeatureToggleGroup() { return byId<HTMLElement>('line-feature-toggle-group'); },
+    get linePointToggleContainer() { return byId<HTMLElement>('line-point-toggle-container'); },
     get linePointToggleBtn() { return byId<HTMLButtonElement>('line-point-toggle'); },
     get lineFeature2ToggleBtn() { return byId<HTMLButtonElement>('line-feature-2-toggle'); },
     get graphSettingTooltip() { return byId<HTMLElement>('graph-setting-tooltip'); },

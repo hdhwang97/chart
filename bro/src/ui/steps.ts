@@ -133,11 +133,15 @@ export function selectType(type: string) {
         ui.spacerStroke.classList.add('hidden');
         ui.lineFeatureToggleGroup.classList.remove('hidden');
         ui.lineFeatureToggleGroup.classList.add('flex');
+        ui.linePointToggleContainer.classList.remove('hidden');
+        ui.linePointToggleContainer.classList.add('flex');
     } else {
         ui.containerStrokeWidth.classList.add('hidden');
         ui.spacerStroke.classList.remove('hidden');
         ui.lineFeatureToggleGroup.classList.add('hidden');
         ui.lineFeatureToggleGroup.classList.remove('flex');
+        ui.linePointToggleContainer.classList.add('hidden');
+        ui.linePointToggleContainer.classList.remove('flex');
     }
 
     const totalCols = type === 'stackedBar' ? getTotalStackedCols() : getGridColsForChart(type, state.cols);
@@ -182,19 +186,21 @@ export function resetData() {
 }
 
 export function updateSettingInputs() {
+    const syncSwitchButton = (button: HTMLButtonElement, enabled: boolean, label: string) => {
+        button.className = 'line-switch-toggle';
+        button.textContent = '';
+        button.dataset.checked = enabled ? 'true' : 'false';
+        button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        button.title = `${label} ${enabled ? '활성화' : '비활성화'}`;
+    };
+
     ui.settingColInput.value = String(state.cols);
     ui.settingCellInput.value = String(state.cellCount);
     ui.settingStrokeInput.value = String(state.strokeWidth);
     ui.settingYLabelFormat.value = state.yLabelFormat;
-    ui.yLabelFormatToggleBtn.textContent = state.yLabelFormat === 'decimal' ? 'ON' : 'OFF';
-    ui.yLabelFormatToggleBtn.className = state.yLabelFormat === 'decimal'
-        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
-        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+    syncSwitchButton(ui.yLabelFormatToggleBtn, state.yLabelFormat === 'decimal', '소수점 표시');
     const axisVisible = state.xAxisLabelsVisible || state.yAxisVisible;
-    ui.previewAxisToggleBtn.textContent = axisVisible ? 'ON' : 'OFF';
-    ui.previewAxisToggleBtn.className = axisVisible
-        ? 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded bg-white text-primary shadow-sm transition-all border border-border cursor-pointer'
-        : 'w-10 px-2 py-0.5 text-center text-xxs font-semibold rounded text-text-sub hover:text-text transition-all border border-border bg-surface cursor-pointer';
+    syncSwitchButton(ui.previewAxisToggleBtn, axisVisible, '축 표시');
     ui.previewAxisXCheck.checked = state.xAxisLabelsVisible;
     ui.previewAxisYCheck.checked = state.yAxisVisible;
     state.markRatio = normalizeMarkRatio(state.markRatio);
