@@ -410,17 +410,52 @@ function buildDataCell(
             updateStackedDerivedUi();
         }
 
-        if (ke.key === 'Tab' || ke.key === 'Enter') {
+        if (ke.shiftKey && (ke.key === 'ArrowUp' || ke.key === 'ArrowDown')) {
+            const rowOffset = ke.key === 'ArrowUp' ? -1 : 1;
+            const nextR = r + rowOffset;
+            if (nextR < 0 || nextR >= state.rows) return;
             e.preventDefault();
-            const nextC = c + 1;
-            const nextR = r + 1;
-            if (ke.key === 'Tab' && nextC < totalCols) {
-                const next = grid.querySelector(`input[data-r="${r}"][data-c="${nextC}"]`) as HTMLInputElement;
-                next?.focus();
-            } else if (ke.key === 'Enter' && nextR < state.rows) {
-                const next = grid.querySelector(`input[data-r="${nextR}"][data-c="${c}"]`) as HTMLInputElement;
-                next?.focus();
+            const next = grid.querySelector(`input[data-r="${nextR}"][data-c="${c}"]`) as HTMLInputElement | null;
+            next?.focus();
+            return;
+        }
+
+        const isTabLikeForward = (ke.key === 'Tab' && !ke.shiftKey) || (ke.shiftKey && ke.key === 'ArrowRight');
+        const isTabLikeBackward = (ke.key === 'Tab' && ke.shiftKey) || (ke.shiftKey && ke.key === 'ArrowLeft');
+        if (isTabLikeForward || isTabLikeBackward) {
+            let nextR = r;
+            let nextC = c;
+
+            if (isTabLikeBackward) {
+                if (c > 0) {
+                    nextC = c - 1;
+                } else if (r > 0) {
+                    nextR = r - 1;
+                    nextC = totalCols - 1;
+                } else {
+                    return;
+                }
+            } else if (c + 1 < totalCols) {
+                nextC = c + 1;
+            } else if (r + 1 < state.rows) {
+                nextR = r + 1;
+                nextC = 0;
+            } else {
+                return;
             }
+
+            e.preventDefault();
+            const next = grid.querySelector(`input[data-r="${nextR}"][data-c="${nextC}"]`) as HTMLInputElement | null;
+            next?.focus();
+            return;
+        }
+
+        if (ke.key === 'Enter') {
+            const nextR = r + 1;
+            if (nextR >= state.rows) return;
+            e.preventDefault();
+            const next = grid.querySelector(`input[data-r="${nextR}"][data-c="${c}"]`) as HTMLInputElement | null;
+            next?.focus();
         }
     });
 

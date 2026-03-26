@@ -112,6 +112,11 @@ function setDirectionVariant(target: SceneNode, direction: string): boolean {
     }
 }
 
+function isPointLikeNode(node: SceneNode): boolean {
+    const lower = node.name.toLowerCase();
+    return node.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+}
+
 function readBooleanComponentProperty(node: SceneNode, key: string): boolean | null {
     if (node.type !== 'INSTANCE') return null;
     const propKey = getComponentPropKey(node, key);
@@ -190,8 +195,9 @@ function resolveLineSegmentTargets(lineRoot: SceneNode): SceneNode[] {
     searchRoots.forEach((root) => {
         traverse(root, (node) => {
             if (!node.visible) return;
+            if (isPointLikeNode(node)) return;
             if (!('strokes' in node)) return;
-            if (node.type === 'VECTOR' || node.type === 'LINE' || node.type === 'POLYGON' || node.type === 'ELLIPSE' || node.type === 'RECTANGLE') {
+            if (node.type === 'VECTOR' || node.type === 'LINE' || node.type === 'POLYGON' || node.type === 'RECTANGLE') {
                 targets.push(node);
             }
         });
@@ -289,9 +295,7 @@ function applyLinePointColors(
     if (!style.strokeColor && !style.fillColor) return;
     traverse(targetNode, (child) => {
         if (child.id === targetNode.id || !child.visible) return;
-        const lower = child.name.toLowerCase();
-        const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
-        if (!isPointLike) return;
+        if (!isPointLikeNode(child)) return;
         if (style.fillColor) tryApplyFill(child, style.fillColor);
         if (style.strokeColor) tryApplyStroke(child, style.strokeColor);
         applyStrokeThickness(child, style.thickness);

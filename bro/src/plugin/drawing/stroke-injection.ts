@@ -884,7 +884,7 @@ function applyLineBundleStylesForColumn(
 
         applyLineSeriesStrokeTargets(entry.strokeTargets, style, skipStrokeColorForSeries, rowStyleId, result);
         applyLinePointTargets(entry.pointTargets, style, skipStrokeColorForSeries, result);
-        setLineSeriesStrokeVisibility([...entry.strokeTargets, ...entry.pointTargets], !entry.isFlat);
+        setLineSeriesStrokeVisibility(entry.strokeTargets, !entry.isFlat);
         if (!entry.isFlat) return;
 
         result.candidates += 1;
