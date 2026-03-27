@@ -467,6 +467,10 @@ export function saveChartData(
         String(normalizeXAxisLabelsVisible(msg.xAxisLabelsVisible))
     );
     node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_BAR_LABEL_VISIBLE,
+        String(msg.barLabelVisible !== false)
+    );
+    node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE,
         String(normalizeYAxisVisible(msg.yAxisVisible))
     );

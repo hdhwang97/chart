@@ -141,6 +141,7 @@ export const state = {
     strokeWidth: 2,
     markRatio: 0.8,
     xAxisLabelsVisible: true,
+    barLabelVisible: true,
     yAxisVisible: true,
     linePointVisible: true,
     lineFeature2Enabled: false,

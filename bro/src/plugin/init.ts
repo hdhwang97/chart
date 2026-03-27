@@ -92,6 +92,12 @@ function resolveXAxisLabelsVisibleFromNode(node: SceneNode) {
     return raw !== 'false';
 }
 
+function resolveBarLabelVisibleFromNode(node: SceneNode) {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_BAR_LABEL_VISIBLE);
+    if (!raw) return true;
+    return raw !== 'false';
+}
+
 function resolveYAxisVisibleFromNode(node: SceneNode) {
     const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE);
     if (!raw) return true;
@@ -466,6 +472,7 @@ export async function syncChartOnResize(
         const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
         const assistLineVisible = resolveAssistLineVisibleFromNode(node);
         const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
+        const barLabelVisible = resolveBarLabelVisibleFromNode(node);
         const yAxisVisible = resolveYAxisVisibleFromNode(node);
         const linePointVisible = resolveLinePointVisibleFromNode(node);
         const lineFeature2Enabled = resolveLineFeature2EnabledFromNode(node);
@@ -487,6 +494,7 @@ export async function syncChartOnResize(
         const savedMarkStyles = parseSavedMarkStylesFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLES);
         const runtimeMarkStyle = localOverrideState.mask.markStyle ? localOverrideState.overrides.markStyle : undefined;
         const runtimeMarkStyles = localOverrideState.mask.markStyles ? localOverrideState.overrides.markStyles : undefined;
+        const savedRowHeaderLabels = parseSavedRowHeaderLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS);
         const rowCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
         const colCount = chartType === 'stackedBar' || chartType === 'stacked'
             ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((acc, cur) => acc + (Number(cur) || 0), 0) : 0)
@@ -496,6 +504,7 @@ export async function syncChartOnResize(
             mode,
             values: valuesToUse,
             rawValues: chartData.values,
+            rowHeaderLabels: Array.isArray(savedRowHeaderLabels) ? savedRowHeaderLabels : [],
             cols: 0,
             cellCount: chartData.cellCount,
             yMin: effectiveY.yMin,
@@ -507,6 +516,7 @@ export async function syncChartOnResize(
                 ? resolveMarkRatioFromNode(node)
                 : undefined,
             xAxisLabelsVisible,
+            barLabelVisible,
             yAxisVisible,
             linePointVisible,
             lineFeature2Enabled,
@@ -651,6 +661,7 @@ export async function initPluginUI(
     const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
     const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
+    const barLabelVisible = resolveBarLabelVisibleFromNode(node);
     const yAxisVisible = resolveYAxisVisibleFromNode(node);
     const linePointVisible = resolveLinePointVisibleFromNode(node, cols);
     const lineFeature2Enabled = resolveLineFeature2EnabledFromNode(node, cols);
@@ -778,6 +789,7 @@ export async function initPluginUI(
         lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
         markRatio,
         xAxisLabelsVisible,
+        barLabelVisible,
         yAxisVisible,
         linePointVisible,
         lineFeature2Enabled,

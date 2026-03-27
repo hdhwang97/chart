@@ -821,6 +821,14 @@ function setAxisVisible(next: boolean) {
     refreshExportPreview();
 }
 
+function setBarLabelVisible(next: boolean) {
+    state.barLabelVisible = Boolean(next);
+    updateBarLabelToggleUi();
+    renderPreview();
+    renderStylePreview();
+    refreshExportPreview();
+}
+
 function updateAssistLineToggleUi() {
     const syncAssistLineControl = (
         toggleBtn: HTMLButtonElement,
@@ -869,6 +877,13 @@ function updateLineFeatureToggleUi() {
     syncSwitchButtonUi(ui.previewCurveModeToggleBtn, state.lineFeature2Enabled, 'curve graph');
     syncSwitchButtonUi(ui.styleCurveModeToggleBtn, state.lineFeature2Enabled, 'curve graph');
     syncMarkStyleCardVisibility();
+}
+
+function updateBarLabelToggleUi() {
+    const isBarChart = state.chartType === 'bar';
+    ui.previewBarLabelControl.classList.toggle('hidden', !isBarChart);
+    ui.previewBarLabelControl.classList.toggle('flex', isBarChart);
+    syncSwitchButtonUi(ui.previewBarLabelToggleBtn, state.barLabelVisible, 'bar label');
 }
 
 function renderStylePreview() {
@@ -996,6 +1011,7 @@ function handlePluginMessage(msg: any) {
             state.assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
             state.yLabelFormat = 'integer';
             state.xAxisLabelsVisible = true;
+            state.barLabelVisible = true;
             state.yAxisVisible = true;
             ui.settingMarkRatioInput.value = '80';
             ui.settingYMin.value = '0';
@@ -1006,6 +1022,7 @@ function handlePluginMessage(msg: any) {
             closeRowColorPopover();
             updateAssistLineToggleUi();
             updateLineFeatureToggleUi();
+            updateBarLabelToggleUi();
             state.colStrokeStyle = null;
             state.cellStrokeStyles = [];
             state.rowStrokeStyles = [];
@@ -1050,6 +1067,7 @@ function handlePluginMessage(msg: any) {
         ui.chartTypeIcon.innerHTML = CHART_ICONS[msg.chartType] || '';
         ui.chartTypeDisplay.textContent = msg.chartType === 'stackedBar' ? 'Stacked' : msg.chartType;
         updateLineFeatureToggleUi();
+        updateBarLabelToggleUi();
 
         // Edit mode button
         if (msg.uiMode === 'edit') {
@@ -1150,6 +1168,7 @@ function handlePluginMessage(msg: any) {
         if (msg.lastMode) state.dataMode = msg.lastMode as 'raw' | 'percent';
         state.yLabelFormat = normalizeYLabelFormatMode(msg.lastYLabelFormat);
         state.xAxisLabelsVisible = msg.xAxisLabelsVisible !== false;
+        state.barLabelVisible = msg.barLabelVisible !== false;
         state.yAxisVisible = msg.yAxisVisible !== false;
         ui.settingYMin.value = msg.lastYMin !== undefined ? String(msg.lastYMin) : '0';
         ui.settingYMax.value = msg.lastYMax !== undefined ? String(msg.lastYMax) : ((msg.lastMode || 'raw') === 'raw' ? '' : '100');
@@ -1168,6 +1187,7 @@ function handlePluginMessage(msg: any) {
         closeAllAssistLinePopovers();
         updateAssistLineToggleUi();
         updateLineFeatureToggleUi();
+        updateBarLabelToggleUi();
         state.colStrokeStyle = msg.colStrokeStyle || null;
         state.cellStrokeStyles = msg.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.rowStrokeStyles || [];
@@ -1318,6 +1338,10 @@ function handlePluginMessage(msg: any) {
                 state.xAxisLabelsVisible = Boolean(msg.payload.xAxisLabelsVisible);
                 updateAxisVisibilityUi();
             }
+            if (msg.payload.barLabelVisible !== undefined) {
+                state.barLabelVisible = Boolean(msg.payload.barLabelVisible);
+                updateBarLabelToggleUi();
+            }
             if (msg.payload.yAxisVisible !== undefined) {
                 state.yAxisVisible = Boolean(msg.payload.yAxisVisible);
                 updateAxisVisibilityUi();
@@ -1427,8 +1451,12 @@ function handlePluginMessage(msg: any) {
         if (msg.payload?.lineFeature2Enabled !== undefined) {
             state.lineFeature2Enabled = msg.payload.lineFeature2Enabled === true;
         }
+        if (msg.payload?.barLabelVisible !== undefined) {
+            state.barLabelVisible = Boolean(msg.payload.barLabelVisible);
+        }
         updateAssistLineToggleUi();
         updateLineFeatureToggleUi();
+        updateBarLabelToggleUi();
         ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
         state.colStrokeStyle = msg.payload?.colStrokeStyle || null;
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
@@ -1520,6 +1548,9 @@ function bindUiEvents() {
     });
     ui.previewAxisToggleBtn.addEventListener('click', () => {
         setAxisVisible(!(state.xAxisLabelsVisible || state.yAxisVisible));
+    });
+    ui.previewBarLabelToggleBtn.addEventListener('click', () => {
+        setBarLabelVisible(!state.barLabelVisible);
     });
     ui.previewAxisXCheck.addEventListener('change', () => {
         setXAxisLabelsVisible(ui.previewAxisXCheck.checked);
@@ -1747,6 +1778,10 @@ function bindUiEvents() {
         renderStylePreview();
         refreshExportPreview();
     });
+    document.addEventListener('line-feature-state-updated', () => {
+        updateLineFeatureToggleUi();
+        updateBarLabelToggleUi();
+    });
 
     // Y axis inputs
     ui.settingYMin.addEventListener('change', () => {
@@ -1858,6 +1893,7 @@ function initializeUi() {
     initGraphSettingTooltip();
     updateAssistLineToggleUi();
     updateLineFeatureToggleUi();
+    updateBarLabelToggleUi();
     requestPaintStyleList();
     setDataTabRenderer(() => {
         renderGrid();

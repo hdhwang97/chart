@@ -188,6 +188,12 @@ function normalizeFlatPayload(value: unknown): StyleTemplatePayload | null {
     const payload: StyleTemplatePayload = {};
 
     const rowColors = normalizeColorArray((source as any).rowColors);
+    const linePointVisible = typeof (source as any).linePointVisible === 'boolean'
+        ? Boolean((source as any).linePointVisible)
+        : undefined;
+    const lineFeature2Enabled = typeof (source as any).lineFeature2Enabled === 'boolean'
+        ? Boolean((source as any).lineFeature2Enabled)
+        : undefined;
     const rowColorModes = normalizeColorModeArray((source as any).rowColorModes);
     const rowPaintStyleIds = normalizeStyleIdArray((source as any).rowPaintStyleIds);
     const cellFillStyle = normalizeCellFillStyle(source.cellFillStyle);
@@ -204,6 +210,8 @@ function normalizeFlatPayload(value: unknown): StyleTemplatePayload | null {
     const colPaintStyleIds = normalizeStyleIdArray((source as any).colPaintStyleIds);
 
     if (rowColors) payload.rowColors = rowColors;
+    if (linePointVisible !== undefined) payload.linePointVisible = linePointVisible;
+    if (lineFeature2Enabled !== undefined) payload.lineFeature2Enabled = lineFeature2Enabled;
     if (rowColorModes) payload.rowColorModes = rowColorModes;
     if (rowPaintStyleIds) payload.rowPaintStyleIds = rowPaintStyleIds;
     if (cellFillStyle) payload.cellFillStyle = cellFillStyle;
@@ -254,6 +262,8 @@ function pickChartPayload(flat: StyleTemplatePayload, chartType: StyleTemplateCh
     }
     if (chartType === 'line') {
         if (flat.lineBackgroundStyle) scoped.lineBackgroundStyle = flat.lineBackgroundStyle;
+        if (typeof flat.linePointVisible === 'boolean') scoped.linePointVisible = flat.linePointVisible;
+        if (typeof flat.lineFeature2Enabled === 'boolean') scoped.lineFeature2Enabled = flat.lineFeature2Enabled;
     }
     return scoped;
 }

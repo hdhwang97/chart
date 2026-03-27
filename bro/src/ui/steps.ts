@@ -164,6 +164,7 @@ export function selectType(type: string) {
 
     updateModeButtonState();
     goToStep(2);
+    document.dispatchEvent(new CustomEvent('line-feature-state-updated'));
     parent.postMessage({ pluginMessage: { type: 'load_style_templates', chartType: state.chartType } }, '*');
 }
 
@@ -203,6 +204,10 @@ export function updateSettingInputs() {
     syncSwitchButton(ui.previewAxisToggleBtn, axisVisible, '축 표시');
     ui.previewAxisXCheck.checked = state.xAxisLabelsVisible;
     ui.previewAxisYCheck.checked = state.yAxisVisible;
+    const isBarChart = state.chartType === 'bar';
+    ui.previewBarLabelControl.classList.toggle('hidden', !isBarChart);
+    ui.previewBarLabelControl.classList.toggle('flex', isBarChart);
+    syncSwitchButton(ui.previewBarLabelToggleBtn, state.barLabelVisible, 'bar label');
     state.markRatio = normalizeMarkRatio(state.markRatio);
     ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
     ui.containerMarkNormal.classList.remove('hidden');
@@ -289,6 +294,7 @@ export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
         rawValues: rawValues,
         xAxisLabels: collectGridHeaderLabels(),
         xAxisLabelsVisible: state.xAxisLabelsVisible,
+        barLabelVisible: state.chartType === 'bar' ? state.barLabelVisible : false,
         yAxisVisible: state.yAxisVisible,
         cols: state.cols,
         rows: state.rows,

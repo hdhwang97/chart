@@ -120,6 +120,7 @@ export function applyModeLocks() {
         ui.modePercentBtn,
         ui.previewAssistLineLabelBtn,
         ui.previewAssistLineToggleBtn,
+        ui.previewBarLabelToggleBtn,
         ui.previewAssistLineMinCheck,
         ui.previewAssistLineMaxCheck,
         ui.previewAssistLineAvgCheck,

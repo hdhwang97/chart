@@ -804,7 +804,11 @@ export function toStrokeInjectionPayload(draft: StyleInjectionDraft): StrokeInje
 }
 
 export function buildTemplatePayloadFromDraft(draft: StyleInjectionDraft): StyleTemplatePayload {
-    return toStrokeInjectionPayload(draft);
+    return {
+        ...toStrokeInjectionPayload(draft),
+        linePointVisible: state.linePointVisible,
+        lineFeature2Enabled: state.lineFeature2Enabled
+    };
 }
 
 export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: StyleInjectionDraft; isValid: boolean } {

@@ -57,6 +57,8 @@ export const ui = {
     get previewAxisPopover() { return byId<HTMLElement>('preview-axis-popover'); },
     get previewAxisXCheck() { return byId<HTMLInputElement>('preview-axis-x-check'); },
     get previewAxisYCheck() { return byId<HTMLInputElement>('preview-axis-y-check'); },
+    get previewBarLabelControl() { return byId<HTMLElement>('preview-bar-label-control'); },
+    get previewBarLabelToggleBtn() { return byId<HTMLButtonElement>('preview-bar-label-toggle'); },
     get settingMarkRatioInput() { return byId<HTMLSelectElement>('setting-mark-ratio-input'); },
 
     get settingStrokeInput() { return byId<HTMLInputElement>('setting-stroke-input'); },

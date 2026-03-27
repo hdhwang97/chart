@@ -248,6 +248,12 @@ function resolveStrokeWidthForUi(node: SceneNode, requestedStrokeWidth?: unknown
     return 2;
 }
 
+function resolveBarLabelVisibleFromNode(node: SceneNode): boolean {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_BAR_LABEL_VISIBLE);
+    if (!raw) return true;
+    return raw !== 'false';
+}
+
 function isRecognizedChartSelection(node: SceneNode) {
     const savedChartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE);
     const columnCount = collectColumns(node).length;
@@ -655,6 +661,7 @@ figma.ui.onmessage = async (msg) => {
             markStyles,
             xAxisLabels,
             xAxisLabelsVisible,
+            barLabelVisible,
             yAxisVisible,
             cellFillStyle,
             lineBackgroundStyle,
@@ -884,6 +891,7 @@ figma.ui.onmessage = async (msg) => {
             mode: drawMode,
             markNum,
             rows,
+            rowHeaderLabels: Array.isArray(rowHeaderLabels) ? rowHeaderLabels : [],
             yMin: effectiveY.yMin,
             yMax: effectiveY.yMax,
             rawYMaxAuto: effectiveY.rawYMaxAuto,
@@ -897,6 +905,11 @@ figma.ui.onmessage = async (msg) => {
             colPaintStyleIds: drawColPaintStyleIds,
             colColorEnabled: drawColColorEnabled,
             markColorSource: drawMarkColorSource,
+            barLabelVisible: type === 'bar'
+                ? (typeof barLabelVisible === 'boolean'
+                    ? barLabelVisible
+                    : resolveBarLabelVisibleFromNode(targetNode))
+                : false,
             linePointVisible: linePointVisible !== false,
             lineFeature2Enabled: lineFeature2Enabled === true,
             assistLineVisible,
@@ -1147,6 +1160,11 @@ figma.ui.onmessage = async (msg) => {
             linePointVisible: linePointVisible !== false,
             lineFeature2Enabled: lineFeature2Enabled === true,
             xAxisLabelsVisible: xAxisLabelsVisible !== false,
+            barLabelVisible: type === 'bar'
+                ? (typeof barLabelVisible === 'boolean'
+                    ? barLabelVisible
+                    : resolveBarLabelVisibleFromNode(targetNode))
+                : false,
             yAxisVisible: yAxisVisible !== false,
             cornerRadius: cornerRadiusForUi,
             strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
@@ -1352,6 +1370,7 @@ figma.ui.onmessage = async (msg) => {
             : (isInstanceTarget ? extractedMarkColorSource : (node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row'));
         const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
         const xAxisLabelsVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS_VISIBLE) !== 'false';
+        const barLabelVisible = resolveBarLabelVisibleFromNode(node);
         const yAxisVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE) !== 'false';
         const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
         let assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
@@ -1386,6 +1405,7 @@ figma.ui.onmessage = async (msg) => {
             colColorEnabled: colColorEnabledForUi,
             markColorSource,
             xAxisLabelsVisible,
+            barLabelVisible,
             yAxisVisible,
             assistLineVisible,
             assistLineEnabled,

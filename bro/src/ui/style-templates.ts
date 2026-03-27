@@ -262,6 +262,21 @@ function renderTemplateThumbnail(item: StyleTemplateItem, markChips: ColorChipDe
 
 export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
     const resolvedPayload = resolveTemplatePayload(template);
+    const linePointVisibleFromTemplate = typeof resolvedPayload.linePointVisible === 'boolean'
+        ? resolvedPayload.linePointVisible
+        : null;
+    const lineFeature2EnabledFromTemplate = typeof resolvedPayload.lineFeature2Enabled === 'boolean'
+        ? resolvedPayload.lineFeature2Enabled
+        : null;
+    const hasLineFeatureOverride = linePointVisibleFromTemplate !== null || lineFeature2EnabledFromTemplate !== null;
+    const previousLinePointVisible = state.linePointVisible;
+    const previousLineFeature2Enabled = state.lineFeature2Enabled;
+    if (linePointVisibleFromTemplate !== null) {
+        state.linePointVisible = linePointVisibleFromTemplate;
+    }
+    if (lineFeature2EnabledFromTemplate !== null) {
+        state.lineFeature2Enabled = lineFeature2EnabledFromTemplate;
+    }
     const nextDraft = buildDraftFromPayload(toSavedStylePayload(resolvedPayload), {});
     setStyleInjectionDraft(nextDraft);
     hydrateStyleTab(nextDraft);
@@ -327,6 +342,12 @@ export function applyTemplateToDraft(template: StyleTemplateItem): boolean {
         setLocalStyleOverrideField('colPaintStyleIds', ensureColHeaderPaintStyleIdsLength(totalCols).slice());
         setLocalStyleOverrideField('colColorEnabled', ensureColHeaderColorEnabledLength(totalCols).slice());
         recomputeEffectiveStyleSnapshot();
+    }
+    if (hasLineFeatureOverride && (
+        previousLinePointVisible !== state.linePointVisible
+        || previousLineFeature2Enabled !== state.lineFeature2Enabled
+    )) {
+        document.dispatchEvent(new CustomEvent('line-feature-state-updated'));
     }
     markStyleInjectionDirty();
     state.selectedStyleTemplateId = template.id;

@@ -1,6 +1,6 @@
 import { MARK_NAME_PATTERNS, VARIANT_PROPERTY_MARK_NUM, PLUGIN_DATA_KEYS } from '../constants';
 import { collectColumns, setVariantProperty } from './shared';
-import { normalizeHexColor, tryApplyFill, tryApplyFillStyleLink, tryApplyStroke, tryApplyStrokeStyleLink, traverse } from '../utils';
+import { findActualPropKey, normalizeHexColor, tryApplyFill, tryApplyFillStyleLink, tryApplyStroke, tryApplyStrokeStyleLink, traverse } from '../utils';
 import { debugLog } from '../log';
 
 // ==========================================
@@ -130,6 +130,84 @@ function findBarLayerByIndex(layerPool: ReadonlyArray<SceneNode>, index: number)
     return found ? (found as SceneNode & LayoutMixin) : null;
 }
 
+function normalizeRowLabel(raw: unknown, index: number): string {
+    const label = typeof raw === 'string' ? raw.trim() : '';
+    return label || `R${index + 1}`;
+}
+
+function resolveBarLabelVisible(config: any): boolean {
+    return config?.barLabelVisible !== false;
+}
+
+function findBarLabelPropKey(props: InstanceNode['componentProperties']): string | null {
+    return findActualPropKey(props, 'bar_label')
+        || findActualPropKey(props, 'bar-label')
+        || findActualPropKey(props, 'barLabel')
+        || findActualPropKey(props, 'Bar_label')
+        || findActualPropKey(props, 'BarLabel');
+}
+
+function setBarLabelVisibility(barInst: InstanceNode, visible: boolean): boolean {
+    try {
+        const props = barInst.componentProperties;
+        const propKey = findBarLabelPropKey(props);
+        if (propKey) {
+            if (props[propKey]?.value !== visible) {
+                barInst.setProperties({ [propKey]: visible });
+                return true;
+            }
+            return false;
+        }
+    } catch {
+        // fall back to direct layer visibility
+    }
+
+    let changed = false;
+    traverse(barInst, (node) => {
+        if (node.id === barInst.id) return;
+        if (node.name !== 'bar_label_comp') return;
+        try {
+            if (node.visible !== visible) {
+                node.visible = visible;
+                changed = true;
+            }
+        } catch {
+            // ignore non-overridable nodes
+        }
+    });
+    return changed;
+}
+
+function findBarLabelTextPropKey(props: InstanceNode['componentProperties']): string | null {
+    return findActualPropKey(props, 'bar_label_txt')
+        || findActualPropKey(props, 'bar-label-txt')
+        || findActualPropKey(props, 'barLabelTxt')
+        || findActualPropKey(props, 'bar_label_text')
+        || findActualPropKey(props, 'barLabelText');
+}
+
+function applyBarLabelText(barLayer: SceneNode, label: string): boolean {
+    let changed = false;
+
+    traverse(barLayer, (node) => {
+        if (node.type !== 'INSTANCE') return;
+        if (node.name !== 'bar_label_comp') return;
+        try {
+            const props = node.componentProperties;
+            const propKey = findBarLabelTextPropKey(props);
+            if (!propKey) return;
+            if (props[propKey]?.value !== label) {
+                node.setProperties({ [propKey]: label });
+                changed = true;
+            }
+        } catch {
+            // skip if property is not writable on this variant
+        }
+    });
+
+    return changed;
+}
+
 function getBarColor(config: any, rowIndex: number, colIndex: number) {
     const colEnabled = Array.isArray(config?.colColorEnabled)
         ? Boolean(config.colColorEnabled[colIndex])
@@ -191,6 +269,8 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
     const { values, mode, markNum, reason, markRatio } = config;
     const cols = collectColumns(graph);
     if (!Array.isArray(values) || values.length === 0 || !Array.isArray(values[0])) return;
+    const rowHeaderLabels = Array.isArray(config?.rowHeaderLabels) ? config.rowHeaderLabels : [];
+    const barLabelVisible = resolveBarLabelVisible(config);
 
     // 1. Max Value 계산
     let maxVal = 100;
@@ -251,6 +331,7 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
             const clusterLayout = computeClusterLayout(measureWidth, targetRatio, numMarks);
             // Figma 컴포넌트의 'markNum' Variant 속성 변경
             setMarkNumVariantWithFallback(barInst, numMarks);
+            setBarLabelVisibility(barInst, barLabelVisible);
             // Variant 변경 직후 인스턴스 내부 레이어가 재구성될 수 있으므로 반드시 재조회한다.
             const barLayerPool = resolveBarMarkLayerPool(barInst);
             // markNum 기준으로 활성 범위 레이어는 항상 visible=true로 강제한다.
@@ -279,6 +360,10 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                 const barLayer = findBarLayerByIndex(barLayerPool, targetNum);
 
                 if (barLayer) {
+                    if (barLabelVisible) {
+                        const rowLabel = normalizeRowLabel(rowHeaderLabels[m], m);
+                        applyBarLabelText(barLayer as SceneNode, rowLabel);
+                    }
                     const markColor = getBarColor(config, m, cIdx);
                     const markStyleId = getBarStyleId(config, m, cIdx);
                     applyBarMarkColor(barLayer as SceneNode, markColor, markStyleId);
