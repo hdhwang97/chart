@@ -114,7 +114,9 @@ function setDirectionVariant(target: SceneNode, direction: string): boolean {
 
 function isPointLikeNode(node: SceneNode): boolean {
     const lower = node.name.toLowerCase();
-    return node.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+    const hasPointLikeName = lower.includes('point') || lower.includes('dot');
+    if (hasPointLikeName && lower.includes('container')) return false;
+    return node.type === 'ELLIPSE' || hasPointLikeName;
 }
 
 function readBooleanComponentProperty(node: SceneNode, key: string): boolean | null {

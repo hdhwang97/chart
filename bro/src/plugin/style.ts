@@ -379,7 +379,8 @@ function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
     traverse(node, (child) => {
         if (child.id === node.id || !child.visible) return;
         const lower = child.name.toLowerCase();
-        const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+        const isPointLike = child.type === 'ELLIPSE'
+            || ((lower.includes('point') || lower.includes('dot')) && !lower.includes('container'));
         const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
         if (isPointLike && !pointStyle) {
             pointStyle = toMarkStyleSnapshot(child);
@@ -449,7 +450,8 @@ export function extractMarkStyle(graph: SceneNode): MarkInjectionStyle | null {
                 || MARK_NAME_PATTERNS.BAR_ITEM_MULTI.test(node.name)
                 || MARK_NAME_PATTERNS.STACKED_SEGMENT.test(node.name);
             const lower = node.name.toLowerCase();
-            const isLineOrPoint = MARK_NAME_PATTERNS.LINE.test(node.name) || lower.includes('point') || lower.includes('dot');
+            const isLineOrPoint = MARK_NAME_PATTERNS.LINE.test(node.name)
+                || ((lower.includes('point') || lower.includes('dot')) && !lower.includes('container'));
             if (!isBarLike && !isLineOrPoint) return;
 
             const fillColor = getSolidFillColor(node);

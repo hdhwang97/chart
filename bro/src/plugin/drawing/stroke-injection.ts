@@ -301,7 +301,9 @@ function applyStrokeStyleMode(node: SceneNode, mode: 'solid' | 'dash' | undefine
 
 function isPointLikeNode(node: SceneNode) {
     const lower = node.name.toLowerCase();
-    return node.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+    const hasPointLikeName = lower.includes('point') || lower.includes('dot');
+    if (hasPointLikeName && lower.includes('container')) return false;
+    return node.type === 'ELLIPSE' || hasPointLikeName;
 }
 
 function isVectorLikeNode(node: SceneNode) {
@@ -765,7 +767,7 @@ function getRowPaintStyleId(payload: StrokeInjectionRuntimePayload | undefined, 
 function isLineLikeNode(node: SceneNode): boolean {
     if (MARK_NAME_PATTERNS.LINE.test(node.name)) return true;
     const lower = node.name.toLowerCase();
-    if (lower.includes('point') || lower.includes('dot')) return true;
+    if ((lower.includes('point') || lower.includes('dot')) && !lower.includes('container')) return true;
     return false;
 }
 
@@ -1050,7 +1052,8 @@ function applyMarkStyles(
                 traverse(node, (child) => {
                     if (child.id === node.id || !child.visible) return;
                     const lower = child.name.toLowerCase();
-                    const isPointLike = child.type === 'ELLIPSE' || lower.includes('point') || lower.includes('dot');
+                    const isPointLike = child.type === 'ELLIPSE'
+                        || ((lower.includes('point') || lower.includes('dot')) && !lower.includes('container'));
                     const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
                     if (!isPointLike && !isVectorLike) return;
                     result.candidates += 1;
