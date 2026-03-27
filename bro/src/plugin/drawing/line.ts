@@ -47,6 +47,15 @@ function canSetPaddingBottom(node: SceneNode): node is SceneNode & { paddingBott
     return 'paddingBottom' in node;
 }
 
+function canSetUniformPadding(node: SceneNode): node is SceneNode & {
+    paddingTop: number;
+    paddingRight: number;
+    paddingBottom: number;
+    paddingLeft: number;
+} {
+    return 'paddingTop' in node && 'paddingRight' in node && 'paddingBottom' in node && 'paddingLeft' in node;
+}
+
 function getComponentPropKey(instance: InstanceNode, key: string): string | null {
     try {
         const props = instance.componentProperties || {};
@@ -80,6 +89,21 @@ function setPaddingBottom(node: SceneNode, value: number): boolean {
         if (Math.abs(node.paddingBottom - next) <= 1e-6) return true;
         node.paddingBottom = next;
         return true;
+    } catch {
+        return false;
+    }
+}
+
+function setUniformPadding(node: SceneNode, value: number): boolean {
+    if (!canSetUniformPadding(node)) return false;
+    try {
+        const next = Math.max(0, value);
+        let changed = false;
+        if (Math.abs(node.paddingTop - next) > 1e-6) { node.paddingTop = next; changed = true; }
+        if (Math.abs(node.paddingRight - next) > 1e-6) { node.paddingRight = next; changed = true; }
+        if (Math.abs(node.paddingBottom - next) > 1e-6) { node.paddingBottom = next; changed = true; }
+        if (Math.abs(node.paddingLeft - next) > 1e-6) { node.paddingLeft = next; changed = true; }
+        return changed;
     } catch {
         return false;
     }
@@ -283,16 +307,19 @@ function resolveLinePointStyle(config: any, rowIndex: number, fallbackColor: str
         || strokeColor;
     const thicknessRaw = Number(source?.linePointThickness);
     const thickness = Number.isFinite(thicknessRaw) ? Math.max(0, thicknessRaw) : Math.max(0, fallbackThickness);
+    const paddingRaw = Number(source?.linePointPadding);
+    const padding = Number.isFinite(paddingRaw) ? Math.max(0, paddingRaw) : undefined;
     return {
         strokeColor,
         fillColor,
-        thickness
+        thickness,
+        padding
     };
 }
 
 function applyLinePointColors(
     targetNode: SceneNode,
-    style: { strokeColor: string | null; fillColor: string | null; thickness: number }
+    style: { strokeColor: string | null; fillColor: string | null; thickness: number; padding?: number }
 ) {
     if (!style.strokeColor && !style.fillColor) return;
     traverse(targetNode, (child) => {
@@ -301,6 +328,9 @@ function applyLinePointColors(
         if (style.fillColor) tryApplyFill(child, style.fillColor);
         if (style.strokeColor) tryApplyStroke(child, style.strokeColor);
         applyStrokeThickness(child, style.thickness);
+        if (typeof style.padding === 'number') {
+            setUniformPadding(child, style.padding);
+        }
     });
 }
 

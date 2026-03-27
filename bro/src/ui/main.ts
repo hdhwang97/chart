@@ -859,9 +859,15 @@ function updateLineFeatureToggleUi() {
     ui.lineFeatureToggleGroup.classList.toggle('flex', isLineChart);
     ui.linePointToggleContainer.classList.toggle('hidden', !isLineChart);
     ui.linePointToggleContainer.classList.toggle('flex', isLineChart);
+    ui.previewCurveModeControl.classList.toggle('hidden', !isLineChart);
+    ui.previewCurveModeControl.classList.toggle('flex', isLineChart);
+    ui.styleCurveModeControl.classList.toggle('hidden', !isLineChart);
+    ui.styleCurveModeControl.classList.toggle('flex', isLineChart);
 
     syncSwitchButtonUi(ui.linePointToggleBtn, state.linePointVisible, 'line point');
     syncSwitchButtonUi(ui.lineFeature2ToggleBtn, state.lineFeature2Enabled, 'curve graph');
+    syncSwitchButtonUi(ui.previewCurveModeToggleBtn, state.lineFeature2Enabled, 'curve graph');
+    syncSwitchButtonUi(ui.styleCurveModeToggleBtn, state.lineFeature2Enabled, 'curve graph');
     syncMarkStyleCardVisibility();
 }
 
@@ -1538,13 +1544,23 @@ function bindUiEvents() {
         renderStylePreview();
         refreshExportPreview();
     });
-    ui.lineFeature2ToggleBtn.addEventListener('click', () => {
-        state.lineFeature2Enabled = !state.lineFeature2Enabled;
+    ui.styleMarkLinePointVisibleInput.addEventListener('change', () => {
+        state.linePointVisible = ui.styleMarkLinePointVisibleInput.checked;
         updateLineFeatureToggleUi();
         renderPreview();
         renderStylePreview();
         refreshExportPreview();
     });
+    const toggleCurveMode = () => {
+        state.lineFeature2Enabled = !state.lineFeature2Enabled;
+        updateLineFeatureToggleUi();
+        renderPreview();
+        renderStylePreview();
+        refreshExportPreview();
+    };
+    ui.lineFeature2ToggleBtn.addEventListener('click', toggleCurveMode);
+    ui.previewCurveModeToggleBtn.addEventListener('click', toggleCurveMode);
+    ui.styleCurveModeToggleBtn.addEventListener('click', toggleCurveMode);
     ui.styleAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);
     });

@@ -59,6 +59,11 @@ const LINE_HIGHLIGHT_MULTIPLIER = 1.5;
 const LINE_STYLE_HIT_STROKE_WIDTH = 14;
 const LINE_STYLE_HIT_RADIUS = 9;
 const TAB_BACKGROUND_OPACITY = 1;
+const PREVIEW_LINE_POINT_BASE_DIAMETER = 11;
+const PREVIEW_LINE_POINT_DEFAULT_PADDING = 2.5;
+const PREVIEW_LINE_POINT_DEFAULT_RADIUS = 3;
+const PREVIEW_LINE_POINT_RADIUS_SCALE =
+    PREVIEW_LINE_POINT_DEFAULT_RADIUS / ((PREVIEW_LINE_POINT_BASE_DIAMETER / 2) + PREVIEW_LINE_POINT_DEFAULT_PADDING);
 
 type HighlightState = { type: string; index: number; row?: number; col?: number };
 let highlightState: HighlightState | null = null;
@@ -355,6 +360,9 @@ function getMarkDraftStyle(seriesIndex: number) {
         linePointThickness: Number.isFinite(Number(source.linePointThickness))
             ? Math.max(0, Number(source.linePointThickness))
             : Math.max(0, Number(fallback.linePointThickness) || 1),
+        linePointPadding: Number.isFinite(Number(source.linePointPadding))
+            ? Math.max(0, Number(source.linePointPadding))
+            : Math.max(0, Number((fallback as any).linePointPadding ?? PREVIEW_LINE_POINT_DEFAULT_PADDING)),
         lineBackgroundColor: normalizeHexColorInput(source.lineBackgroundColor) || strokeColor || '#3B82F6',
         lineBackgroundOpacity: Number.isFinite(Number(source.lineBackgroundOpacity))
             ? Math.max(0, Math.min(100, Number(source.lineBackgroundOpacity)))
@@ -367,6 +375,12 @@ function getMarkDraftStyle(seriesIndex: number) {
         thickness: Number.isFinite(Number(source.thickness)) ? Math.max(0, Number(source.thickness)) : Math.max(0, Number(fallback.thickness) || 1),
         strokeStyle: source.strokeStyle === 'dash' ? 'dash' : 'solid'
     };
+}
+
+function getPreviewLinePointRadius(padding: number): number {
+    const safePadding = Number.isFinite(Number(padding)) ? Math.max(0, Number(padding)) : PREVIEW_LINE_POINT_DEFAULT_PADDING;
+    const pointOuterRadius = (PREVIEW_LINE_POINT_BASE_DIAMETER / 2) + safePadding;
+    return Math.max(1, pointOuterRadius * PREVIEW_LINE_POINT_RADIUS_SCALE);
 }
 
 function drawTabBackgroundLayer(g: any, w: number, h: number, mode: PreviewInteractionMode) {
@@ -1156,6 +1170,7 @@ function renderLinePreview(
         const rowDots: any[] = [];
         if (state.linePointVisible) {
             const pointStyle = getMarkDraftStyle(r);
+            const baseDotRadius = getPreviewLinePointRadius(pointStyle.linePointPadding);
             lineData.forEach((val: number, i: number) => {
                 const isColHighlighted = activeHighlight?.type === 'col' && activeHighlight.index === i;
                 const isCellHighlighted = activeHighlight?.type === 'cell' && activeHighlight.row === r && activeHighlight.col === i;
@@ -1164,7 +1179,9 @@ function renderLinePreview(
                         ? (isCellHighlighted ? 1 : 0.2)
                         : (relatedRow || isColHighlighted ? 1 : 0.2))
                     : 1;
-                const dotRadius = activeHighlight ? (relatedRow || isColHighlighted ? 3 * LINE_HIGHLIGHT_MULTIPLIER : 3) : 3;
+                const dotRadius = activeHighlight
+                    ? (relatedRow || isColHighlighted ? baseDotRadius * LINE_HIGHLIGHT_MULTIPLIER : baseDotRadius)
+                    : baseDotRadius;
                 const dot = g.append('circle')
                     .attr('class', 'preview-mark')
                     .attr('cx', xScale(i)!)

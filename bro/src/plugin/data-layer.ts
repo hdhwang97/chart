@@ -358,6 +358,7 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
     const linePointStrokeColor = normalizeHexColor(source.linePointStrokeColor);
     const linePointFillColor = normalizeHexColor(source.linePointFillColor);
     const linePointThickness = normalizeThickness(source.linePointThickness);
+    const linePointPadding = normalizeThickness(source.linePointPadding);
     const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
     const lineBackgroundOpacityRaw = Number(source.lineBackgroundOpacity);
     const lineBackgroundOpacity = Number.isFinite(lineBackgroundOpacityRaw)
@@ -374,13 +375,14 @@ function normalizeMarkStyle(value: unknown): MarkInjectionStyle | null {
             right: source.sides.right !== false
         }
         : undefined;
-    if (!fillColor && !strokeColor && !linePointStrokeColor && !linePointFillColor && linePointThickness === undefined && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
+    if (!fillColor && !strokeColor && !linePointStrokeColor && !linePointFillColor && linePointThickness === undefined && linePointPadding === undefined && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         linePointStrokeColor: linePointStrokeColor || undefined,
         linePointFillColor: linePointFillColor || undefined,
         linePointThickness,
+        linePointPadding,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity,
         lineBackgroundVisible,

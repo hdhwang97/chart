@@ -69,6 +69,7 @@ export type MarkInjectionStyle = {
     linePointStrokeColor?: string;
     linePointFillColor?: string;
     linePointThickness?: number;
+    linePointPadding?: number;
     lineBackgroundColor?: string;
     lineBackgroundOpacity?: number;
     lineBackgroundVisible?: boolean;

@@ -126,7 +126,8 @@ function syncLinePointCardState() {
     ui.styleMarkLinePointCard.classList.toggle('hidden', !visible);
     ui.styleMarkLinePointCard.classList.toggle('is-disabled', visible && !enabled);
     ui.styleMarkLinePointCard.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-    [ui.styleMarkLinePointStrokeInput, ui.styleMarkLinePointThicknessInput, ui.styleMarkLinePointFillInput].forEach((input) => {
+    ui.styleMarkLinePointVisibleInput.checked = state.linePointVisible;
+    [ui.styleMarkLinePointStrokeInput, ui.styleMarkLinePointThicknessInput, ui.styleMarkLinePointPaddingInput, ui.styleMarkLinePointFillInput].forEach((input) => {
         input.disabled = !enabled;
     });
 }
@@ -387,6 +388,7 @@ export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSe
         ui.styleMarkLineBackgroundColorInput,
         ui.styleMarkLinePointStrokeInput,
         ui.styleMarkLinePointThicknessInput,
+        ui.styleMarkLinePointPaddingInput,
         ui.styleMarkLinePointFillInput,
         ui.styleMarkLineBackgroundOpacityInput,
         ui.styleMarkStrokeStyleInput,
@@ -511,6 +513,7 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     ui.styleMarkLineBackgroundColorInput.value = activeMark.lineBackgroundColor;
     ui.styleMarkLinePointStrokeInput.value = activeMark.linePointStrokeColor;
     ui.styleMarkLinePointThicknessInput.value = String(activeMark.linePointThickness);
+    ui.styleMarkLinePointPaddingInput.value = String(activeMark.linePointPadding);
     ui.styleMarkLinePointFillInput.value = activeMark.linePointFillColor;
     ui.styleMarkLineBackgroundOpacityInput.value = String(clampOpacityPercent(activeMark.lineBackgroundOpacity, 100));
     ui.styleMarkLineBackgroundVisibleInput.checked = activeMark.lineBackgroundVisible;
@@ -593,6 +596,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
         linePointStrokeColor: normalizeHexColorInput(ui.styleMarkLinePointStrokeInput.value) || state.styleInjectionDraft.mark.linePointStrokeColor,
         linePointFillColor: normalizeHexColorInput(ui.styleMarkLinePointFillInput.value) || state.styleInjectionDraft.mark.linePointFillColor,
         linePointThickness: Number(ui.styleMarkLinePointThicknessInput.value),
+        linePointPadding: Number(ui.styleMarkLinePointPaddingInput.value),
         lineBackgroundColor: normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || state.styleInjectionDraft.mark.lineBackgroundColor,
         lineBackgroundOpacity: clampOpacityPercent(ui.styleMarkLineBackgroundOpacityInput.value, state.styleInjectionDraft.mark.lineBackgroundOpacity),
         thickness: Number(ui.styleMarkThicknessInput.value),
@@ -607,6 +611,7 @@ export function readStyleTabDraft(): StyleInjectionDraft {
             linePointStrokeColor: markNormalized.linePointStrokeColor || markNormalized.strokeColor || state.styleInjectionDraft.mark.linePointStrokeColor,
             linePointFillColor: markNormalized.linePointFillColor || markNormalized.fillColor || state.styleInjectionDraft.mark.linePointFillColor,
             linePointThickness: typeof markNormalized.linePointThickness === 'number' ? markNormalized.linePointThickness : state.styleInjectionDraft.mark.linePointThickness,
+            linePointPadding: typeof markNormalized.linePointPadding === 'number' ? markNormalized.linePointPadding : state.styleInjectionDraft.mark.linePointPadding,
             lineBackgroundColor: allowLineBackground
                 ? (markNormalized.lineBackgroundColor
                     || markNormalized.strokeColor
@@ -678,6 +683,12 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
         && linePointThicknessRaw >= THICKNESS_MIN
         && linePointThicknessRaw <= THICKNESS_MAX
     );
+    const linePointPaddingRaw = Number(ui.styleMarkLinePointPaddingInput.value);
+    const linePointPaddingValid = !linePointCardVisible() || (
+        Number.isFinite(linePointPaddingRaw)
+        && linePointPaddingRaw >= THICKNESS_MIN
+        && linePointPaddingRaw <= THICKNESS_MAX
+    );
     const linePointFillValid = !linePointCardVisible() || Boolean(normalizeHexColorInput(ui.styleMarkLinePointFillInput.value));
     const markLineBackgroundValid = !allowLineBackground || Boolean(normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value));
     const markLineBackgroundOpacityRaw = Number(ui.styleMarkLineBackgroundOpacityInput.value);
@@ -730,6 +741,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
     setInputError(ui.styleMarkStrokeColorInput, !markStrokeValid);
     setInputError(ui.styleMarkLinePointStrokeInput, !linePointStrokeValid && linePointCardVisible());
     setInputError(ui.styleMarkLinePointThicknessInput, !linePointThicknessValid && linePointCardVisible());
+    setInputError(ui.styleMarkLinePointPaddingInput, !linePointPaddingValid && linePointCardVisible());
     setInputError(ui.styleMarkLinePointFillInput, !linePointFillValid && linePointCardVisible());
     setInputError(ui.styleMarkLineBackgroundColorInput, !markLineBackgroundValid && allowLineBackground);
     setInputError(ui.styleMarkLineBackgroundOpacityInput, !markLineBackgroundOpacityValid && allowLineBackground);
@@ -749,6 +761,7 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
         && markStrokeValid
         && linePointStrokeValid
         && linePointThicknessValid
+        && linePointPaddingValid
         && linePointFillValid
         && markLineBackgroundValid
         && markLineBackgroundOpacityValid
@@ -785,6 +798,9 @@ export function validateStyleTabDraft(draft: StyleInjectionDraft): { draft: Styl
                 linePointThickness: linePointThicknessValid
                     ? linePointThicknessRaw
                     : clampThickness(linePointThicknessRaw, draft.mark.linePointThickness),
+                linePointPadding: linePointPaddingValid
+                    ? linePointPaddingRaw
+                    : clampThickness(linePointPaddingRaw, draft.mark.linePointPadding),
                 linePointFillColor: normalizeHexColorInput(ui.styleMarkLinePointFillInput.value) || draft.mark.linePointFillColor,
                 lineBackgroundColor: allowLineBackground
                     ? (normalizeHexColorInput(ui.styleMarkLineBackgroundColorInput.value) || normalizeHexColorInput(ui.styleMarkStrokeColorInput.value) || draft.mark.lineBackgroundColor)
@@ -927,6 +943,7 @@ export function bindStyleTabEvents() {
         ui.styleMarkLineBackgroundColorInput.value = active.lineBackgroundColor;
         ui.styleMarkLinePointStrokeInput.value = active.linePointStrokeColor;
         ui.styleMarkLinePointThicknessInput.value = String(active.linePointThickness);
+        ui.styleMarkLinePointPaddingInput.value = String(active.linePointPadding);
         ui.styleMarkLinePointFillInput.value = active.linePointFillColor;
         ui.styleMarkLineBackgroundOpacityInput.value = String(clampOpacityPercent(active.lineBackgroundOpacity, 100));
         ui.styleMarkLineBackgroundVisibleInput.checked = active.lineBackgroundVisible;

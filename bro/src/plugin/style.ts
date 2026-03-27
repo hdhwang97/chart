@@ -329,6 +329,26 @@ function getSolidStrokeColor(node: SceneNode): string | null {
     return rgbToHex(first.color.r, first.color.g, first.color.b);
 }
 
+function canReadUniformPadding(node: SceneNode): node is SceneNode & {
+    paddingTop: number;
+    paddingRight: number;
+    paddingBottom: number;
+    paddingLeft: number;
+} {
+    return 'paddingTop' in node && 'paddingRight' in node && 'paddingBottom' in node && 'paddingLeft' in node;
+}
+
+function readUniformPadding(node: SceneNode): number | undefined {
+    if (!canReadUniformPadding(node)) return undefined;
+    const values = [node.paddingTop, node.paddingRight, node.paddingBottom, node.paddingLeft];
+    if (values.some((value) => !Number.isFinite(value))) return undefined;
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const tolerance = 1e-3;
+    const isUniform = values.every((value) => Math.abs(value - average) <= tolerance);
+    if (!isUniform) return undefined;
+    return average;
+}
+
 function parseMarkSeriesIndex(node: SceneNode): number | null {
     const name = node.name;
     if (MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(name)) return 1;
@@ -376,14 +396,20 @@ function toMarkStyleSnapshot(node: SceneNode): MarkInjectionStyle | null {
 function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
     let lineStyle: MarkInjectionStyle | null = null;
     let pointStyle: MarkInjectionStyle | null = null;
+    let pointPadding: number | undefined;
     traverse(node, (child) => {
         if (child.id === node.id || !child.visible) return;
         const lower = child.name.toLowerCase();
         const isPointLike = child.type === 'ELLIPSE'
             || ((lower.includes('point') || lower.includes('dot')) && !lower.includes('container'));
         const isVectorLike = child.type === 'VECTOR' || child.type === 'LINE' || child.type === 'POLYGON' || child.type === 'RECTANGLE';
-        if (isPointLike && !pointStyle) {
-            pointStyle = toMarkStyleSnapshot(child);
+        if (isPointLike) {
+            if (pointPadding === undefined) {
+                pointPadding = readUniformPadding(child);
+            }
+            if (!pointStyle) {
+                pointStyle = toMarkStyleSnapshot(child);
+            }
             return;
         }
         if (isVectorLike && !lineStyle) {
@@ -397,6 +423,7 @@ function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
         linePointStrokeColor: pointStyle?.strokeColor || lineStyle?.strokeColor,
         linePointFillColor: pointStyle?.fillColor || pointStyle?.strokeColor || lineStyle?.fillColor,
         linePointThickness: pointStyle?.thickness ?? lineStyle?.thickness,
+        linePointPadding: pointPadding,
         thickness: lineStyle?.thickness ?? pointStyle?.thickness,
         strokeStyle: lineStyle?.strokeStyle ?? pointStyle?.strokeStyle
     };

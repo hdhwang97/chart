@@ -62,6 +62,7 @@ type NormalizedMarkStyle = {
     linePointStrokeColor?: string;
     linePointFillColor?: string;
     linePointThickness?: number;
+    linePointPadding?: number;
     lineBackgroundColor?: string;
     lineBackgroundOpacity?: number;
     lineBackgroundVisible?: boolean;
@@ -131,6 +132,7 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
     const linePointStrokeColor = normalizeHexColor(source.linePointStrokeColor);
     const linePointFillColor = normalizeHexColor(source.linePointFillColor);
     const linePointThickness = normalizeThickness(source.linePointThickness);
+    const linePointPadding = normalizeThickness(source.linePointPadding);
     const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
     const lineBackgroundOpacityRaw = Number(source.lineBackgroundOpacity);
     const lineBackgroundOpacity = Number.isFinite(lineBackgroundOpacityRaw)
@@ -147,13 +149,14 @@ function normalizeMarkStyle(input: unknown): NormalizedMarkStyle | null {
             right: source.sides.right !== false
         }
         : undefined;
-    if (!fillColor && !strokeColor && !linePointStrokeColor && !linePointFillColor && linePointThickness === undefined && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
+    if (!fillColor && !strokeColor && !linePointStrokeColor && !linePointFillColor && linePointThickness === undefined && linePointPadding === undefined && !lineBackgroundColor && lineBackgroundOpacity === undefined && lineBackgroundVisible === undefined && thickness === undefined && !strokeStyle && enabled === undefined && !sides) return null;
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         linePointStrokeColor: linePointStrokeColor || undefined,
         linePointFillColor: linePointFillColor || undefined,
         linePointThickness,
+        linePointPadding,
         lineBackgroundColor: lineBackgroundColor || undefined,
         lineBackgroundOpacity,
         lineBackgroundVisible,
@@ -522,6 +525,22 @@ function setSideThickness(node: IndividualStrokeNode, side: SideName, thickness:
     return true;
 }
 
+function setUniformPadding(node: SceneNode, padding: number): boolean {
+    if (!('paddingTop' in node) || !('paddingRight' in node) || !('paddingBottom' in node) || !('paddingLeft' in node)) return false;
+    try {
+        const target = node as SceneNode & { paddingTop: number; paddingRight: number; paddingBottom: number; paddingLeft: number };
+        const next = Math.max(0, padding);
+        let changed = false;
+        if (!nearlyEqual(target.paddingTop, next)) { target.paddingTop = next; changed = true; }
+        if (!nearlyEqual(target.paddingRight, next)) { target.paddingRight = next; changed = true; }
+        if (!nearlyEqual(target.paddingBottom, next)) { target.paddingBottom = next; changed = true; }
+        if (!nearlyEqual(target.paddingLeft, next)) { target.paddingLeft = next; changed = true; }
+        return changed;
+    } catch {
+        return false;
+    }
+}
+
 function clearNodeStrokes(node: SceneNode) {
     if (!('strokes' in node)) return false;
     try {
@@ -813,6 +832,7 @@ function applyLinePointTargets(
         fillColor: resolvedPointFill,
         strokeColor: resolvedPointStroke,
         thickness: typeof style.linePointThickness === 'number' ? style.linePointThickness : style.thickness,
+        linePointPadding: style.linePointPadding,
         sides: undefined
     };
     targets.forEach((target) => {
@@ -829,6 +849,9 @@ function applyLinePointTargets(
             const skipPointStrokeColor = !style.linePointStrokeColor && skipStrokeColorForSeries;
             if (applyMarkStyleToNode(target, pointStyle, { skipFill: false, skipStrokeColor: skipPointStrokeColor })) {
                 applied = true;
+            }
+            if (typeof pointStyle.linePointPadding === 'number') {
+                applied = setUniformPadding(target, pointStyle.linePointPadding) || applied;
             }
             if (applied) {
                 result.applied += 1;
