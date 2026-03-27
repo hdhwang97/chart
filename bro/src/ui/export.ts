@@ -677,6 +677,7 @@ export function switchTab(tab: 'data' | 'style' | 'export') {
         stepStyle.classList.add('active');
         stepExport.classList.remove('active');
         if (styleTabRenderer) styleTabRenderer();
+        parent.postMessage({ pluginMessage: { type: 'request_style_extract', reason: 'style_tab' } }, '*');
     } else {
         tabDataBtn.className = inactiveClass;
         tabStyleBtn.className = inactiveClass;
@@ -693,8 +694,8 @@ export function switchTab(tab: 'data' | 'style' | 'export') {
         renderD3Preview(previewPayload);
         updateCodeOutput(previewPayload);
 
-        // Request style extraction from plugin
-        parent.postMessage({ pluginMessage: { type: 'extract_style' } }, '*');
+        // Request style extraction from plugin (on-demand)
+        parent.postMessage({ pluginMessage: { type: 'request_style_extract', reason: 'export_tab' } }, '*');
     }
 }
 

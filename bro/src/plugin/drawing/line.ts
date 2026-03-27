@@ -29,7 +29,18 @@ export type LineApplyResult =
         errorCode: 'line_structure_missing';
         message: string;
         missing: LineStructureIssue[];
+    }
+    | {
+        ok: false;
+        errorCode: 'cancelled';
+        message: string;
     };
+
+export type LineDrawChunkControl = {
+    chunkSize?: number;
+    shouldCancel?: () => boolean;
+    yieldControl?: () => Promise<void>;
+};
 
 const LINE_POINT_PROPERTY_KEY = 'line_point';
 const LINE_LAST_POINT_PROPERTY_KEY = 'last_point';
@@ -428,7 +439,12 @@ function buildLineApplyFailure(message: string, missing: LineStructureIssue[]): 
     };
 }
 
-export function applyLine(config: any, H: number, graph: SceneNode): LineApplyResult {
+export async function applyLine(
+    config: any,
+    H: number,
+    graph: SceneNode,
+    control?: LineDrawChunkControl
+): Promise<LineApplyResult> {
     const flatEpsilon = 1e-6;
     const values = Array.isArray(config?.values) ? config.values : [];
     const rowCount = values.length;
@@ -466,8 +482,17 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
     const safeRange = yRange.max - yRange.min === 0 ? 1 : (yRange.max - yRange.min);
 
     const applyStart = Date.now();
+    const chunkSize = Math.max(1, Number(control?.chunkSize) || 10);
+    let processedSegmentsForYield = 0;
     let appliedSegments = 0;
     for (let r = 0; r < rowCount; r++) {
+        if (control?.shouldCancel?.()) {
+            return {
+                ok: false,
+                errorCode: 'cancelled',
+                message: 'Line apply cancelled.'
+            };
+        }
         const rowColor = normalizeHexColor(Array.isArray(config?.rowColors) ? config.rowColors[r] : null);
         const rowStyleId = getLineStyleId(config, r);
         const seriesData = Array.isArray(values[r]) ? values[r] : [];
@@ -531,6 +556,24 @@ export function applyLine(config: any, H: number, graph: SceneNode): LineApplyRe
                 }]);
             }
             appliedSegments += 1;
+            processedSegmentsForYield += 1;
+            if (processedSegmentsForYield % chunkSize === 0) {
+                if (control?.shouldCancel?.()) {
+                    return {
+                        ok: false,
+                        errorCode: 'cancelled',
+                        message: 'Line apply cancelled.'
+                    };
+                }
+                if (control?.yieldControl) await control.yieldControl();
+                if (control?.shouldCancel?.()) {
+                    return {
+                        ok: false,
+                        errorCode: 'cancelled',
+                        message: 'Line apply cancelled.'
+                    };
+                }
+            }
         }
     }
 

@@ -598,7 +598,7 @@ export function extractChartColors(graph: SceneNode, chartType: string, precompu
         const barInstance = (targetParent as any).children.find((n: SceneNode) => MARK_NAME_PATTERNS.BAR_INSTANCE.test(n.name));
 
         if (barInstance && 'children' in barInstance) {
-            for (let i = 1; i <= 25; i++) {
+            for (let i = 1; i <= 50; i++) {
                 const pat = new RegExp(`^bar[-_]?0*(${i})$`);
                 const barItem = (barInstance as any).children.find((n: SceneNode) => {
                     if (i === 1 && MARK_NAME_PATTERNS.BAR_ITEM_SINGLE.test(n.name)) return true;

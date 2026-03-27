@@ -14,7 +14,7 @@ import type {
 } from '../shared/style-types';
 import type { YLabelFormatMode } from '../shared/y-label-format';
 
-export const MAX_SIZE = 25;
+export const MAX_SIZE = 50;
 export const DEFAULT_ROW_COLORS = [
     '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE',
     '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#FB923C'

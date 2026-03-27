@@ -1415,13 +1415,17 @@ function handlePluginMessage(msg: any) {
             assistLineStrokeStyle: msg.payload?.assistLineStrokeStyle
         };
 
-        if (msg.source === 'extract_style') {
+        const isExportOnlyExtraction =
+            msg.source === 'extract_style'
+            || (msg.source === 'on_demand' && msg.reason === 'export_tab');
+        if (isExportOnlyExtraction) {
             const wasDirty = state.styleInjectionDirty;
             // Export tab style extraction is for preview/code only.
             // Do not mutate style/data tab draft state from this path.
             const syncApplied = false;
             uiDebugLog('[ui][style-extracted]', {
                 source: msg.source,
+                reason: msg.reason,
                 dirty: wasDirty,
                 syncApplied
             });

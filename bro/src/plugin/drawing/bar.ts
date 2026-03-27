@@ -7,6 +7,12 @@ import { debugLog } from '../log';
 // BAR CHART DRAWING
 // ==========================================
 
+export type DrawChunkControl = {
+    chunkSize?: number;
+    shouldCancel?: () => boolean;
+    yieldControl?: () => Promise<void>;
+};
+
 function normalizeRatio(value: number | null | undefined): number {
     const ratio = typeof value === 'number' && Number.isFinite(value) ? value : 0.8;
     return Math.max(0.01, Math.min(1, ratio));
@@ -269,7 +275,7 @@ function applyBarMarkColor(target: SceneNode, color?: string | null, styleId?: s
     return applied;
 }
 
-export function applyBar(config: any, H: number, graph: SceneNode) {
+export async function applyBar(config: any, H: number, graph: SceneNode, control?: DrawChunkControl) {
     const { values, mode, markNum, reason, markRatio } = config;
     const cols = collectColumns(graph);
     if (!Array.isArray(values) || values.length === 0 || !Array.isArray(values[0])) return;
@@ -322,8 +328,12 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
     const numMarks = Number(markNum) || 1;
     const dataCols = values[0].length;
 
-    cols.forEach((colObj, cIdx) => {
-        if (cIdx >= dataCols) return;
+    const chunkSize = Math.max(1, Number(control?.chunkSize) || 20);
+    let processedColumns = 0;
+    for (let cIdx = 0; cIdx < cols.length; cIdx++) {
+        if (control?.shouldCancel?.()) return;
+        const colObj = cols[cIdx];
+        if (cIdx >= dataCols) continue;
 
         // 2. Bar Instance (컨테이너) 찾기
         const { barInst, measureWidth } = resolveBarMeasureContext(colObj.node);
@@ -479,7 +489,13 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
                 }
             }
         }
-    });
+        processedColumns += 1;
+        if (processedColumns % chunkSize === 0) {
+            if (control?.shouldCancel?.()) return;
+            if (control?.yieldControl) await control.yieldControl();
+            if (control?.shouldCancel?.()) return;
+        }
+    }
 
     if (shouldLogResizeDebug && loggedColumns > 0) {
         debugLog('[chart-plugin][bar-resize][summary]', {

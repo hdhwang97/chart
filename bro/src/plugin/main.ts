@@ -37,6 +37,32 @@ const autoResizeSyncQueue = new Map<string, {
     pendingPostPreviewUpdate: boolean;
 }>();
 type ApplyPolicy = 'template-master' | 'instance-data' | 'default';
+const APPLY_CHUNK_SIZE_BAR = 20;
+const APPLY_CHUNK_SIZE_STACKED = 20;
+const APPLY_CHUNK_SIZE_LINE = 10;
+const APPLY_CHUNK_SIZE_STROKE = 10;
+let latestApplyRunId = 0;
+const targetRevisionMap = new Map<string, number>();
+const styleExtractCache = new Map<string, { revision: number; payload: any }>();
+
+function nextTick(): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, 0);
+    });
+}
+
+function bumpTargetRevision(targetId: string) {
+    const next = (targetRevisionMap.get(targetId) || 0) + 1;
+    targetRevisionMap.set(targetId, next);
+    // drop outdated cache entries for the same target
+    Array.from(styleExtractCache.keys()).forEach((key) => {
+        if (key.startsWith(`${targetId}:`)) styleExtractCache.delete(key);
+    });
+}
+
+function getTargetRevision(targetId: string): number {
+    return targetRevisionMap.get(targetId) || 0;
+}
 
 function normalizeMarkRatio(value: unknown): number | null {
     const ratio = typeof value === 'number' ? value : Number(value);
@@ -475,6 +501,7 @@ async function flushAutoResizeSync(targetId: string) {
                 reason: 'auto-resize',
                 postPreviewUpdate
             });
+            bumpTargetRevision(trackedScene.id);
         }
     } catch (error) {
         console.error('[chart-plugin][auto-resize-sync-failed]', {
@@ -626,6 +653,235 @@ function logSelectionRecognition(node: SceneNode) {
     });
 }
 
+function resolveStyleExtractTarget(requestedTargetId?: string): SceneNode | null {
+    const normalizedRequestedId = typeof requestedTargetId === 'string' ? requestedTargetId.trim() : '';
+    if (normalizedRequestedId) {
+        const matchedTarget = selectedChartTargets.find((target) => target.id === normalizedRequestedId);
+        if (matchedTarget && isRecognizedChartSelection(matchedTarget)) {
+            return matchedTarget;
+        }
+        const requestedNode = figma.getNodeById(normalizedRequestedId);
+        if (requestedNode && requestedNode.type !== 'PAGE' && requestedNode.type !== 'DOCUMENT') {
+            const resolved = resolveChartTargetFromInnerNode(requestedNode as SceneNode);
+            if (isRecognizedChartSelection(resolved)) return resolved;
+        }
+    }
+
+    if (activeTargetId) {
+        const activeTarget = selectedChartTargets.find((target) => target.id === activeTargetId);
+        if (activeTarget && isRecognizedChartSelection(activeTarget)) return activeTarget;
+        const activeNode = figma.getNodeById(activeTargetId);
+        if (activeNode && activeNode.type !== 'PAGE' && activeNode.type !== 'DOCUMENT') {
+            const resolved = resolveChartTargetFromInnerNode(activeNode as SceneNode);
+            if (isRecognizedChartSelection(resolved)) return resolved;
+        }
+    }
+
+    const selection = figma.currentPage.selection;
+    if (selection.length === 0) return null;
+    const resolvedSelection = resolveChartTargetFromInnerNode(selection[0]);
+    if (isRecognizedChartSelection(resolvedSelection)) return resolvedSelection;
+    return null;
+}
+
+function buildStyleExtractPayloadFromNode(node: SceneNode, chartType: string) {
+    // 주입된 payload가 없으므로 역산(Inference) 수행
+    const structure = inferStructureFromGraph(chartType, node);
+
+    // 숨겨진 레이어 제외하고 카운트 (Visible Column Only)
+    const cols = collectColumns(node);
+    const visibleCols = cols.filter(c => c.node.visible);
+    const stackedGroupStructure = (chartType === 'stackedBar' || chartType === 'stacked')
+        ? (visibleCols.length > 0 ? visibleCols : cols).map((colObj) => {
+            let parent: SceneNode = colObj.node;
+            if ('children' in colObj.node) {
+                const tab = (colObj.node as SceneNode & ChildrenMixin).children.find((n: SceneNode) => n.name === 'tab');
+                if (tab) parent = tab;
+            }
+            if (!('children' in parent)) return 0;
+            const group = (parent as SceneNode & ChildrenMixin).children.find((n: SceneNode) => MARK_NAME_PATTERNS.STACKED_GROUP.test(n.name));
+            if (!group || !('children' in group)) return 0;
+            const visibleBars = (group as SceneNode & ChildrenMixin).children.filter(
+                (n: SceneNode) => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name) && n.visible
+            );
+            return visibleBars.length;
+        })
+        : null;
+    const extractedMarkNum = stackedGroupStructure || structure.markNum;
+    const colCount = visibleCols.length > 0
+        ? visibleCols.length
+        : (Array.isArray(extractedMarkNum)
+            ? Math.max(1, extractedMarkNum.length)
+            : (cols.length > 0 ? cols.length : 5));
+
+    const styleInfo = extractStyleFromNode(node, chartType, { columns: cols });
+    const markRatioForUi = resolveMarkRatioFromNode(node, styleInfo.markRatio);
+    let rowCount = 1;
+    const savedValuesRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
+    if (savedValuesRaw) {
+        try {
+            const parsed = JSON.parse(savedValuesRaw);
+            if (Array.isArray(parsed)) rowCount = parsed.length;
+        } catch { }
+    }
+    if (!savedValuesRaw) {
+        if (chartType === 'stackedBar' || chartType === 'stacked') {
+            rowCount = Array.isArray(extractedMarkNum) ? Math.max(1, Math.max(...extractedMarkNum) + 1) : 1;
+        } else {
+            rowCount = typeof extractedMarkNum === 'number' ? Math.max(1, extractedMarkNum) : 1;
+        }
+    }
+    const isInstanceTarget = node.type === 'INSTANCE';
+    const extractedRowColors = Array.from({ length: Math.max(1, rowCount) }, (_, i) =>
+        normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
+    );
+    const extractedRowColorModes = Array.from({ length: Math.max(1, rowCount) }, () => 'hex' as ColorMode);
+    const extractedRowPaintStyleIds = Array.from({ length: Math.max(1, rowCount) }, () => null as string | null);
+    const extractedColColors = Array.from({ length: Math.max(1, colCount) }, () => extractedRowColors[0] || '#3B82F6');
+    const extractedColColorModes = Array.from({ length: Math.max(1, colCount) }, () => 'hex' as ColorMode);
+    const extractedColPaintStyleIds = Array.from({ length: Math.max(1, colCount) }, () => null as string | null);
+    const extractedColEnabled = Array.from({ length: Math.max(1, colCount) }, () => false);
+    const extractedMarkColorSource: 'row' | 'col' = 'row';
+    const localOverrideState = isInstanceTarget
+        ? loadLocalStyleOverrides(node)
+        : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
+
+    const rowColorsForUi = (localOverrideState.mask.rowColors && Array.isArray(localOverrideState.overrides.rowColors))
+        ? normalizeRowColors(localOverrideState.overrides.rowColors)
+        : (isInstanceTarget
+            ? extractedRowColors
+            : resolveRowColorsFromNode(node, chartType, rowCount, styleInfo.colors));
+    const rowColorModesForUi = (localOverrideState.mask.rowColorModes && Array.isArray(localOverrideState.overrides.rowColorModes))
+        ? normalizeColorModes(localOverrideState.overrides.rowColorModes)
+        : (isInstanceTarget
+            ? extractedRowColorModes
+            : resolveRowColorModesFromNode(node, rowCount));
+    const rowPaintStyleIdsForUi = (localOverrideState.mask.rowPaintStyleIds && Array.isArray(localOverrideState.overrides.rowPaintStyleIds))
+        ? normalizeStyleIds(localOverrideState.overrides.rowPaintStyleIds)
+        : (isInstanceTarget
+            ? extractedRowPaintStyleIds
+            : resolveRowPaintStyleIdsFromNode(node, rowCount));
+    const colColorsForUi = (localOverrideState.mask.colColors && Array.isArray(localOverrideState.overrides.colColors))
+        ? normalizeRowColors(localOverrideState.overrides.colColors)
+        : (isInstanceTarget
+            ? extractedColColors
+            : resolveColColorsFromNode(node, colCount, rowColorsForUi[0] || '#3B82F6'));
+    const colColorModesForUi = (localOverrideState.mask.colColorModes && Array.isArray(localOverrideState.overrides.colColorModes))
+        ? normalizeColorModes(localOverrideState.overrides.colColorModes)
+        : (isInstanceTarget
+            ? extractedColColorModes
+            : resolveColColorModesFromNode(node, colCount));
+    const colPaintStyleIdsForUi = (localOverrideState.mask.colPaintStyleIds && Array.isArray(localOverrideState.overrides.colPaintStyleIds))
+        ? normalizeStyleIds(localOverrideState.overrides.colPaintStyleIds)
+        : (isInstanceTarget
+            ? extractedColPaintStyleIds
+            : resolveColPaintStyleIdsFromNode(node, colCount));
+    const colColorEnabledForUi = (localOverrideState.mask.colColorEnabled && Array.isArray(localOverrideState.overrides.colColorEnabled))
+        ? localOverrideState.overrides.colColorEnabled.map((v) => Boolean(v))
+        : (isInstanceTarget ? extractedColEnabled : resolveColColorEnabledFromNode(node, colCount));
+    const markColorSource = localOverrideState.mask.markColorSource
+        ? (localOverrideState.overrides.markColorSource === 'col' ? 'col' : 'row')
+        : (isInstanceTarget ? extractedMarkColorSource : (node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row'));
+    const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
+    const xAxisLabelsVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS_VISIBLE) !== 'false';
+    const barLabelVisible = resolveBarLabelVisibleFromNode(node);
+    const barLabelSource = resolveBarLabelSourceFromNode(node);
+    const yAxisVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE) !== 'false';
+    const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
+    let assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
+    if (assistLineEnabledRaw) {
+        try {
+            const parsed = JSON.parse(assistLineEnabledRaw);
+            assistLineEnabled = {
+                min: Boolean(parsed?.min),
+                max: Boolean(parsed?.max),
+                avg: Boolean(parsed?.avg),
+                ctr: Boolean(parsed?.ctr)
+            };
+        } catch { }
+    }
+
+    return {
+        chartType: chartType,
+        markNum: extractedMarkNum,
+        yCount: structure.cellCount || 4,
+        colCount: colCount,
+        previewPlotWidth: getPlotAreaWidth(node),
+        previewPlotHeight: getGraphHeight(node as FrameNode),
+
+        colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
+        markRatio: markRatioForUi,
+        rowColors: rowColorsForUi,
+        rowColorModes: rowColorModesForUi,
+        rowPaintStyleIds: rowPaintStyleIdsForUi,
+        colColors: colColorsForUi,
+        colColorModes: colColorModesForUi,
+        colPaintStyleIds: colPaintStyleIdsForUi,
+        colColorEnabled: colColorEnabledForUi,
+        markColorSource,
+        xAxisLabelsVisible,
+        barLabelVisible,
+        barLabelSource,
+        yAxisVisible,
+        assistLineVisible,
+        assistLineEnabled,
+        cornerRadius: styleInfo.cornerRadius,
+        strokeWidth: resolveStrokeWidthForUi(node, undefined, styleInfo.strokeWidth),
+        cellFillStyle: styleInfo.cellFillStyle || null,
+        lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
+        markStyle: styleInfo.markStyle || null,
+        markStyles: styleInfo.markStyles || [],
+        colStrokeStyle: styleInfo.colStrokeStyle || null,
+        chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
+        assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
+        cellStrokeStyles: styleInfo.cellStrokeStyles || [],
+        rowStrokeStyles: styleInfo.rowStrokeStyles || [],
+        isInstanceTarget,
+        extractedStyleSnapshot: {
+            rowColors: extractedRowColors,
+            rowColorModes: extractedRowColorModes,
+            rowPaintStyleIds: extractedRowPaintStyleIds,
+            colColors: extractedColColors,
+            colColorModes: extractedColColorModes,
+            colPaintStyleIds: extractedColPaintStyleIds,
+            colColorEnabled: extractedColEnabled,
+            markColorSource: extractedMarkColorSource,
+            cellFillStyle: styleInfo.cellFillStyle || null,
+            lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
+            markStyle: styleInfo.markStyle || null,
+            markStyles: styleInfo.markStyles || [],
+            rowStrokeStyles: styleInfo.rowStrokeStyles || [],
+            colStrokeStyle: styleInfo.colStrokeStyle || null,
+            chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
+            assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null
+        },
+        localStyleOverrides: localOverrideState.overrides,
+        localStyleOverrideMask: localOverrideState.mask
+    };
+}
+
+function postStyleExtracted(
+    node: SceneNode,
+    source: 'extract_style' | 'on_demand',
+    reason: 'style_tab' | 'export_tab',
+    force?: boolean
+) {
+    const revision = getTargetRevision(node.id);
+    const cacheKey = `${node.id}:${revision}`;
+    const cached = !force ? styleExtractCache.get(cacheKey) : null;
+    const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
+    const payload = cached?.payload || buildStyleExtractPayloadFromNode(node, chartType);
+    if (!cached) {
+        styleExtractCache.set(cacheKey, { revision, payload });
+    }
+    figma.ui.postMessage({
+        type: 'style_extracted',
+        source,
+        reason,
+        payload
+    });
+}
+
 // Message Handler
 figma.ui.onmessage = async (msg) => {
     if (msg.type === 'resize') {
@@ -682,6 +938,9 @@ figma.ui.onmessage = async (msg) => {
         } = msg.payload;
 
         const perf = new PerfTracker();
+        const applyRunId = ++latestApplyRunId;
+        const isCancelled = () => applyRunId !== latestApplyRunId;
+        let wasCancelled = false;
         const normalizedRowColors = normalizeRowColors(rowColors);
         const normalizedRowColorModes = normalizeColorModes(rowColorModes);
         const normalizedRowPaintStyleIds = normalizeStyleIds(rowPaintStyleIds);
@@ -934,24 +1193,52 @@ figma.ui.onmessage = async (msg) => {
             deferLineSegmentStrokeStyling: type === 'line'
         };
 
-        const lineApplyResult = await perf.step('draw-chart', () => {
+        const lineApplyResult = await perf.step('draw-chart', async () => {
             if (type === "bar") {
-                applyBar(drawConfig, H, targetNode);
+                await applyBar(drawConfig, H, targetNode, {
+                    chunkSize: APPLY_CHUNK_SIZE_BAR,
+                    shouldCancel: isCancelled,
+                    yieldControl: nextTick
+                });
+                if (isCancelled()) {
+                    wasCancelled = true;
+                    return { ok: false, errorCode: 'cancelled', message: 'Bar apply cancelled.' } as const;
+                }
                 applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
                 return { ok: true } as const;
             }
             if (type === "line") {
-                const result = applyLine(drawConfig, H, targetNode);
+                const result = await applyLine(drawConfig, H, targetNode, {
+                    chunkSize: APPLY_CHUNK_SIZE_LINE,
+                    shouldCancel: isCancelled,
+                    yieldControl: nextTick
+                });
                 if (!result.ok) return result;
+                if (isCancelled()) {
+                    wasCancelled = true;
+                    return { ok: false, errorCode: 'cancelled', message: 'Line apply cancelled.' } as const;
+                }
                 applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
                 return result;
             }
             if (isStackedType(type)) {
-                applyStackedBar(drawConfig, H, targetNode, columns);
+                await applyStackedBar(drawConfig, H, targetNode, columns, {
+                    chunkSize: APPLY_CHUNK_SIZE_STACKED,
+                    shouldCancel: isCancelled,
+                    yieldControl: nextTick
+                });
+                if (isCancelled()) {
+                    wasCancelled = true;
+                    return { ok: false, errorCode: 'cancelled', message: 'Stacked apply cancelled.' } as const;
+                }
                 applyAssistLines(drawConfig, targetNode, H, { xEmptyHeight });
             }
             return { ok: true } as const;
         });
+        if (!lineApplyResult.ok && (lineApplyResult as any).errorCode === 'cancelled') {
+            wasCancelled = true;
+            return;
+        }
         if (type === 'line' && !lineApplyResult.ok) {
             figma.notify('Line apply failed: required line structure is missing.');
             console.error('[chart-plugin][line-apply-failed]', {
@@ -1042,223 +1329,119 @@ figma.ui.onmessage = async (msg) => {
                 markNum
             };
 
-        const strokeInjectionResult = await perf.step('stroke-injection', () => applyStrokeInjection(targetNode, runtimeStrokePayload, columns));
+        const strokeInjectionResult = await perf.step('stroke-injection', async () => {
+            const mergeScope = (
+                acc: { candidates: number; applied: number; skipped: number; errors: number },
+                next: { candidates: number; applied: number; skipped: number; errors: number }
+            ) => {
+                acc.candidates += next.candidates;
+                acc.applied += next.applied;
+                acc.skipped += next.skipped;
+                acc.errors += next.errors;
+                return acc;
+            };
+            const combined = {
+                cellFill: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+                lineBackground: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+                mark: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+                legend: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+                cellTop: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+                tabRight: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+                gridContainer: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+                resolved: {
+                    cellFill: false,
+                    lineBackground: false,
+                    mark: false,
+                    legend: false,
+                    cellTop: false,
+                    tabRight: false,
+                    gridContainer: false
+                }
+            };
+
+            for (let start = 0; start < columns.length; start += APPLY_CHUNK_SIZE_STROKE) {
+                if (isCancelled()) {
+                    wasCancelled = true;
+                    return combined;
+                }
+                const chunk = columns.slice(start, start + APPLY_CHUNK_SIZE_STROKE);
+                const partial = applyStrokeInjection(targetNode, runtimeStrokePayload, chunk, {
+                    applyColumnScopes: true,
+                    applyLegendScope: false,
+                    applyGridContainerScope: false
+                });
+                mergeScope(combined.cellFill, partial.cellFill);
+                mergeScope(combined.lineBackground, partial.lineBackground);
+                mergeScope(combined.mark, partial.mark);
+                mergeScope(combined.cellTop, partial.cellTop);
+                mergeScope(combined.tabRight, partial.tabRight);
+                combined.resolved.cellFill = combined.resolved.cellFill || partial.resolved.cellFill;
+                combined.resolved.lineBackground = combined.resolved.lineBackground || partial.resolved.lineBackground;
+                combined.resolved.mark = combined.resolved.mark || partial.resolved.mark;
+                combined.resolved.cellTop = combined.resolved.cellTop || partial.resolved.cellTop;
+                combined.resolved.tabRight = combined.resolved.tabRight || partial.resolved.tabRight;
+                await nextTick();
+            }
+
+            if (!isCancelled()) {
+                const globalScopes = applyStrokeInjection(targetNode, runtimeStrokePayload, columns, {
+                    applyColumnScopes: false,
+                    applyLegendScope: true,
+                    applyGridContainerScope: true
+                });
+                mergeScope(combined.legend, globalScopes.legend);
+                mergeScope(combined.gridContainer, globalScopes.gridContainer);
+                combined.resolved.legend = globalScopes.resolved.legend;
+                combined.resolved.gridContainer = globalScopes.resolved.gridContainer;
+            } else {
+                wasCancelled = true;
+            }
+
+            return combined;
+        });
         debugLog('[chart-plugin][stroke-injection]', strokeInjectionResult);
+        if (wasCancelled || isCancelled()) {
+            wasCancelled = true;
+            return;
+        }
         if (type === 'line') {
             await perf.step('flat-padding-sync', () => syncFlatLineFillBottomPadding(targetNode, columns));
         }
-
-        // 5. 스타일 자동 추출 및 전송
-        const shouldUseFastStyleSync = msg.type === 'apply' && (isStackedType(type) || isDataOnlyApply);
-        const styleInfo = await perf.step('style-payload-build', () => extractStyleFromNode(
-            targetNode,
-            type,
-            {
-                columns,
-                fastPath: shouldUseFastStyleSync
-            }
-        ));
-        const requestedRatio = (type === 'bar' || type === 'stackedBar' || type === 'stacked')
-            ? normalizeMarkRatio(markRatio)
-            : null;
-        const fallbackRowCount = Number.isFinite(Number(rows)) ? Number(rows) : (Array.isArray(rawValues) ? rawValues.length : 1);
-        const requestedRowColors = normalizedRowColors;
-        const requestedRowColorModes = normalizedRowColorModes;
-        const requestedRowPaintStyleIds = normalizedRowPaintStyleIds;
-        const extractedRowColorsForUi = Array.from({ length: Math.max(1, fallbackRowCount) }, (_, i) =>
-            normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
-        );
-        const extractedRowColorModesForUi = Array.from({ length: Math.max(1, fallbackRowCount) }, () => 'hex' as ColorMode);
-        const extractedRowPaintStyleIdsForUi = Array.from({ length: Math.max(1, fallbackRowCount) }, () => null as string | null);
-        const rowColorsForUiBase = targetNode.type === 'INSTANCE'
-            ? extractedRowColorsForUi
-            : ((!isDataOnlyApply && requestedRowColors.length > 0)
-                ? requestedRowColors
-                : resolveRowColorsFromNode(targetNode, type, fallbackRowCount, styleInfo.colors));
-        const rowColorModesForUiBase = targetNode.type === 'INSTANCE'
-            ? extractedRowColorModesForUi
-            : ((!isDataOnlyApply && requestedRowColorModes.length > 0)
-                ? requestedRowColorModes
-                : resolveRowColorModesFromNode(targetNode, fallbackRowCount));
-        const rowPaintStyleIdsForUiBase = targetNode.type === 'INSTANCE'
-            ? extractedRowPaintStyleIdsForUi
-            : ((!isDataOnlyApply && requestedRowPaintStyleIds.length > 0)
-                ? requestedRowPaintStyleIds
-                : resolveRowPaintStyleIdsFromNode(targetNode, fallbackRowCount));
-        const colorsForUi = styleInfo.colors.length > 0
-            ? styleInfo.colors
-            : (isStackedType(type) ? rowColorsForUiBase.slice(1) : ['#3b82f6', '#9CA3AF']);
-        const fallbackColCount = Math.max(
-            1,
-            Number(cols) || 0,
-            Array.isArray(xAxisLabels) ? xAxisLabels.length : 0
-        );
-        const colColorsForUiBase = targetNode.type === 'INSTANCE'
-            ? Array.from({ length: fallbackColCount }, () => rowColorsForUiBase[0] || '#3B82F6')
-            : ((!isDataOnlyApply && normalizedColColors.length > 0)
-                ? normalizedColColors
-                : resolveColColorsFromNode(targetNode, fallbackColCount, rowColorsForUiBase[0] || '#3B82F6'));
-        const colColorModesForUiBase = targetNode.type === 'INSTANCE'
-            ? Array.from({ length: fallbackColCount }, () => 'hex' as ColorMode)
-            : ((!isDataOnlyApply && normalizedColColorModes.length > 0)
-                ? normalizedColColorModes
-                : resolveColColorModesFromNode(targetNode, fallbackColCount));
-        const colPaintStyleIdsForUiBase = targetNode.type === 'INSTANCE'
-            ? Array.from({ length: fallbackColCount }, () => null as string | null)
-            : ((!isDataOnlyApply && normalizedColPaintStyleIds.length > 0)
-                ? normalizedColPaintStyleIds
-                : resolveColPaintStyleIdsFromNode(targetNode, fallbackColCount));
-        const colColorEnabledForUiBase = targetNode.type === 'INSTANCE'
-            ? Array.from({ length: fallbackColCount }, () => false)
-            : ((!isDataOnlyApply && normalizedColColorEnabled.length > 0)
-                ? normalizedColColorEnabled
-                : resolveColColorEnabledFromNode(targetNode, fallbackColCount));
-        const markColorSourceForUiBase = targetNode.type === 'INSTANCE'
-            ? 'row'
-            : (!isDataOnlyApply
-                ? (markColorSource === 'col' ? 'col' : 'row')
-                : (targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row'));
-        const rowColorsForUi = effectiveLocalMask.rowColors && Array.isArray(effectiveLocalOverrides.rowColors)
-            ? normalizeRowColors(effectiveLocalOverrides.rowColors)
-            : rowColorsForUiBase;
-        const rowColorModesForUi = effectiveLocalMask.rowColorModes && Array.isArray(effectiveLocalOverrides.rowColorModes)
-            ? normalizeColorModes(effectiveLocalOverrides.rowColorModes)
-            : rowColorModesForUiBase;
-        const rowPaintStyleIdsForUi = effectiveLocalMask.rowPaintStyleIds && Array.isArray(effectiveLocalOverrides.rowPaintStyleIds)
-            ? normalizeStyleIds(effectiveLocalOverrides.rowPaintStyleIds)
-            : rowPaintStyleIdsForUiBase;
-        const colColorsForUi = effectiveLocalMask.colColors && Array.isArray(effectiveLocalOverrides.colColors)
-            ? normalizeRowColors(effectiveLocalOverrides.colColors)
-            : colColorsForUiBase;
-        const colColorModesForUi = effectiveLocalMask.colColorModes && Array.isArray(effectiveLocalOverrides.colColorModes)
-            ? normalizeColorModes(effectiveLocalOverrides.colColorModes)
-            : colColorModesForUiBase;
-        const colPaintStyleIdsForUi = effectiveLocalMask.colPaintStyleIds && Array.isArray(effectiveLocalOverrides.colPaintStyleIds)
-            ? normalizeStyleIds(effectiveLocalOverrides.colPaintStyleIds)
-            : colPaintStyleIdsForUiBase;
-        const colColorEnabledForUi = effectiveLocalMask.colColorEnabled && Array.isArray(effectiveLocalOverrides.colColorEnabled)
-            ? effectiveLocalOverrides.colColorEnabled.map((v) => Boolean(v))
-            : colColorEnabledForUiBase;
-        const markColorSourceForUi = effectiveLocalMask.markColorSource
-            ? (effectiveLocalOverrides.markColorSource === 'col' ? 'col' : 'row')
-            : markColorSourceForUiBase;
-        const savedCornerRadiusRaw = Number(targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_CORNER_RADIUS));
-        const cornerRadiusForUi = Number.isFinite(savedCornerRadiusRaw)
-            ? savedCornerRadiusRaw
-            : styleInfo.cornerRadius;
-
-        // 차트 생성 후 데이터 및 스타일 저장
-        const markRatioForUi = requestedRatio ?? resolveMarkRatioFromNode(targetNode, styleInfo.markRatio);
-        const stylePayload = {
-            chartType: type,
-            markNum: markNum,
-            yCount: cellCount,
-            colCount: cols,
-
-            colors: colorsForUi.length > 0 ? colorsForUi : ['#3b82f6', '#9CA3AF'],
-            markRatio: markRatioForUi,
-            rowColors: rowColorsForUi,
-            rowColorModes: rowColorModesForUi,
-            rowPaintStyleIds: rowPaintStyleIdsForUi,
-            colColors: colColorsForUi,
-            colColorModes: colColorModesForUi,
-            colPaintStyleIds: colPaintStyleIdsForUi,
-            colColorEnabled: colColorEnabledForUi,
-            markColorSource: markColorSourceForUi,
-            assistLineVisible: effectiveLocalMask.assistLineVisible
-                ? Boolean(effectiveLocalOverrides.assistLineVisible)
-                : Boolean(assistLineVisible),
-            assistLineEnabled: effectiveLocalMask.assistLineEnabled
-                ? (effectiveLocalOverrides.assistLineEnabled || { min: false, max: false, avg: false, ctr: false })
-                : (assistLineEnabled || { min: false, max: false, avg: false, ctr: false }),
-            linePointVisible: linePointVisible !== false,
-            lineFeature2Enabled: lineFeature2Enabled === true,
-            xAxisLabelsVisible: xAxisLabelsVisible !== false,
-            barLabelVisible: type === 'bar'
-                ? (typeof barLabelVisible === 'boolean'
-                    ? barLabelVisible
-                    : resolveBarLabelVisibleFromNode(targetNode))
-                : false,
-            barLabelSource: type === 'bar'
-                ? ((barLabelSource === 'y' || barLabelSource === 'row')
-                    ? barLabelSource
-                    : resolveBarLabelSourceFromNode(targetNode))
-                : 'row',
-            yAxisVisible: yAxisVisible !== false,
-            cornerRadius: cornerRadiusForUi,
-            strokeWidth: resolveStrokeWidthForUi(targetNode, strokeWidth, styleInfo.strokeWidth),
-            cellFillStyle: effectiveLocalMask.cellFillStyle
-                ? (effectiveLocalOverrides.cellFillStyle || styleInfo.cellFillStyle || null)
-                : (cellFillStyle || styleInfo.cellFillStyle || null),
-            lineBackgroundStyle: effectiveLocalMask.lineBackgroundStyle
-                ? (effectiveLocalOverrides.lineBackgroundStyle || styleInfo.lineBackgroundStyle || null)
-                : (lineBackgroundStyle || styleInfo.lineBackgroundStyle || null),
-            markStyle: effectiveLocalMask.markStyle
-                ? (effectiveLocalOverrides.markStyle || styleInfo.markStyle || null)
-                : (markStyle || styleInfo.markStyle || null),
-            markStyles: effectiveLocalMask.markStyles
-                ? (effectiveLocalOverrides.markStyles || styleInfo.markStyles || [])
-                : (Array.isArray(markStyles) && markStyles.length > 0 ? markStyles : (styleInfo.markStyles || [])),
-            colStrokeStyle: effectiveLocalMask.colStrokeStyle
-                ? (effectiveLocalOverrides.colStrokeStyle || styleInfo.colStrokeStyle || null)
-                : (colStrokeStyle || styleInfo.colStrokeStyle || null),
-            chartContainerStrokeStyle: effectiveLocalMask.gridContainerStyle
-                ? (effectiveLocalOverrides.gridContainerStyle || styleInfo.chartContainerStrokeStyle || null)
-                : (gridContainerStyle || styleInfo.chartContainerStrokeStyle || null),
-            assistLineStrokeStyle: effectiveLocalMask.assistLineStyle
-                ? (effectiveLocalOverrides.assistLineStyle || styleInfo.assistLineStrokeStyle || null)
-                : (assistLineStyle || styleInfo.assistLineStrokeStyle || null),
-            previewPlotWidth: getPlotAreaWidth(targetNode),
-            previewPlotHeight: getGraphHeight(targetNode as FrameNode),
-            cellStrokeStyles: styleInfo.cellStrokeStyles || [],
-            rowStrokeStyles: effectiveLocalMask.rowStrokeStyles
-                ? (effectiveLocalOverrides.rowStrokeStyles || styleInfo.rowStrokeStyles || [])
-                : (Array.isArray(rowStrokeStyles) ? rowStrokeStyles : (styleInfo.rowStrokeStyles || [])),
-            isInstanceTarget: targetNode.type === 'INSTANCE',
-            isTemplateMasterTarget: applyPolicy === 'template-master',
-            extractedStyleSnapshot: {
-                rowColors: extractedRowColorsForUi,
-                rowColorModes: extractedRowColorModesForUi,
-                rowPaintStyleIds: extractedRowPaintStyleIdsForUi,
-                colColors: colColorsForUiBase,
-                colColorModes: colColorModesForUiBase,
-                colPaintStyleIds: colPaintStyleIdsForUiBase,
-                colColorEnabled: colColorEnabledForUiBase,
-                markColorSource: markColorSourceForUiBase,
-                cellFillStyle: styleInfo.cellFillStyle || null,
-                lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
-                markStyle: styleInfo.markStyle || null,
-                markStyles: styleInfo.markStyles || [],
-                rowStrokeStyles: styleInfo.rowStrokeStyles || [],
-                colStrokeStyle: styleInfo.colStrokeStyle || null,
-                chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
-                assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null
-            },
-            localStyleOverrides: effectiveLocalOverrides,
-            localStyleOverrideMask: effectiveLocalMask
-        };
 
         await perf.step('save-and-sync', () => {
             saveChartData(
                 targetNode,
                 { ...msg.payload, styleApplyMode: resolvedStyleApplyMode },
-                shouldUseFastStyleSync ? undefined : styleInfo,
+                undefined,
                 { skipDataKeys: isTemplateMasterApply }
             );
             if (targetNode.type === 'INSTANCE') {
                 saveLocalStyleOverrides(targetNode, effectiveLocalOverrides, effectiveLocalMask);
             }
+            bumpTargetRevision(targetNode.id);
             debugLog('[chart-plugin][save-policy]', {
                 applyPolicy,
                 targetNodeId: targetNode.id,
                 skipDataKeys: isTemplateMasterApply
             });
-            figma.ui.postMessage({ type: 'style_extracted', source: 'generate_apply', payload: stylePayload });
+            figma.ui.postMessage({
+                type: 'preview_plot_size_updated',
+                previewPlotWidth: getPlotAreaWidth(targetNode),
+                previewPlotHeight: getGraphHeight(targetNode as FrameNode)
+            });
             if (msg.type === 'apply') {
                 figma.ui.postMessage({ type: 'apply_completed', targetId: targetNode.id });
             }
         });
         });
+        if (wasCancelled || isCancelled()) {
+            figma.ui.postMessage({
+                type: 'apply_cancelled',
+                targetId: targetNode.id
+            });
+            return;
+        }
+
         const perfReport = perf.done();
         logApplyPerf(perfReport, {
             messageType: msg.type,
@@ -1276,196 +1459,30 @@ figma.ui.onmessage = async (msg) => {
         }
     }
 
-    // Export를 위한 스타일 추출 로직 (별도 호출 시)
+    // Export style extraction (legacy path, kept for backward compatibility)
     else if (msg.type === 'extract_style') {
-        const nodes = figma.currentPage.selection;
-        if (nodes.length !== 1) {
-            figma.notify("Please select exactly one chart component.");
-            return;
-        }
-        const node = resolveChartTargetFromInnerNode(nodes[0]);
-        if (!isRecognizedChartSelection(node)) {
+        const node = resolveStyleExtractTarget();
+        if (!node) {
             figma.notify("Please select a chart component instance.");
             return;
         }
-        const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
-
-        // 주입된 payload가 없으므로 역산(Inference) 수행
-        const structure = inferStructureFromGraph(chartType, node);
-
-        // 숨겨진 레이어 제외하고 카운트 (Visible Column Only)
-        const cols = collectColumns(node);
-        const visibleCols = cols.filter(c => c.node.visible);
-        const stackedGroupStructure = (chartType === 'stackedBar' || chartType === 'stacked')
-            ? (visibleCols.length > 0 ? visibleCols : cols).map((colObj) => {
-                let parent: SceneNode = colObj.node;
-                if ('children' in colObj.node) {
-                    const tab = (colObj.node as SceneNode & ChildrenMixin).children.find((n: SceneNode) => n.name === 'tab');
-                    if (tab) parent = tab;
-                }
-                if (!('children' in parent)) return 0;
-                const group = (parent as SceneNode & ChildrenMixin).children.find((n: SceneNode) => MARK_NAME_PATTERNS.STACKED_GROUP.test(n.name));
-                if (!group || !('children' in group)) return 0;
-                const visibleBars = (group as SceneNode & ChildrenMixin).children.filter(
-                    (n: SceneNode) => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name) && n.visible
-                );
-                return visibleBars.length;
-            })
-            : null;
-        const extractedMarkNum = stackedGroupStructure || structure.markNum;
-        const colCount = visibleCols.length > 0
-            ? visibleCols.length
-            : (Array.isArray(extractedMarkNum)
-                ? Math.max(1, extractedMarkNum.length)
-                : (cols.length > 0 ? cols.length : 5));
-
-        const styleInfo = extractStyleFromNode(node, chartType, { columns: cols });
-        const markRatioForUi = resolveMarkRatioFromNode(node, styleInfo.markRatio);
-        let rowCount = 1;
-        const savedValuesRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
-        if (savedValuesRaw) {
-            try {
-                const parsed = JSON.parse(savedValuesRaw);
-                if (Array.isArray(parsed)) rowCount = parsed.length;
-            } catch { }
-        }
-        if (!savedValuesRaw) {
-            if (chartType === 'stackedBar' || chartType === 'stacked') {
-                rowCount = Array.isArray(extractedMarkNum) ? Math.max(1, Math.max(...extractedMarkNum) + 1) : 1;
-            } else {
-                rowCount = typeof extractedMarkNum === 'number' ? Math.max(1, extractedMarkNum) : 1;
-            }
-        }
-        const isInstanceTarget = node.type === 'INSTANCE';
-        const extractedRowColors = Array.from({ length: Math.max(1, rowCount) }, (_, i) =>
-            normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
-        );
-        const extractedRowColorModes = Array.from({ length: Math.max(1, rowCount) }, () => 'hex' as ColorMode);
-        const extractedRowPaintStyleIds = Array.from({ length: Math.max(1, rowCount) }, () => null as string | null);
-        const extractedColColors = Array.from({ length: Math.max(1, colCount) }, () => extractedRowColors[0] || '#3B82F6');
-        const extractedColColorModes = Array.from({ length: Math.max(1, colCount) }, () => 'hex' as ColorMode);
-        const extractedColPaintStyleIds = Array.from({ length: Math.max(1, colCount) }, () => null as string | null);
-        const extractedColEnabled = Array.from({ length: Math.max(1, colCount) }, () => false);
-        const extractedMarkColorSource: 'row' | 'col' = 'row';
-        const localOverrideState = isInstanceTarget
-            ? loadLocalStyleOverrides(node)
-            : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
-
-        const rowColorsForUi = (localOverrideState.mask.rowColors && Array.isArray(localOverrideState.overrides.rowColors))
-            ? normalizeRowColors(localOverrideState.overrides.rowColors)
-            : (isInstanceTarget
-                ? extractedRowColors
-                : resolveRowColorsFromNode(node, chartType, rowCount, styleInfo.colors));
-        const rowColorModesForUi = (localOverrideState.mask.rowColorModes && Array.isArray(localOverrideState.overrides.rowColorModes))
-            ? normalizeColorModes(localOverrideState.overrides.rowColorModes)
-            : (isInstanceTarget
-                ? extractedRowColorModes
-                : resolveRowColorModesFromNode(node, rowCount));
-        const rowPaintStyleIdsForUi = (localOverrideState.mask.rowPaintStyleIds && Array.isArray(localOverrideState.overrides.rowPaintStyleIds))
-            ? normalizeStyleIds(localOverrideState.overrides.rowPaintStyleIds)
-            : (isInstanceTarget
-                ? extractedRowPaintStyleIds
-                : resolveRowPaintStyleIdsFromNode(node, rowCount));
-        const colColorsForUi = (localOverrideState.mask.colColors && Array.isArray(localOverrideState.overrides.colColors))
-            ? normalizeRowColors(localOverrideState.overrides.colColors)
-            : (isInstanceTarget
-                ? extractedColColors
-                : resolveColColorsFromNode(node, colCount, rowColorsForUi[0] || '#3B82F6'));
-        const colColorModesForUi = (localOverrideState.mask.colColorModes && Array.isArray(localOverrideState.overrides.colColorModes))
-            ? normalizeColorModes(localOverrideState.overrides.colColorModes)
-            : (isInstanceTarget
-                ? extractedColColorModes
-                : resolveColColorModesFromNode(node, colCount));
-        const colPaintStyleIdsForUi = (localOverrideState.mask.colPaintStyleIds && Array.isArray(localOverrideState.overrides.colPaintStyleIds))
-            ? normalizeStyleIds(localOverrideState.overrides.colPaintStyleIds)
-            : (isInstanceTarget
-                ? extractedColPaintStyleIds
-                : resolveColPaintStyleIdsFromNode(node, colCount));
-        const colColorEnabledForUi = (localOverrideState.mask.colColorEnabled && Array.isArray(localOverrideState.overrides.colColorEnabled))
-            ? localOverrideState.overrides.colColorEnabled.map((v) => Boolean(v))
-            : (isInstanceTarget ? extractedColEnabled : resolveColColorEnabledFromNode(node, colCount));
-        const markColorSource = localOverrideState.mask.markColorSource
-            ? (localOverrideState.overrides.markColorSource === 'col' ? 'col' : 'row')
-            : (isInstanceTarget ? extractedMarkColorSource : (node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_COLOR_SOURCE) === 'col' ? 'col' : 'row'));
-        const assistLineVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE) === 'true';
-        const xAxisLabelsVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS_VISIBLE) !== 'false';
-        const barLabelVisible = resolveBarLabelVisibleFromNode(node);
-        const barLabelSource = resolveBarLabelSourceFromNode(node);
-        const yAxisVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE) !== 'false';
-        const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
-        let assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
-        if (assistLineEnabledRaw) {
-            try {
-                const parsed = JSON.parse(assistLineEnabledRaw);
-                assistLineEnabled = {
-                    min: Boolean(parsed?.min),
-                    max: Boolean(parsed?.max),
-                    avg: Boolean(parsed?.avg),
-                    ctr: Boolean(parsed?.ctr)
-                };
-            } catch { }
-        }
-
-        const payload = {
-            chartType: chartType,
-            markNum: extractedMarkNum,
-            yCount: structure.cellCount || 4,
-            colCount: colCount,
-            previewPlotWidth: getPlotAreaWidth(node),
-            previewPlotHeight: getGraphHeight(node as FrameNode),
-
-            colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
-            markRatio: markRatioForUi,
-            rowColors: rowColorsForUi,
-            rowColorModes: rowColorModesForUi,
-            rowPaintStyleIds: rowPaintStyleIdsForUi,
-            colColors: colColorsForUi,
-            colColorModes: colColorModesForUi,
-            colPaintStyleIds: colPaintStyleIdsForUi,
-            colColorEnabled: colColorEnabledForUi,
-            markColorSource,
-            xAxisLabelsVisible,
-            barLabelVisible,
-            barLabelSource,
-            yAxisVisible,
-            assistLineVisible,
-            assistLineEnabled,
-            cornerRadius: styleInfo.cornerRadius,
-            strokeWidth: resolveStrokeWidthForUi(node, undefined, styleInfo.strokeWidth),
-            cellFillStyle: styleInfo.cellFillStyle || null,
-            lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
-            markStyle: styleInfo.markStyle || null,
-            markStyles: styleInfo.markStyles || [],
-            colStrokeStyle: styleInfo.colStrokeStyle || null,
-            chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
-            assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null,
-            cellStrokeStyles: styleInfo.cellStrokeStyles || [],
-            rowStrokeStyles: styleInfo.rowStrokeStyles || [],
-            isInstanceTarget,
-            extractedStyleSnapshot: {
-                rowColors: extractedRowColors,
-                rowColorModes: extractedRowColorModes,
-                rowPaintStyleIds: extractedRowPaintStyleIds,
-                colColors: extractedColColors,
-                colColorModes: extractedColColorModes,
-                colPaintStyleIds: extractedColPaintStyleIds,
-                colColorEnabled: extractedColEnabled,
-                markColorSource: extractedMarkColorSource,
-                cellFillStyle: styleInfo.cellFillStyle || null,
-                lineBackgroundStyle: styleInfo.lineBackgroundStyle || null,
-                markStyle: styleInfo.markStyle || null,
-                markStyles: styleInfo.markStyles || [],
-                rowStrokeStyles: styleInfo.rowStrokeStyles || [],
-                colStrokeStyle: styleInfo.colStrokeStyle || null,
-                chartContainerStrokeStyle: styleInfo.chartContainerStrokeStyle || null,
-                assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null
-            },
-            localStyleOverrides: localOverrideState.overrides,
-            localStyleOverrideMask: localOverrideState.mask
-        };
-
-        figma.ui.postMessage({ type: 'style_extracted', source: 'extract_style', payload: payload });
+        postStyleExtracted(node, 'extract_style', 'export_tab', true);
         figma.notify("Style Extracted!");
+    }
+    else if (msg.type === 'request_style_extract') {
+        const requestedTargetId = typeof msg.payload?.targetId === 'string'
+            ? msg.payload.targetId
+            : (typeof msg.targetId === 'string' ? msg.targetId : undefined);
+        const node = resolveStyleExtractTarget(requestedTargetId);
+        if (!node) {
+            figma.notify("Please select a chart component instance.");
+            return;
+        }
+        const reason = msg.reason === 'style_tab' || msg.payload?.reason === 'style_tab'
+            ? 'style_tab'
+            : 'export_tab';
+        const force = Boolean(msg.force ?? msg.payload?.force);
+        postStyleExtracted(node, 'on_demand', reason, force);
     }
     else if (msg.type === 'list_paint_styles') {
         const list = await loadLocalPaintStyleSelections();
@@ -1574,7 +1591,8 @@ figma.ui.onmessage = async (msg) => {
             reason: 'selection',
             isCType: false,
             selectionTargets: getSelectionTargetsMeta(selectedChartTargets),
-            activeTargetId
+            activeTargetId,
+            deferStyleExtract: true
         });
     }
 };
@@ -1630,7 +1648,8 @@ figma.on("selectionchange", () => {
         reason: 'selection',
         isCType: selection.length === 1 ? detectCTypeSelection(selection[0], activeTarget) : false,
         selectionTargets: getSelectionTargetsMeta(selectedChartTargets),
-        activeTargetId
+        activeTargetId,
+        deferStyleExtract: true
     });
 });
 

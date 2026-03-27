@@ -6,6 +6,12 @@ import { normalizeHexColor, rgbToHex, tryApplyFill, tryApplyFillStyleLink, tryAp
 // STACKED BAR CHART DRAWING
 // ==========================================
 
+export type StackedDrawChunkControl = {
+    chunkSize?: number;
+    shouldCancel?: () => boolean;
+    yieldControl?: () => Promise<void>;
+};
+
 function normalizeRatio(value: number | null | undefined): number {
     const ratio = typeof value === 'number' && Number.isFinite(value) ? value : 0.8;
     return Math.max(0.01, Math.min(1, ratio));
@@ -196,7 +202,13 @@ function forceGroupContainerHug(groupInstance: InstanceNode, itemSpacing: number
     }
 }
 
-export function applyStackedBar(config: any, H: number, graph: SceneNode, precomputedCols?: ColRef[]) {
+export async function applyStackedBar(
+    config: any,
+    H: number,
+    graph: SceneNode,
+    precomputedCols?: ColRef[],
+    control?: StackedDrawChunkControl
+) {
     const { values, mode, markNum, markRatio } = config;
     if (!values || values.length === 0) return;
 
@@ -226,8 +238,12 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode, precom
     let globalDataIdx = 0;
     const targetRatio = normalizeRatio(typeof markRatio === 'number' ? markRatio : null);
 
-    columns.forEach((colObj, index) => {
-        if (globalDataIdx >= totalDataCols) return;
+    const chunkSize = Math.max(1, Number(control?.chunkSize) || 20);
+    let processedColumns = 0;
+    for (let index = 0; index < columns.length; index++) {
+        if (control?.shouldCancel?.()) return;
+        const colObj = columns[index];
+        if (globalDataIdx >= totalDataCols) continue;
 
         let currentGroupBarCount = 1;
         if (Array.isArray(markNum)) {
@@ -302,7 +318,13 @@ export function applyStackedBar(config: any, H: number, graph: SceneNode, precom
                 }
             });
         }
-    });
+        processedColumns += 1;
+        if (processedColumns % chunkSize === 0) {
+            if (control?.shouldCancel?.()) return;
+            if (control?.yieldControl) await control.yieldControl();
+            if (control?.shouldCancel?.()) return;
+        }
+    }
 }
 
 export function applySegmentsToBar(

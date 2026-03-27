@@ -41,6 +41,7 @@ type InitPluginUiOptions = {
     isCType?: boolean;
     selectionTargets?: SelectionTargetMeta[];
     activeTargetId?: string | null;
+    deferStyleExtract?: boolean;
 };
 
 // ==========================================
@@ -551,14 +552,17 @@ export async function syncChartOnResize(
         });
         const H = getGraphHeight(node as FrameNode);
         const xEmptyHeight = getXEmptyHeight(node as FrameNode);
-        await perf.step('draw-chart', () => {
+        await perf.step('draw-chart', async () => {
             if (chartType === 'stackedBar' || chartType === 'stacked') {
-                applyStackedBar(payload, H, node);
+                await applyStackedBar(payload, H, node);
             } else if (chartType === 'bar') {
-                applyBar(payload, H, node);
+                await applyBar(payload, H, node);
             } else if (chartType === 'line') {
-                const lineResult = applyLine(payload, H, node);
+                const lineResult = await applyLine(payload, H, node);
                 if (!lineResult.ok) {
+                    if (lineResult.errorCode === 'cancelled') {
+                        return;
+                    }
                     figma.notify('Line apply failed: required line structure is missing.');
                     console.error('[chart-plugin][line-apply-failed]', {
                         reason,
@@ -649,21 +653,40 @@ export async function initPluginUI(
         ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((a, b) => a + b, 0) : 0)
         : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
     const cols = await perf.step('collect-columns', () => collectColumns(node));
+    const deferStyleExtract = opts?.deferStyleExtract === true;
     const shouldUseSelectionFastPath = Boolean(
         chartData.isSaved
         && opts?.reason === 'selection'
         && Math.max(colCount, cols.length) >= 40
     );
-    const styleInfo = await perf.step('style-extract', () => extractStyleFromNode(node, chartType, {
-        columns: cols,
-        fastPath: shouldUseSelectionFastPath
-    }));
-    const extractedColors = styleInfo.colors;
+    const styleInfo = deferStyleExtract
+        ? {
+            colors: [] as string[],
+            markRatio: undefined,
+            cornerRadius: 0,
+            strokeWidth: Number.isFinite(Number(lastStrokeWidth)) ? Number(lastStrokeWidth) : 2,
+            cellFillStyle: null,
+            lineBackgroundStyle: null,
+            markStyle: null,
+            markStyles: [] as MarkInjectionStyle[],
+            colStrokeStyle: null,
+            chartContainerStrokeStyle: null,
+            assistLineStrokeStyle: null,
+            cellStrokeStyles: [] as any[],
+            rowStrokeStyles: [] as any[]
+        }
+        : await perf.step('style-extract', () => extractStyleFromNode(node, chartType, {
+            columns: cols,
+            fastPath: shouldUseSelectionFastPath
+        }));
+    const extractedColors = deferStyleExtract
+        ? resolveRowColorsFromNode(node, chartType, Math.max(1, rowColorCount))
+        : styleInfo.colors;
     const isInstanceTarget = node.type === 'INSTANCE';
     const localOverrideState = isInstanceTarget
         ? loadLocalStyleOverrides(node)
         : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
-    const markRatio = resolveMarkRatioFromNode(node, styleInfo.markRatio);
+    const markRatio = resolveMarkRatioFromNode(node, deferStyleExtract ? undefined : styleInfo.markRatio);
     const assistLineEnabled = resolveAssistLineEnabledFromNode(node);
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
     const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);

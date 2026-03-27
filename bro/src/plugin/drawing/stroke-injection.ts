@@ -100,6 +100,12 @@ export type StrokeInjectionResult = {
     };
 };
 
+export type StrokeInjectionApplyOptions = {
+    applyColumnScopes?: boolean;
+    applyLegendScope?: boolean;
+    applyGridContainerScope?: boolean;
+};
+
 function normalizeCellFillStyle(input: unknown): { color?: string; visible?: boolean } | null {
     if (!input || typeof input !== 'object') return null;
     const source = input as CellFillInjectionStyle;
@@ -1407,17 +1413,27 @@ function shouldSkipMarkStyleApply(payload: StrokeInjectionRuntimePayload, markSt
     return !hasEffectiveStyle;
 }
 
-export function applyStrokeInjection(graph: SceneNode, payload: StrokeInjectionRuntimePayload, precomputedCols?: ColRef[]): StrokeInjectionResult {
+export function applyStrokeInjection(
+    graph: SceneNode,
+    payload: StrokeInjectionRuntimePayload,
+    precomputedCols?: ColRef[],
+    options?: StrokeInjectionApplyOptions
+): StrokeInjectionResult {
+    const applyColumnScopes = options?.applyColumnScopes !== false;
+    const applyLegendScope = options?.applyLegendScope !== false;
+    const applyGridContainerScope = options?.applyGridContainerScope !== false;
     const columns = precomputedCols ?? collectColumns(graph);
     const contexts = buildColumnStrokeContexts(columns, payload.chartType);
-    const cellFillStyle = resolveCellFillStyle(payload);
-    const lineBackgroundStyle = resolveLineBackgroundStyle(payload);
+    const cellFillStyle = applyColumnScopes ? resolveCellFillStyle(payload) : null;
+    const lineBackgroundStyle = applyColumnScopes ? resolveLineBackgroundStyle(payload) : null;
     const markStyles = resolveMarkStyles(payload);
-    const legendSync = applyLegendMarkSync(graph, markStyles, payload, payload.markNum, payload.chartType, payload.rowColors, columns);
-    const cellTopStyle = resolveCellTopStyle(payload);
-    const tabRightStyle = resolveTabRightStyle(payload);
-    const gridContainerStyle = resolveGridContainerStyle(payload);
-    const skipMarkStyleApply = shouldSkipMarkStyleApply(payload, markStyles);
+    const legendSync = applyLegendScope
+        ? applyLegendMarkSync(graph, markStyles, payload, payload.markNum, payload.chartType, payload.rowColors, columns)
+        : { result: createScopeResult(), enabled: false };
+    const cellTopStyle = applyColumnScopes ? resolveCellTopStyle(payload) : null;
+    const tabRightStyle = applyColumnScopes ? resolveTabRightStyle(payload) : null;
+    const gridContainerStyle = applyGridContainerScope ? resolveGridContainerStyle(payload) : null;
+    const skipMarkStyleApply = !applyColumnScopes || shouldSkipMarkStyleApply(payload, markStyles);
 
     return {
         cellFill: cellFillStyle ? applyCellFill(contexts, cellFillStyle, payload.chartType) : createScopeResult(),
