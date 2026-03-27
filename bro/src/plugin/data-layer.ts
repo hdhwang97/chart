@@ -471,6 +471,10 @@ export function saveChartData(
         String(msg.barLabelVisible !== false)
     );
     node.setPluginData(
+        PLUGIN_DATA_KEYS.LAST_BAR_LABEL_SOURCE,
+        msg.barLabelSource === 'y' ? 'y' : 'row'
+    );
+    node.setPluginData(
         PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE,
         String(normalizeYAxisVisible(msg.yAxisVisible))
     );

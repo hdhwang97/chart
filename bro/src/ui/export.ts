@@ -42,6 +42,8 @@ function buildPreviewStyleFromState() {
         lineFeature2Enabled: state.lineFeature2Enabled,
         xAxisLabelsVisible: state.xAxisLabelsVisible,
         yAxisVisible: state.yAxisVisible,
+        barLabelVisible: state.chartType === 'bar' ? state.barLabelVisible : false,
+        barLabelSource: state.chartType === 'bar' ? state.barLabelSource : 'row',
         assistLineVisible: state.assistLineVisible,
         assistLineEnabled: state.assistLineEnabled,
         markRatio: state.markRatio,
@@ -209,6 +211,37 @@ function buildXAxisLabels(totalCols: number): string[] {
         const raw = state.colHeaderTitles[i];
         return typeof raw === 'string' && raw.trim() ? raw.trim() : `C${i + 1}`;
     });
+}
+
+function normalizeBarLabelSource(source: unknown): 'row' | 'y' {
+    return source === 'y' ? 'y' : 'row';
+}
+
+function normalizeRowLabel(raw: unknown, index: number): string {
+    const label = typeof raw === 'string' ? raw.trim() : '';
+    return label || `R${index + 1}`;
+}
+
+function formatBarNumericLabel(value: number): string {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '';
+    if (Number.isInteger(numeric)) return String(numeric);
+    return String(Number(numeric.toFixed(2)));
+}
+
+function resolveBarLabelText(
+    rowIndex: number,
+    colIndex: number,
+    value: number,
+    source: 'row' | 'y',
+    rawData?: unknown[][]
+): string {
+    if (source === 'y') {
+        const raw = rawData?.[rowIndex]?.[colIndex];
+        const rawText = raw === null || raw === undefined ? '' : String(raw).trim();
+        return rawText || formatBarNumericLabel(value);
+    }
+    return normalizeRowLabel(state.rowHeaderLabels[rowIndex], rowIndex);
 }
 
 function buildYTickValues(yMin: number, yMax: number, cellCount: number): number[] {
@@ -777,6 +810,11 @@ function renderD3Preview(style: any) {
         }
     }
     const numRows = sampleData.length;
+    const barLabelVisible = chartType === 'bar'
+        ? (style?.barLabelVisible !== undefined ? Boolean(style.barLabelVisible) : state.barLabelVisible)
+        : false;
+    const barLabelSource = normalizeBarLabelSource(style?.barLabelSource ?? state.barLabelSource);
+    const barLabelRawData: unknown[][] | undefined = hasStateData ? state.data : undefined;
 
     const yDomain = getEffectiveYDomain({
         mode: state.dataMode,
@@ -817,9 +855,10 @@ function renderD3Preview(style: any) {
                 const colX = xScale(c)!;
                 const colW = xScale.bandwidth();
                 const clusterLayout = computeClusterLayout(colW, ratio, numRows);
+                const barX = colX + clusterLayout.clusterOffset + (r * (clusterLayout.subBarW + clusterLayout.gapPx));
 
                 const rect = g.append('rect')
-                    .attr('x', colX + clusterLayout.clusterOffset + (r * (clusterLayout.subBarW + clusterLayout.gapPx)))
+                    .attr('x', barX)
                     .attr('y', yScale(val))
                     .attr('width', clusterLayout.subBarW)
                     .attr('height', h - yScale(val))
@@ -827,6 +866,21 @@ function renderD3Preview(style: any) {
                     .attr('rx', cornerRadius);
                 const draftStroke = getDraftMarkStrokeFromState(r, 'bar', rowColors);
                 applyStroke(rect, draftStroke, draftStroke.color || '#3B82F6', 0);
+
+                if (barLabelVisible) {
+                    const labelText = resolveBarLabelText(r, c, val, barLabelSource, barLabelRawData);
+                    if (labelText) {
+                        const labelY = Math.max(8, Math.min(h - 2, yScale(val) - 4));
+                        g.append('text')
+                            .attr('x', barX + (clusterLayout.subBarW / 2))
+                            .attr('y', labelY)
+                            .attr('text-anchor', 'middle')
+                            .attr('font-size', 8)
+                            .attr('fill', '#111827')
+                            .style('pointer-events', 'none')
+                            .text(labelText);
+                    }
+                }
             }
         }
     } else if (chartType === 'line') {
@@ -955,6 +1009,10 @@ export function generateD3CodeString(style: any): string {
     const lineCurveEnabled = style?.lineFeature2Enabled !== undefined
         ? Boolean(style.lineFeature2Enabled)
         : state.lineFeature2Enabled;
+    const barLabelVisible = chartType === 'bar'
+        ? (style?.barLabelVisible !== undefined ? Boolean(style.barLabelVisible) : state.barLabelVisible)
+        : false;
+    const barLabelSource = normalizeBarLabelSource(style?.barLabelSource ?? state.barLabelSource);
     const plotWidth = Number.isFinite(requestedPlotWidth) && requestedPlotWidth > 0
         ? requestedPlotWidth
         : Math.max(0, containerWidth - EXPORT_LAYOUT.margin.left - EXPORT_LAYOUT.margin.right);
@@ -1009,6 +1067,9 @@ export function generateD3CodeString(style: any): string {
     });
     const yTickValues = buildYTickValues(yDomain.yMin, yDomain.yMax, yCount);
     const xLabels = buildXAxisLabels(axisCols);
+    const rowLabels = Array.from({ length: Math.max(1, sampleData.length) }, (_, rowIndex) => (
+        normalizeRowLabel(state.rowHeaderLabels[rowIndex], rowIndex)
+    ));
     const legendItems = buildLegendItems(chartType, rowColors);
     const svgNaturalWidth = Math.max(1, EXPORT_LAYOUT.margin.left + plotWidth + EXPORT_LAYOUT.margin.right);
     const legendLayout = measureLegendLayout(chartType, rowColors, svgNaturalWidth);
@@ -1096,11 +1157,16 @@ export function generateD3CodeString(style: any): string {
             flatCols,
             yCount,
             xLabels,
+            rowLabels,
             xAxisLabelsVisible,
             yAxisVisible,
             yDomain,
             yTicks,
             yLabelFormat: state.yLabelFormat
+        },
+        barLabel: {
+            visible: barLabelVisible,
+            source: barLabelSource
         },
         legend: {
             items: legendItems,
@@ -1214,6 +1280,13 @@ function computeClusterLayout(cellWidth, markRatio, markNum) {
     subBarW: Math.max(1, (clusterW - (gapPx * gaps)) / safeMarkNum),
     gapPx
   };
+}
+
+function formatBarLabelValue(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  if (Number.isInteger(numeric)) return String(numeric);
+  return String(Number(numeric.toFixed(2)));
 }
 
 const yScale = d3.scaleLinear()
@@ -1341,14 +1414,32 @@ if (config.chartType === 'bar') {
       const cluster = computeClusterLayout(colW, config.marks.markRatio, config.data.length);
       const stroke = config.series.bar[seriesIndex]?.stroke || null;
       const fill = config.series.bar[seriesIndex]?.fills?.[colIndex] || config.marks.colors[seriesIndex] || '#3B82F6';
+      const barX = colX + cluster.clusterOffset + (seriesIndex * (cluster.subBarW + cluster.gapPx));
       const rect = plot.append('rect')
-        .attr('x', colX + cluster.clusterOffset + (seriesIndex * (cluster.subBarW + cluster.gapPx)))
+        .attr('x', barX)
         .attr('y', yScale(value))
         .attr('width', cluster.subBarW)
         .attr('height', config.plot.height - yScale(value))
         .attr('fill', fill)
         .attr('rx', config.marks.cornerRadius);
       applyStroke(rect, stroke, fill, 0);
+
+      if (config.barLabel && config.barLabel.visible) {
+        const labelText = config.barLabel.source === 'y'
+          ? formatBarLabelValue(value)
+          : (config.axis.rowLabels?.[seriesIndex] || ('R' + (seriesIndex + 1)));
+        if (labelText) {
+          const labelY = Math.max(8, Math.min(config.plot.height - 2, yScale(value) - 4));
+          plot.append('text')
+            .attr('x', barX + (cluster.subBarW / 2))
+            .attr('y', labelY)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', 8)
+            .attr('fill', '#111827')
+            .style('pointer-events', 'none')
+            .text(labelText);
+        }
+      }
     });
   });
 } else if (config.chartType === 'line') {

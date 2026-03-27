@@ -48,6 +48,7 @@ export const PLUGIN_DATA_KEYS = {
     LAST_X_AXIS_LABELS: "lastXAxisLabels",
     LAST_X_AXIS_LABELS_VISIBLE: "lastXAxisLabelsVisible",
     LAST_BAR_LABEL_VISIBLE: "lastBarLabelVisible",
+    LAST_BAR_LABEL_SOURCE: "lastBarLabelSource",
     LAST_Y_AXIS_VISIBLE: "lastYAxisVisible",
     LAST_Y_MIN: "lastYMin",
     LAST_Y_MAX: "lastYMax",

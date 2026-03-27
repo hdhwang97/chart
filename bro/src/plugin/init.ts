@@ -98,6 +98,10 @@ function resolveBarLabelVisibleFromNode(node: SceneNode) {
     return raw !== 'false';
 }
 
+function resolveBarLabelSourceFromNode(node: SceneNode): 'row' | 'y' {
+    return node.getPluginData(PLUGIN_DATA_KEYS.LAST_BAR_LABEL_SOURCE) === 'y' ? 'y' : 'row';
+}
+
 function resolveYAxisVisibleFromNode(node: SceneNode) {
     const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE);
     if (!raw) return true;
@@ -473,6 +477,7 @@ export async function syncChartOnResize(
         const assistLineVisible = resolveAssistLineVisibleFromNode(node);
         const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
         const barLabelVisible = resolveBarLabelVisibleFromNode(node);
+        const barLabelSource = resolveBarLabelSourceFromNode(node);
         const yAxisVisible = resolveYAxisVisibleFromNode(node);
         const linePointVisible = resolveLinePointVisibleFromNode(node);
         const lineFeature2Enabled = resolveLineFeature2EnabledFromNode(node);
@@ -505,6 +510,7 @@ export async function syncChartOnResize(
             values: valuesToUse,
             rawValues: chartData.values,
             rowHeaderLabels: Array.isArray(savedRowHeaderLabels) ? savedRowHeaderLabels : [],
+            barLabelSource,
             cols: 0,
             cellCount: chartData.cellCount,
             yMin: effectiveY.yMin,
@@ -662,6 +668,7 @@ export async function initPluginUI(
     const assistLineVisible = resolveAssistLineVisibleFromNode(node);
     const xAxisLabelsVisible = resolveXAxisLabelsVisibleFromNode(node);
     const barLabelVisible = resolveBarLabelVisibleFromNode(node);
+    const barLabelSource = resolveBarLabelSourceFromNode(node);
     const yAxisVisible = resolveYAxisVisibleFromNode(node);
     const linePointVisible = resolveLinePointVisibleFromNode(node, cols);
     const lineFeature2Enabled = resolveLineFeature2EnabledFromNode(node, cols);
@@ -790,6 +797,7 @@ export async function initPluginUI(
         markRatio,
         xAxisLabelsVisible,
         barLabelVisible,
+        barLabelSource,
         yAxisVisible,
         linePointVisible,
         lineFeature2Enabled,

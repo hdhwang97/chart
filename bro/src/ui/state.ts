@@ -142,6 +142,7 @@ export const state = {
     markRatio: 0.8,
     xAxisLabelsVisible: true,
     barLabelVisible: true,
+    barLabelSource: 'row' as 'row' | 'y',
     yAxisVisible: true,
     linePointVisible: true,
     lineFeature2Enabled: false,

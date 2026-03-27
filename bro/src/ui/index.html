@@ -285,11 +285,20 @@
                                     </label>
                                 </div>
                             </div>
-                            <div id="preview-bar-label-control" class="hidden items-center gap-1.5">
-                                <span class="text-xxs font-semibold text-text-sub whitespace-nowrap">bar label</span>
+                            <div id="preview-bar-label-control" class="hidden relative items-center gap-1.5">
+                                <button id="preview-bar-label-source-btn"
+                                    class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2 whitespace-nowrap"
+                                    type="button">row</button>
                                 <button id="preview-bar-label-toggle"
                                     class="line-switch-toggle"
                                     type="button"></button>
+                                <div id="preview-bar-label-popover"
+                                    class="hidden absolute top-6 right-0 z-30 w-24 rounded border border-border bg-white shadow-md p-1.5">
+                                    <button id="preview-bar-label-option-row" type="button"
+                                        class="w-full text-left px-2 py-1 rounded text-xxs text-text hover:bg-gray-50">row</button>
+                                    <button id="preview-bar-label-option-y" type="button"
+                                        class="w-full text-left px-2 py-1 rounded text-xxs text-text hover:bg-gray-50">y값</button>
+                                </div>
                             </div>
                             <div id="preview-curve-mode-control" class="hidden items-center gap-1.5">
                                 <span class="text-xxs font-semibold text-text-sub whitespace-nowrap">curve mode</span>

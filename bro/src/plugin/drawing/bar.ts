@@ -139,6 +139,10 @@ function resolveBarLabelVisible(config: any): boolean {
     return config?.barLabelVisible !== false;
 }
 
+function resolveBarLabelSource(config: any): 'row' | 'y' {
+    return config?.barLabelSource === 'y' ? 'y' : 'row';
+}
+
 function findBarLabelPropKey(props: InstanceNode['componentProperties']): string | null {
     return findActualPropKey(props, 'bar_label')
         || findActualPropKey(props, 'bar-label')
@@ -270,7 +274,9 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
     const cols = collectColumns(graph);
     if (!Array.isArray(values) || values.length === 0 || !Array.isArray(values[0])) return;
     const rowHeaderLabels = Array.isArray(config?.rowHeaderLabels) ? config.rowHeaderLabels : [];
+    const rawValues = Array.isArray(config?.rawValues) ? config.rawValues : [];
     const barLabelVisible = resolveBarLabelVisible(config);
+    const barLabelSource = resolveBarLabelSource(config);
 
     // 1. Max Value 계산
     let maxVal = 100;
@@ -361,8 +367,15 @@ export function applyBar(config: any, H: number, graph: SceneNode) {
 
                 if (barLayer) {
                     if (barLabelVisible) {
-                        const rowLabel = normalizeRowLabel(rowHeaderLabels[m], m);
-                        applyBarLabelText(barLayer as SceneNode, rowLabel);
+                        if (barLabelSource === 'y') {
+                            const raw = Array.isArray(rawValues[m]) ? rawValues[m][cIdx] : undefined;
+                            const rawText = raw === null || raw === undefined ? '' : String(raw).trim();
+                            const valueText = Number.isFinite(Number(val)) ? String(val) : '';
+                            applyBarLabelText(barLayer as SceneNode, rawText || valueText);
+                        } else {
+                            const rowLabel = normalizeRowLabel(rowHeaderLabels[m], m);
+                            applyBarLabelText(barLayer as SceneNode, rowLabel);
+                        }
                     }
                     const markColor = getBarColor(config, m, cIdx);
                     const markStyleId = getBarStyleId(config, m, cIdx);

@@ -320,6 +320,31 @@ function getBarPreviewColor(rowIndex: number, colIndex: number): string {
     return resolveBarFillColor(rowIndex, colIndex);
 }
 
+function normalizeBarLabelSource(source: unknown): 'row' | 'y' {
+    return source === 'y' ? 'y' : 'row';
+}
+
+function normalizeRowLabel(raw: unknown, index: number): string {
+    const label = typeof raw === 'string' ? raw.trim() : '';
+    return label || `R${index + 1}`;
+}
+
+function formatBarNumericLabel(value: number): string {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '';
+    if (Number.isInteger(numeric)) return String(numeric);
+    return String(Number(numeric.toFixed(2)));
+}
+
+function resolveBarLabelText(rowIndex: number, colIndex: number, value: number, source: 'row' | 'y'): string {
+    if (source === 'y') {
+        const raw = state.data[rowIndex]?.[colIndex];
+        const rawText = raw === null || raw === undefined ? '' : String(raw).trim();
+        return rawText || formatBarNumericLabel(value);
+    }
+    return normalizeRowLabel(state.rowHeaderLabels[rowIndex], rowIndex);
+}
+
 function isStackedChartType(chartType: string) {
     return chartType === 'stackedBar' || chartType === 'stacked';
 }
@@ -995,6 +1020,8 @@ function renderBarPreview(
     const rows = state.rows;
     const xScale = d3.scaleBand().domain(d3.range(cols)).range([0, w]).padding(0);
     const ratio = normalizeMarkRatio(state.markRatio);
+    const barLabelVisible = state.barLabelVisible === true;
+    const barLabelSource = normalizeBarLabelSource(state.barLabelSource);
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -1009,16 +1036,18 @@ function renderBarPreview(
             const colX = xScale(c)!;
             const colW = xScale.bandwidth();
             const clusterLayout = computeClusterLayout(colW, ratio, rows);
+            const barX = colX + clusterLayout.clusterOffset + (r * (clusterLayout.subBarW + clusterLayout.gapPx));
+            const baseOpacity = activeHighlight ? (isHighlighted ? 1 : 0.2) : 1;
 
             const rect = g.append('rect')
                 .attr('class', 'preview-mark')
-                .attr('x', colX + clusterLayout.clusterOffset + (r * (clusterLayout.subBarW + clusterLayout.gapPx)))
+                .attr('x', barX)
                 .attr('y', yScale(val))
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
                 .attr('fill', getBarPreviewColor(r, c))
-                .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 1)
-                .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 1)
+                .attr('opacity', baseOpacity)
+                .attr('data-base-opacity', baseOpacity)
                 .attr('rx', 2);
 
             if (mode === 'data') {
@@ -1046,6 +1075,24 @@ function renderBarPreview(
                 markStyleTarget(rect, 'mark', mode);
                 markStyleTargetSeries(rect, r, mode);
                 markStyleTargetColumn(rect, c, mode);
+            }
+
+            if (barLabelVisible) {
+                const labelText = resolveBarLabelText(r, c, val, barLabelSource);
+                if (labelText) {
+                    const labelY = Math.max(8, Math.min(h - 2, yScale(val) - 4));
+                    g.append('text')
+                        .attr('class', 'preview-mark')
+                        .attr('x', barX + (clusterLayout.subBarW / 2))
+                        .attr('y', labelY)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', 8)
+                        .attr('fill', '#111827')
+                        .attr('opacity', baseOpacity)
+                        .attr('data-base-opacity', baseOpacity)
+                        .style('pointer-events', 'none')
+                        .text(labelText);
+                }
             }
         }
     }

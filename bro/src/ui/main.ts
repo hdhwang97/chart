@@ -50,6 +50,8 @@ let uiInitialized = false;
 const pendingMessages: any[] = [];
 let previewAssistLinePopoverOpen = false;
 let previewAxisPopoverOpen = false;
+let previewBarLabelPopoverOpen = false;
+let previewBarLabelSourceDraft: 'row' | 'y' = 'row';
 let styleAssistLinePopoverOpen = false;
 let rowColorPopoverOpen = false;
 let activeColorTarget: { type: 'row' | 'col'; index: number } | null = null;
@@ -62,6 +64,14 @@ let rowColorDraftMode: ColorMode | null = null;
 let rowColorDraftStyleId: string | null = null;
 let rowColorDraftColReset = false;
 const lineSwitchToggleClass = 'line-switch-toggle';
+
+function normalizeBarLabelSource(value: unknown): 'row' | 'y' {
+    return value === 'y' ? 'y' : 'row';
+}
+
+function getBarLabelSourceLabel(source: 'row' | 'y'): string {
+    return source === 'y' ? 'y값' : 'row';
+}
 
 function toHex6FromRgb(color: any): string | null {
     const rgb = color?.rgb;
@@ -750,6 +760,33 @@ function openPreviewAxisPopover() {
     ui.previewAxisPopover.classList.remove('hidden');
 }
 
+function updateBarLabelPopoverUi() {
+    const draft = normalizeBarLabelSource(previewBarLabelSourceDraft);
+    const rowSelected = draft === 'row';
+    const ySelected = draft === 'y';
+    ui.previewBarLabelOptionRowBtn.classList.toggle('bg-gray-100', rowSelected);
+    ui.previewBarLabelOptionYBtn.classList.toggle('bg-gray-100', ySelected);
+}
+
+function closePreviewBarLabelPopover(commit = false) {
+    if (previewBarLabelPopoverOpen && commit) {
+        state.barLabelSource = normalizeBarLabelSource(previewBarLabelSourceDraft);
+        updateBarLabelToggleUi();
+        renderPreview();
+        renderStylePreview();
+        refreshExportPreview();
+    }
+    previewBarLabelPopoverOpen = false;
+    ui.previewBarLabelPopover.classList.add('hidden');
+}
+
+function openPreviewBarLabelPopover() {
+    previewBarLabelPopoverOpen = true;
+    previewBarLabelSourceDraft = normalizeBarLabelSource(state.barLabelSource);
+    updateBarLabelPopoverUi();
+    ui.previewBarLabelPopover.classList.remove('hidden');
+}
+
 function closeStyleAssistLinePopover() {
     styleAssistLinePopoverOpen = false;
     ui.styleAssistLinePopover.classList.add('hidden');
@@ -881,9 +918,15 @@ function updateLineFeatureToggleUi() {
 
 function updateBarLabelToggleUi() {
     const isBarChart = state.chartType === 'bar';
+    const source = normalizeBarLabelSource(state.barLabelSource);
+    state.barLabelSource = source;
     ui.previewBarLabelControl.classList.toggle('hidden', !isBarChart);
     ui.previewBarLabelControl.classList.toggle('flex', isBarChart);
+    ui.previewBarLabelSourceBtn.textContent = getBarLabelSourceLabel(source);
     syncSwitchButtonUi(ui.previewBarLabelToggleBtn, state.barLabelVisible, 'bar label');
+    if (!isBarChart) {
+        closePreviewBarLabelPopover(false);
+    }
 }
 
 function renderStylePreview() {
@@ -1012,6 +1055,7 @@ function handlePluginMessage(msg: any) {
             state.yLabelFormat = 'integer';
             state.xAxisLabelsVisible = true;
             state.barLabelVisible = true;
+            state.barLabelSource = 'row';
             state.yAxisVisible = true;
             ui.settingMarkRatioInput.value = '80';
             ui.settingYMin.value = '0';
@@ -1169,6 +1213,7 @@ function handlePluginMessage(msg: any) {
         state.yLabelFormat = normalizeYLabelFormatMode(msg.lastYLabelFormat);
         state.xAxisLabelsVisible = msg.xAxisLabelsVisible !== false;
         state.barLabelVisible = msg.barLabelVisible !== false;
+        state.barLabelSource = normalizeBarLabelSource(msg.barLabelSource);
         state.yAxisVisible = msg.yAxisVisible !== false;
         ui.settingYMin.value = msg.lastYMin !== undefined ? String(msg.lastYMin) : '0';
         ui.settingYMax.value = msg.lastYMax !== undefined ? String(msg.lastYMax) : ((msg.lastMode || 'raw') === 'raw' ? '' : '100');
@@ -1342,6 +1387,10 @@ function handlePluginMessage(msg: any) {
                 state.barLabelVisible = Boolean(msg.payload.barLabelVisible);
                 updateBarLabelToggleUi();
             }
+            if (msg.payload.barLabelSource !== undefined) {
+                state.barLabelSource = normalizeBarLabelSource(msg.payload.barLabelSource);
+                updateBarLabelToggleUi();
+            }
             if (msg.payload.yAxisVisible !== undefined) {
                 state.yAxisVisible = Boolean(msg.payload.yAxisVisible);
                 updateAxisVisibilityUi();
@@ -1454,6 +1503,9 @@ function handlePluginMessage(msg: any) {
         if (msg.payload?.barLabelVisible !== undefined) {
             state.barLabelVisible = Boolean(msg.payload.barLabelVisible);
         }
+        if (msg.payload?.barLabelSource !== undefined) {
+            state.barLabelSource = normalizeBarLabelSource(msg.payload.barLabelSource);
+        }
         updateAssistLineToggleUi();
         updateLineFeatureToggleUi();
         updateBarLabelToggleUi();
@@ -1552,6 +1604,24 @@ function bindUiEvents() {
     ui.previewBarLabelToggleBtn.addEventListener('click', () => {
         setBarLabelVisible(!state.barLabelVisible);
     });
+    ui.previewBarLabelSourceBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (previewBarLabelPopoverOpen) {
+            closePreviewBarLabelPopover(true);
+        } else {
+            openPreviewBarLabelPopover();
+        }
+    });
+    ui.previewBarLabelOptionRowBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        previewBarLabelSourceDraft = 'row';
+        closePreviewBarLabelPopover(true);
+    });
+    ui.previewBarLabelOptionYBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        previewBarLabelSourceDraft = 'y';
+        closePreviewBarLabelPopover(true);
+    });
     ui.previewAxisXCheck.addEventListener('change', () => {
         setXAxisLabelsVisible(ui.previewAxisXCheck.checked);
         updateAxisVisibilityUi();
@@ -1634,6 +1704,8 @@ function bindUiEvents() {
     ui.previewAssistLineControl.addEventListener('click', (e) => e.stopPropagation());
     ui.previewAxisPopover.addEventListener('click', (e) => e.stopPropagation());
     ui.previewAxisControl.addEventListener('click', (e) => e.stopPropagation());
+    ui.previewBarLabelPopover.addEventListener('click', (e) => e.stopPropagation());
+    ui.previewBarLabelControl.addEventListener('click', (e) => e.stopPropagation());
     ui.styleAssistLinePopover.addEventListener('click', (e) => e.stopPropagation());
     ui.styleAssistLineControl.addEventListener('click', (e) => e.stopPropagation());
     ui.rowColorPopover.addEventListener('click', (e) => e.stopPropagation());
@@ -1759,11 +1831,15 @@ function bindUiEvents() {
     });
     document.addEventListener('click', () => {
         closeAllAssistLinePopovers();
+        if (previewBarLabelPopoverOpen) closePreviewBarLabelPopover(true);
         if (rowColorPopoverOpen) closeRowColorPopover();
     });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && rowColorPopoverOpen) {
             closeRowColorPopover();
+        }
+        if (e.key === 'Escape' && previewBarLabelPopoverOpen) {
+            closePreviewBarLabelPopover(true);
         }
         if (e.key === 'Escape' && (previewAssistLinePopoverOpen || styleAssistLinePopoverOpen)) {
             closeAllAssistLinePopovers();

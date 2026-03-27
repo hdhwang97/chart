@@ -58,7 +58,11 @@ export const ui = {
     get previewAxisXCheck() { return byId<HTMLInputElement>('preview-axis-x-check'); },
     get previewAxisYCheck() { return byId<HTMLInputElement>('preview-axis-y-check'); },
     get previewBarLabelControl() { return byId<HTMLElement>('preview-bar-label-control'); },
+    get previewBarLabelSourceBtn() { return byId<HTMLButtonElement>('preview-bar-label-source-btn'); },
     get previewBarLabelToggleBtn() { return byId<HTMLButtonElement>('preview-bar-label-toggle'); },
+    get previewBarLabelPopover() { return byId<HTMLElement>('preview-bar-label-popover'); },
+    get previewBarLabelOptionRowBtn() { return byId<HTMLButtonElement>('preview-bar-label-option-row'); },
+    get previewBarLabelOptionYBtn() { return byId<HTMLButtonElement>('preview-bar-label-option-y'); },
     get settingMarkRatioInput() { return byId<HTMLSelectElement>('setting-mark-ratio-input'); },
 
     get settingStrokeInput() { return byId<HTMLInputElement>('setting-stroke-input'); },

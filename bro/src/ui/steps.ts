@@ -208,6 +208,7 @@ export function updateSettingInputs() {
     ui.previewBarLabelControl.classList.toggle('hidden', !isBarChart);
     ui.previewBarLabelControl.classList.toggle('flex', isBarChart);
     syncSwitchButton(ui.previewBarLabelToggleBtn, state.barLabelVisible, 'bar label');
+    ui.previewBarLabelSourceBtn.textContent = state.barLabelSource === 'y' ? 'y값' : 'row';
     state.markRatio = normalizeMarkRatio(state.markRatio);
     ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
     ui.containerMarkNormal.classList.remove('hidden');
@@ -295,6 +296,7 @@ export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
         xAxisLabels: collectGridHeaderLabels(),
         xAxisLabelsVisible: state.xAxisLabelsVisible,
         barLabelVisible: state.chartType === 'bar' ? state.barLabelVisible : false,
+        barLabelSource: state.chartType === 'bar' ? state.barLabelSource : 'row',
         yAxisVisible: state.yAxisVisible,
         cols: state.cols,
         rows: state.rows,
