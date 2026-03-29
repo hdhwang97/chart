@@ -1,6 +1,7 @@
 import { buildSolidPaint, normalizeHexColor } from '../utils';
 
 export type VariableUpdateMode = 'overwrite' | 'create';
+export type LineAreaSegment = 'top' | 'bot';
 
 type MarkSlotKind = 'color' | 'number';
 type PaintField = 'fills' | 'strokes';
@@ -110,9 +111,13 @@ export class MarkVariableBinder {
         this.bindPaintColor(node, 'fills', `color/${markIndex}_fill`, hex);
     }
 
-    bindLineBackgroundColor(node: SceneNode, markIndex: number, hex?: string, opacity?: number) {
-        this.bindPaintColor(node, 'fills', `color/${markIndex}_area`, hex, opacity, {
-            storeOpacityInColorAlpha: true
+    bindLineBackgroundColor(node: SceneNode, markIndex: number, hex?: string, opacity?: number, segment?: LineAreaSegment) {
+        const slotSuffix = segment === 'top'
+            ? 'area_top'
+            : (segment === 'bot' ? 'area_bot' : 'area');
+        this.bindPaintColor(node, 'fills', `color/${markIndex}_${slotSuffix}`, hex, opacity, {
+            storeOpacityInColorAlpha: true,
+            allowNodeBoundFallback: segment === undefined
         });
     }
 
@@ -146,7 +151,7 @@ export class MarkVariableBinder {
         slotKey: string,
         hex?: string,
         opacity?: number,
-        options?: { storeOpacityInColorAlpha?: boolean }
+        options?: { storeOpacityInColorAlpha?: boolean; allowNodeBoundFallback?: boolean }
     ) {
         const normalizedHex = typeof hex === 'string' ? normalizeHexColor(hex) : null;
         if (!normalizedHex) return;
@@ -173,7 +178,8 @@ export class MarkVariableBinder {
             kind: 'color',
             slotKey,
             node,
-            paintField: field
+            paintField: field,
+            allowNodeBoundFallback: options?.allowNodeBoundFallback !== false
         });
         if (!variable) return;
         const valueSignature = `${variable.id}:${rgbValue.r}:${rgbValue.g}:${rgbValue.b}:${rgbValue.a}`;
@@ -231,6 +237,7 @@ export class MarkVariableBinder {
         node: SceneNode;
         paintField?: PaintField;
         numberFields?: NumberField[];
+        allowNodeBoundFallback?: boolean;
     }): Variable | null {
         const expectedType: VariableResolvedDataType = params.kind === 'color' ? 'COLOR' : 'FLOAT';
         const collection = params.kind === 'color' ? this.colorCollection : this.numberCollection;
@@ -242,13 +249,15 @@ export class MarkVariableBinder {
                 return fromSlotMap;
             }
 
-            const boundId = params.kind === 'color'
-                ? (params.paintField ? readNodeBoundColorVariableId(params.node, params.paintField) : null)
-                : readNodeBoundNumberVariableId(params.node, params.numberFields || []);
-            const fromNodeBound = this.readVariableById(boundId, expectedType);
-            if (fromNodeBound) {
-                this.slotVariableIdMap[params.slotKey] = fromNodeBound.id;
-                return fromNodeBound;
+            if (params.allowNodeBoundFallback !== false) {
+                const boundId = params.kind === 'color'
+                    ? (params.paintField ? readNodeBoundColorVariableId(params.node, params.paintField) : null)
+                    : readNodeBoundNumberVariableId(params.node, params.numberFields || []);
+                const fromNodeBound = this.readVariableById(boundId, expectedType);
+                if (fromNodeBound) {
+                    this.slotVariableIdMap[params.slotKey] = fromNodeBound.id;
+                    return fromNodeBound;
+                }
             }
         }
 

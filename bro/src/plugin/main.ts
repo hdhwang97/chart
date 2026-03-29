@@ -883,6 +883,8 @@ function applyVariablesOnlyFromMarkStyles(
         const markIndex = index + 1;
         setColorVariableValueBySlot(slotMap, `color/${markIndex}_str`, style.strokeColor, undefined, report);
         setColorVariableValueBySlot(slotMap, `color/${markIndex}_fill`, style.fillColor, undefined, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_area_top`, style.lineBackgroundColor, style.lineBackgroundOpacity, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_area_bot`, style.lineBackgroundColor, style.lineBackgroundOpacity, report);
         setColorVariableValueBySlot(slotMap, `color/${markIndex}_area`, style.lineBackgroundColor, style.lineBackgroundOpacity, report);
         setColorVariableValueBySlot(slotMap, `color/${markIndex}_pt_stroke`, style.linePointStrokeColor, undefined, report);
         setColorVariableValueBySlot(slotMap, `color/${markIndex}_pt_fill`, style.linePointFillColor, undefined, report);

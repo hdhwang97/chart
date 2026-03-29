@@ -13,7 +13,7 @@ import type {
 import { normalizeHexColor, rgbToHex, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
 import { debugLog } from '../log';
 import { collectColumns, type ColRef } from './shared';
-import { collectLineBundlesInColumn, isLineBundleFlat, type LineBundle } from './line-structure';
+import { LINE_FILL_BOT_NAME, LINE_FILL_TOP_NAME, LINE_FILL_TRI_NAME, collectLineBundlesInColumn, isLineBundleFlat, type LineBundle } from './line-structure';
 import { MarkVariableBinder } from './mark-variables';
 
 type SideName = 'top' | 'right' | 'bottom' | 'left';
@@ -1052,7 +1052,21 @@ function applyLineBackgroundStyles(
                         if (typeof visible === 'boolean') {
                             applied = setNodeFillVisibility(target, visible) || applied;
                         }
-                        options?.variableBinder?.bindLineBackgroundColor(target, seriesIndex, effectiveColor, opacity);
+                        const targetName = target.name.toLowerCase();
+                        const areaSegment = (
+                            targetName === LINE_FILL_BOT_NAME
+                            || targetName.includes(LINE_FILL_BOT_NAME)
+                        )
+                            ? 'bot'
+                            : (
+                                targetName === LINE_FILL_TOP_NAME
+                                || targetName.includes(LINE_FILL_TOP_NAME)
+                                || targetName === LINE_FILL_TRI_NAME
+                                || targetName.includes(LINE_FILL_TRI_NAME)
+                            )
+                                ? 'top'
+                                : undefined;
+                        options?.variableBinder?.bindLineBackgroundColor(target, seriesIndex, effectiveColor, opacity, areaSegment);
                     }
                     if (applied) result.applied += 1;
                     else result.skipped += 1;
