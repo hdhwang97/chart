@@ -142,15 +142,11 @@ export function selectType(type: string) {
         ui.spacerStroke.classList.add('hidden');
         ui.lineFeatureToggleGroup.classList.remove('hidden');
         ui.lineFeatureToggleGroup.classList.add('flex');
-        ui.linePointToggleContainer.classList.remove('hidden');
-        ui.linePointToggleContainer.classList.add('flex');
     } else {
         ui.containerStrokeWidth.classList.add('hidden');
         ui.spacerStroke.classList.remove('hidden');
         ui.lineFeatureToggleGroup.classList.add('hidden');
         ui.lineFeatureToggleGroup.classList.remove('flex');
-        ui.linePointToggleContainer.classList.add('hidden');
-        ui.linePointToggleContainer.classList.remove('flex');
     }
 
     const totalCols = type === 'stackedBar' ? getTotalStackedCols() : getGridColsForChart(type, state.cols);

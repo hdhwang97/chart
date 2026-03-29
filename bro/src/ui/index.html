@@ -142,12 +142,7 @@
         <div class="px-3 pt-3 pb-1 shrink-0 flex flex-col gap-1.5">
             <div class="flex items-center justify-between gap-3">
                 <h2 class="text-[11px] font-bold text-text-sub uppercase tracking-wider ml-1">Graph Setting</h2>
-                <div id="line-feature-toggle-group" class="hidden items-center gap-1.5">
-                    <span class="text-xxs font-semibold text-text-sub whitespace-nowrap">Curve Mode</span>
-                    <button id="line-feature-2-toggle"
-                        class="line-switch-toggle"
-                        type="button"></button>
-                </div>
+                <div id="line-feature-toggle-group" class="hidden items-center gap-1.5"></div>
             </div>
             <div id="graph-setting-panel" class="bg-white border border-border rounded-md p-3 flex flex-col shadow-sm gap-2">
                 <div class="flex items-center gap-3">
@@ -249,22 +244,28 @@
                     <div class="flex items-center justify-between gap-3">
                         <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
                         <div class="flex items-center gap-3">
-                            <div id="line-point-toggle-container" class="hidden items-center gap-1.5">
-                                <span class="text-xxs font-semibold text-text-sub whitespace-nowrap">line point</span>
-                                <button id="line-point-toggle"
+                            <div id="preview-line-option-control" class="hidden relative items-center gap-1.5">
+                                <button id="preview-line-option-label-btn"
+                                    class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2 whitespace-nowrap"
+                                    type="button">line option</button>
+                                <button id="preview-line-option-toggle"
                                     class="line-switch-toggle"
                                     type="button"></button>
-                            </div>
-                            <div id="y-label-format-control" class="flex items-center gap-1.5">
-                                <span id="y-label-format-label"
-                                    class="text-xxs font-semibold text-text-sub whitespace-nowrap">소수점 표시</span>
-                                <button id="y-label-format-toggle"
-                                    class="line-switch-toggle"
-                                    type="button"></button>
-                                <select id="setting-y-label-format" class="hidden" aria-hidden="true" tabindex="-1">
-                                    <option value="integer" selected>Integer</option>
-                                    <option value="decimal">Decimal</option>
-                                </select>
+                                <div id="preview-line-option-popover"
+                                    class="hidden absolute top-6 right-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-line-option-point-check" type="checkbox" class="cursor-pointer">
+                                        <span>line point</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-line-option-curve-check" type="checkbox" class="cursor-pointer">
+                                        <span>curve</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                        <input id="preview-line-option-area-check" type="checkbox" class="cursor-pointer">
+                                        <span>area</span>
+                                    </label>
+                                </div>
                             </div>
                             <div id="preview-axis-control" class="relative flex items-center gap-1.5">
                                 <button id="preview-axis-label-btn"
@@ -274,7 +275,7 @@
                                     class="line-switch-toggle"
                                     type="button"></button>
                                 <div id="preview-axis-popover"
-                                    class="hidden absolute top-6 right-0 z-30 w-24 rounded border border-border bg-white shadow-md p-2">
+                                    class="hidden absolute top-6 right-0 z-30 w-32 rounded border border-border bg-white shadow-md p-2">
                                     <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
                                         <input id="preview-axis-x-check" type="checkbox" class="cursor-pointer">
                                         <span>x축</span>
@@ -283,6 +284,16 @@
                                         <input id="preview-axis-y-check" type="checkbox" class="cursor-pointer">
                                         <span>y축</span>
                                     </label>
+                                    <div class="mt-1 pt-1 border-t border-border/70 flex items-center justify-between gap-2">
+                                        <span id="y-label-format-label" class="text-xxs text-text">소수점 표시</span>
+                                        <button id="y-label-format-toggle"
+                                            class="line-switch-toggle"
+                                            type="button"></button>
+                                        <select id="setting-y-label-format" class="hidden" aria-hidden="true" tabindex="-1">
+                                            <option value="integer" selected>Integer</option>
+                                            <option value="decimal">Decimal</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div id="preview-bar-label-control" class="hidden relative items-center gap-1.5">
@@ -299,12 +310,6 @@
                                     <button id="preview-bar-label-option-y" type="button"
                                         class="w-full text-left px-2 py-1 rounded text-xxs text-text hover:bg-gray-50">y값</button>
                                 </div>
-                            </div>
-                            <div id="preview-curve-mode-control" class="hidden items-center gap-1.5">
-                                <span class="text-xxs font-semibold text-text-sub whitespace-nowrap">curve mode</span>
-                                <button id="preview-curve-mode-toggle"
-                                    class="line-switch-toggle"
-                                    type="button"></button>
                             </div>
                             <div id="preview-assist-line-control" class="relative flex items-center gap-1.5">
                                 <button id="preview-assist-line-label-btn"
@@ -448,11 +453,28 @@
             <div class="flex items-center justify-between">
                 <span class="text-[11px] font-bold text-text-sub uppercase tracking-wider">Preview</span>
                 <div class="flex items-center gap-3">
-                    <div id="style-curve-mode-control" class="hidden items-center gap-1.5">
-                        <span class="text-xxs font-semibold text-text-sub whitespace-nowrap">curve mode</span>
-                        <button id="style-curve-mode-toggle"
+                    <div id="style-line-option-control" class="hidden relative items-center gap-1.5">
+                        <button id="style-line-option-label-btn"
+                            class="text-xxs font-semibold text-text-sub hover:text-text transition-colors border-0 bg-transparent cursor-pointer underline underline-offset-2 whitespace-nowrap"
+                            type="button">line option</button>
+                        <button id="style-line-option-toggle"
                             class="line-switch-toggle"
                             type="button"></button>
+                        <div id="style-line-option-popover"
+                            class="hidden absolute top-6 right-0 z-30 w-28 rounded border border-border bg-white shadow-md p-2">
+                            <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                <input id="style-line-option-point-check" type="checkbox" class="cursor-pointer">
+                                <span>line point</span>
+                            </label>
+                            <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                <input id="style-line-option-curve-check" type="checkbox" class="cursor-pointer">
+                                <span>curve</span>
+                            </label>
+                            <label class="flex items-center gap-2 py-1 text-xxs text-text cursor-pointer">
+                                <input id="style-line-option-area-check" type="checkbox" class="cursor-pointer">
+                                <span>area</span>
+                            </label>
+                        </div>
                     </div>
                     <div id="style-assist-line-control" class="relative flex items-center gap-1.5">
                         <button id="style-assist-line-label-btn"

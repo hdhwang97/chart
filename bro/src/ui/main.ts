@@ -53,6 +53,8 @@ let previewAxisPopoverOpen = false;
 let previewBarLabelPopoverOpen = false;
 let previewBarLabelSourceDraft: 'row' | 'y' = 'row';
 let styleAssistLinePopoverOpen = false;
+let previewLineOptionPopoverOpen = false;
+let styleLineOptionPopoverOpen = false;
 let rowColorPopoverOpen = false;
 let activeColorTarget: { type: 'row' | 'col'; index: number } | null = null;
 let rowColorPicker: any = null;
@@ -761,8 +763,23 @@ function closePreviewAssistLinePopover() {
 }
 
 function openPreviewAssistLinePopover() {
+    closePreviewLineOptionPopover();
+    closeStyleLineOptionPopover();
     previewAssistLinePopoverOpen = true;
     ui.previewAssistLinePopover.classList.remove('hidden');
+}
+
+function closePreviewLineOptionPopover() {
+    previewLineOptionPopoverOpen = false;
+    ui.previewLineOptionPopover.classList.add('hidden');
+}
+
+function openPreviewLineOptionPopover() {
+    closePreviewAssistLinePopover();
+    closeStyleAssistLinePopover();
+    closeStyleLineOptionPopover();
+    previewLineOptionPopoverOpen = true;
+    ui.previewLineOptionPopover.classList.remove('hidden');
 }
 
 function closePreviewAxisPopover() {
@@ -808,14 +825,31 @@ function closeStyleAssistLinePopover() {
 }
 
 function openStyleAssistLinePopover() {
+    closePreviewLineOptionPopover();
+    closeStyleLineOptionPopover();
     styleAssistLinePopoverOpen = true;
     ui.styleAssistLinePopover.classList.remove('hidden');
+}
+
+function closeStyleLineOptionPopover() {
+    styleLineOptionPopoverOpen = false;
+    ui.styleLineOptionPopover.classList.add('hidden');
+}
+
+function openStyleLineOptionPopover() {
+    closePreviewAssistLinePopover();
+    closeStyleAssistLinePopover();
+    closePreviewLineOptionPopover();
+    styleLineOptionPopoverOpen = true;
+    ui.styleLineOptionPopover.classList.remove('hidden');
 }
 
 function closeAllAssistLinePopovers() {
     closePreviewAssistLinePopover();
     closePreviewAxisPopover();
     closeStyleAssistLinePopover();
+    closePreviewLineOptionPopover();
+    closeStyleLineOptionPopover();
 }
 
 function syncSwitchButtonUi(button: HTMLButtonElement, enabled: boolean, label: string) {
@@ -915,19 +949,26 @@ function updateAssistLineToggleUi() {
 
 function updateLineFeatureToggleUi() {
     const isLineChart = state.chartType === 'line';
-    ui.lineFeatureToggleGroup.classList.toggle('hidden', !isLineChart);
-    ui.lineFeatureToggleGroup.classList.toggle('flex', isLineChart);
-    ui.linePointToggleContainer.classList.toggle('hidden', !isLineChart);
-    ui.linePointToggleContainer.classList.toggle('flex', isLineChart);
-    ui.previewCurveModeControl.classList.toggle('hidden', !isLineChart);
-    ui.previewCurveModeControl.classList.toggle('flex', isLineChart);
-    ui.styleCurveModeControl.classList.toggle('hidden', !isLineChart);
-    ui.styleCurveModeControl.classList.toggle('flex', isLineChart);
-
-    syncSwitchButtonUi(ui.linePointToggleBtn, state.linePointVisible, 'line point');
-    syncSwitchButtonUi(ui.lineFeature2ToggleBtn, state.lineFeature2Enabled, 'curve graph');
-    syncSwitchButtonUi(ui.previewCurveModeToggleBtn, state.lineFeature2Enabled, 'curve graph');
-    syncSwitchButtonUi(ui.styleCurveModeToggleBtn, state.lineFeature2Enabled, 'curve graph');
+    const areaVisible = ui.styleMarkLineBackgroundVisibleInput.checked;
+    const lineOptionEnabled = state.linePointVisible || state.lineFeature2Enabled || areaVisible;
+    ui.lineFeatureToggleGroup.classList.add('hidden');
+    ui.lineFeatureToggleGroup.classList.remove('flex');
+    ui.previewLineOptionControl.classList.toggle('hidden', !isLineChart);
+    ui.previewLineOptionControl.classList.toggle('flex', isLineChart);
+    ui.styleLineOptionControl.classList.toggle('hidden', !isLineChart);
+    ui.styleLineOptionControl.classList.toggle('flex', isLineChart);
+    if (!isLineChart) {
+        closePreviewLineOptionPopover();
+        closeStyleLineOptionPopover();
+    }
+    ui.previewLineOptionPointCheck.checked = state.linePointVisible;
+    ui.previewLineOptionCurveCheck.checked = state.lineFeature2Enabled;
+    ui.previewLineOptionAreaCheck.checked = areaVisible;
+    ui.styleLineOptionPointCheck.checked = state.linePointVisible;
+    ui.styleLineOptionCurveCheck.checked = state.lineFeature2Enabled;
+    ui.styleLineOptionAreaCheck.checked = areaVisible;
+    syncSwitchButtonUi(ui.previewLineOptionToggleBtn, lineOptionEnabled, 'line option');
+    syncSwitchButtonUi(ui.styleLineOptionToggleBtn, lineOptionEnabled, 'line option');
     syncMarkStyleCardVisibility();
 }
 
@@ -1320,6 +1361,7 @@ function handlePluginMessage(msg: any) {
                 assistLineStrokeStyle: msg.assistLineStrokeStyle
             }
         );
+        updateLineFeatureToggleUi();
         syncAllHexPreviewsFromDom();
         parent.postMessage({ pluginMessage: { type: 'load_style_templates', chartType: state.chartType } }, '*');
         uiPerfMarkStage('hydrate-style');
@@ -1591,6 +1633,7 @@ function handlePluginMessage(msg: any) {
         state.cellStrokeStyles = msg.payload?.cellStrokeStyles || [];
         state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
         syncStyleTabDraftFromExtracted(extractedDraftPayload);
+        updateLineFeatureToggleUi();
         syncAllHexPreviewsFromDom();
         const dataTabActive = document.getElementById('step-2')?.classList.contains('active') === true;
         const styleTabActive = document.getElementById('step-style')?.classList.contains('active') === true;
@@ -1730,15 +1773,77 @@ function bindUiEvents() {
         if (styleAssistLinePopoverOpen) closeStyleAssistLinePopover();
         else openStyleAssistLinePopover();
     });
-    ui.previewAssistLineToggleBtn.addEventListener('click', () => {
-        setAssistLineVisible(!state.assistLineVisible);
+    ui.previewLineOptionLabelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (previewLineOptionPopoverOpen) closePreviewLineOptionPopover();
+        else openPreviewLineOptionPopover();
     });
-    ui.linePointToggleBtn.addEventListener('click', () => {
-        state.linePointVisible = !state.linePointVisible;
+    ui.styleLineOptionLabelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (styleLineOptionPopoverOpen) closeStyleLineOptionPopover();
+        else openStyleLineOptionPopover();
+    });
+    const applyLineOptionAreaVisibility = (next: boolean) => {
+        ui.previewLineOptionAreaCheck.checked = next;
+        ui.styleLineOptionAreaCheck.checked = next;
+        const changed = ui.styleMarkLineBackgroundVisibleInput.checked !== next
+            || ui.styleLineBackgroundVisibleInput.checked !== next;
+        if (!changed) return;
+        ui.styleMarkLineBackgroundVisibleInput.checked = next;
+        ui.styleLineBackgroundVisibleInput.checked = next;
+        ui.styleMarkLineBackgroundVisibleInput.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const toggleLineOptionMaster = () => {
+        const next = !(state.linePointVisible || state.lineFeature2Enabled || ui.styleMarkLineBackgroundVisibleInput.checked);
+        ui.previewLineOptionPointCheck.checked = next;
+        ui.previewLineOptionCurveCheck.checked = next;
+        ui.styleLineOptionPointCheck.checked = next;
+        ui.styleLineOptionCurveCheck.checked = next;
+        state.linePointVisible = next;
+        state.lineFeature2Enabled = next;
+        applyLineOptionAreaVisibility(next);
         updateLineFeatureToggleUi();
         renderPreview();
         renderStylePreview();
         refreshExportPreview();
+    };
+    ui.previewLineOptionToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleLineOptionMaster();
+    });
+    ui.styleLineOptionToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleLineOptionMaster();
+    });
+    ui.previewAssistLineToggleBtn.addEventListener('click', () => {
+        setAssistLineVisible(!state.assistLineVisible);
+    });
+    const applyLineOptionState = () => {
+        state.linePointVisible = ui.previewLineOptionPointCheck.checked;
+        state.lineFeature2Enabled = ui.previewLineOptionCurveCheck.checked;
+        updateLineFeatureToggleUi();
+        renderPreview();
+        renderStylePreview();
+        refreshExportPreview();
+    };
+    ui.previewLineOptionPointCheck.addEventListener('change', applyLineOptionState);
+    ui.previewLineOptionCurveCheck.addEventListener('change', applyLineOptionState);
+    ui.styleLineOptionPointCheck.addEventListener('change', () => {
+        ui.previewLineOptionPointCheck.checked = ui.styleLineOptionPointCheck.checked;
+        applyLineOptionState();
+    });
+    ui.styleLineOptionCurveCheck.addEventListener('change', () => {
+        ui.previewLineOptionCurveCheck.checked = ui.styleLineOptionCurveCheck.checked;
+        applyLineOptionState();
+    });
+    const applyLineOptionAreaState = () => {
+        applyLineOptionAreaVisibility(ui.previewLineOptionAreaCheck.checked);
+        updateLineFeatureToggleUi();
+    };
+    ui.previewLineOptionAreaCheck.addEventListener('change', applyLineOptionAreaState);
+    ui.styleLineOptionAreaCheck.addEventListener('change', () => {
+        ui.previewLineOptionAreaCheck.checked = ui.styleLineOptionAreaCheck.checked;
+        applyLineOptionAreaState();
     });
     ui.styleMarkLinePointVisibleInput.addEventListener('change', () => {
         state.linePointVisible = ui.styleMarkLinePointVisibleInput.checked;
@@ -1747,19 +1852,15 @@ function bindUiEvents() {
         renderStylePreview();
         refreshExportPreview();
     });
+    ui.styleMarkLineBackgroundVisibleInput.addEventListener('change', () => {
+        updateLineFeatureToggleUi();
+    });
+    ui.styleLineBackgroundVisibleInput.addEventListener('change', () => {
+        updateLineFeatureToggleUi();
+    });
     ui.styleVariableUpdateModeInput.addEventListener('change', () => {
         state.variableUpdateMode = ui.styleVariableUpdateModeInput.value === 'create' ? 'create' : 'overwrite';
     });
-    const toggleCurveMode = () => {
-        state.lineFeature2Enabled = !state.lineFeature2Enabled;
-        updateLineFeatureToggleUi();
-        renderPreview();
-        renderStylePreview();
-        refreshExportPreview();
-    };
-    ui.lineFeature2ToggleBtn.addEventListener('click', toggleCurveMode);
-    ui.previewCurveModeToggleBtn.addEventListener('click', toggleCurveMode);
-    ui.styleCurveModeToggleBtn.addEventListener('click', toggleCurveMode);
     ui.styleAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);
     });
@@ -1804,8 +1905,12 @@ function bindUiEvents() {
     ui.previewAxisControl.addEventListener('click', (e) => e.stopPropagation());
     ui.previewBarLabelPopover.addEventListener('click', (e) => e.stopPropagation());
     ui.previewBarLabelControl.addEventListener('click', (e) => e.stopPropagation());
+    ui.previewLineOptionPopover.addEventListener('click', (e) => e.stopPropagation());
+    ui.previewLineOptionControl.addEventListener('click', (e) => e.stopPropagation());
     ui.styleAssistLinePopover.addEventListener('click', (e) => e.stopPropagation());
     ui.styleAssistLineControl.addEventListener('click', (e) => e.stopPropagation());
+    ui.styleLineOptionPopover.addEventListener('click', (e) => e.stopPropagation());
+    ui.styleLineOptionControl.addEventListener('click', (e) => e.stopPropagation());
     ui.rowColorPopover.addEventListener('click', (e) => e.stopPropagation());
     document.addEventListener('row-color-swatch-click', ((event: Event) => {
         const custom = event as CustomEvent<{ row: number; anchorRect: { left: number; top: number; right: number; bottom: number } }>;
@@ -1939,7 +2044,15 @@ function bindUiEvents() {
         if (e.key === 'Escape' && previewBarLabelPopoverOpen) {
             closePreviewBarLabelPopover(true);
         }
-        if (e.key === 'Escape' && (previewAssistLinePopoverOpen || styleAssistLinePopoverOpen)) {
+        if (
+            e.key === 'Escape'
+            && (
+                previewAssistLinePopoverOpen
+                || styleAssistLinePopoverOpen
+                || previewLineOptionPopoverOpen
+                || styleLineOptionPopoverOpen
+            )
+        ) {
             closeAllAssistLinePopovers();
         }
     });
@@ -1974,6 +2087,7 @@ function bindUiEvents() {
         renderPreview();
         renderStylePreview();
         refreshExportPreview();
+        updateLineFeatureToggleUi();
         const markNumberVariableInputIds = new Set<string>([
             ui.styleMarkThicknessInput.id,
             ui.styleMarkLinePointThicknessInput.id,
