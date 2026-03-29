@@ -36,12 +36,26 @@ export type SelectionTargetMeta = {
     chartType: string;
 };
 
+export type UiInitPerfTrace = {
+    traceId: string;
+    trigger: 'selectionchange' | 'target_switch' | 'manual';
+    selectionStartedAtMs: number;
+    targetNodeId?: string;
+    selectionCount?: number;
+    preInitSingleResolveMs?: number;
+    preInitCollectTargetsMs?: number;
+    preInitTotalMs?: number;
+    pluginInitPostedAtMs?: number;
+    pluginInitReason?: 'selection' | 'auto-resize';
+};
+
 type InitPluginUiOptions = {
     reason?: 'selection' | 'auto-resize';
     isCType?: boolean;
     selectionTargets?: SelectionTargetMeta[];
     activeTargetId?: string | null;
     deferStyleExtract?: boolean;
+    uiPerfTrace?: UiInitPerfTrace;
 };
 
 // ==========================================
@@ -480,8 +494,12 @@ export async function syncChartOnResize(
         const barLabelVisible = resolveBarLabelVisibleFromNode(node);
         const barLabelSource = resolveBarLabelSourceFromNode(node);
         const yAxisVisible = resolveYAxisVisibleFromNode(node);
-        const linePointVisible = resolveLinePointVisibleFromNode(node);
-        const lineFeature2Enabled = resolveLineFeature2EnabledFromNode(node);
+        const linePointVisible = chartType === 'line'
+            ? resolveLinePointVisibleFromNode(node)
+            : true;
+        const lineFeature2Enabled = chartType === 'line'
+            ? resolveLineFeature2EnabledFromNode(node)
+            : false;
         const localOverrideState = node.type === 'INSTANCE'
             ? loadLocalStyleOverrides(node)
             : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
@@ -652,12 +670,22 @@ export async function initPluginUI(
     const colCount = chartType === 'stackedBar' || chartType === 'stacked'
         ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((a, b) => a + b, 0) : 0)
         : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
-    const cols = await perf.step('collect-columns', () => collectColumns(node));
     const deferStyleExtract = opts?.deferStyleExtract === true;
+    let cols: ReturnType<typeof collectColumns> = [];
+    let hasLoadedCols = false;
+    const ensureCols = async () => {
+        if (hasLoadedCols) return cols;
+        cols = await perf.step('collect-columns', () => collectColumns(node));
+        hasLoadedCols = true;
+        return cols;
+    };
+    if (!deferStyleExtract) {
+        await ensureCols();
+    }
     const shouldUseSelectionFastPath = Boolean(
         chartData.isSaved
         && opts?.reason === 'selection'
-        && Math.max(colCount, cols.length) >= 40
+        && Math.max(colCount, hasLoadedCols ? cols.length : 0) >= 40
     );
     const styleInfo = deferStyleExtract
         ? {
@@ -675,10 +703,13 @@ export async function initPluginUI(
             cellStrokeStyles: [] as any[],
             rowStrokeStyles: [] as any[]
         }
-        : await perf.step('style-extract', () => extractStyleFromNode(node, chartType, {
-            columns: cols,
-            fastPath: shouldUseSelectionFastPath
-        }));
+        : await perf.step('style-extract', async () => {
+            const resolvedCols = await ensureCols();
+            return extractStyleFromNode(node, chartType, {
+                columns: resolvedCols,
+                fastPath: shouldUseSelectionFastPath
+            });
+        });
     const extractedColors = deferStyleExtract
         ? resolveRowColorsFromNode(node, chartType, Math.max(1, rowColorCount))
         : styleInfo.colors;
@@ -693,8 +724,22 @@ export async function initPluginUI(
     const barLabelVisible = resolveBarLabelVisibleFromNode(node);
     const barLabelSource = resolveBarLabelSourceFromNode(node);
     const yAxisVisible = resolveYAxisVisibleFromNode(node);
-    const linePointVisible = resolveLinePointVisibleFromNode(node, cols);
-    const lineFeature2Enabled = resolveLineFeature2EnabledFromNode(node, cols);
+    const hasSavedLinePointVisible = Boolean(node.getPluginData(PLUGIN_DATA_KEYS.LAST_LINE_POINT_VISIBLE));
+    const hasSavedLineCurveEnabled = Boolean(node.getPluginData(PLUGIN_DATA_KEYS.LAST_LINE_CURVE_ENABLED));
+    const linePointVisible = chartType === 'line'
+        ? (
+            hasSavedLinePointVisible || !deferStyleExtract
+                ? resolveLinePointVisibleFromNode(node, hasLoadedCols ? cols : undefined)
+                : true
+        )
+        : true;
+    const lineFeature2Enabled = chartType === 'line'
+        ? (
+            hasSavedLineCurveEnabled || !deferStyleExtract
+                ? resolveLineFeature2EnabledFromNode(node, hasLoadedCols ? cols : undefined)
+                : false
+        )
+        : false;
     const savedCellTopStyle =
         parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_TOP_STYLE)
         || parseSavedSideStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_CELL_BOTTOM_STYLE);
@@ -708,7 +753,7 @@ export async function initPluginUI(
     const savedRowHeaderLabels = parseSavedRowHeaderLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS);
     const savedXAxisLabels = parseSavedXAxisLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS);
     const previewPlotWidth = getPlotAreaWidth(node);
-    const previewPlotHeight = getGraphHeight(node as FrameNode);
+    const previewPlotHeight = getGraphHeight(node as FrameNode, hasLoadedCols ? cols : []);
     const extractedRowColors = Array.from({ length: Math.max(1, rowColorCount) }, (_, i) =>
         normalizeHexColor(styleInfo.colors[i]) || getDefaultRowColor(i)
     );
@@ -788,6 +833,13 @@ export async function initPluginUI(
     const selectionTargets = Array.isArray(opts?.selectionTargets) ? opts.selectionTargets : [];
     const activeTargetId = typeof opts?.activeTargetId === 'string' ? opts.activeTargetId : node.id;
     const activeTargetIndex = selectionTargets.findIndex((target) => target.id === activeTargetId);
+    const uiPerfTrace = opts?.uiPerfTrace
+        ? {
+            ...opts.uiPerfTrace,
+            pluginInitPostedAtMs: Date.now(),
+            pluginInitReason: opts?.reason || 'selection'
+        }
+        : undefined;
 
     await perf.step('post-message', () => figma.ui.postMessage({
         type: 'init',
@@ -886,7 +938,8 @@ export async function initPluginUI(
             assistLineStrokeStyle: styleInfo.assistLineStrokeStyle || null
         },
         localStyleOverrides: localOverrideState.overrides,
-        localStyleOverrideMask: localOverrideState.mask
+        localStyleOverrideMask: localOverrideState.mask,
+        uiPerfTrace
     }));
     logApplyPerf(perf.done(), {
         messageType: 'init-ui',

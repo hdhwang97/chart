@@ -1030,6 +1030,47 @@ function setAssistLineEnabledKey(key: 'min' | 'max' | 'avg' | 'ctr', checked: bo
 
 function handlePluginMessage(msg: any) {
     if (msg.type === 'init') {
+        const uiPerfTrace = msg.uiPerfTrace && typeof msg.uiPerfTrace === 'object' ? msg.uiPerfTrace : null;
+        const uiPerfStartEpochMs = Date.now();
+        const uiPerfStartMs = performance.now();
+        const uiPerfStageDurations: Record<string, number> = {};
+        let uiPerfPrevStageMs = uiPerfStartMs;
+        const roundMs = (value: number) => Math.round(value * 1000) / 1000;
+        const uiPerfMarkStage = (name: string) => {
+            const now = performance.now();
+            uiPerfStageDurations[name] = roundMs(now - uiPerfPrevStageMs);
+            uiPerfPrevStageMs = now;
+        };
+        const uiPerfSendAck = (status: 'ok' | 'empty-selection') => {
+            uiPerfMarkStage('await-paint');
+            if (!uiPerfTrace || typeof uiPerfTrace.traceId !== 'string') return;
+            parent.postMessage({
+                pluginMessage: {
+                    type: 'ui_perf_init_ack',
+                    trace: uiPerfTrace,
+                    status,
+                    uiReceivedAtMs: uiPerfStartEpochMs,
+                    uiCompletedAtMs: Date.now(),
+                    uiHandleMs: roundMs(performance.now() - uiPerfStartMs),
+                    stageDurations: uiPerfStageDurations,
+                    chartType: state.chartType,
+                    rows: state.rows,
+                    cols: state.cols
+                }
+            }, '*');
+        };
+        const uiPerfFlush = (status: 'ok' | 'empty-selection') => {
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        uiPerfSendAck(status);
+                    });
+                });
+                return;
+            }
+            setTimeout(() => uiPerfSendAck(status), 0);
+        };
+
         forceCloseStyleColorPopover();
         closeRowColorPopover();
         closeAllAssistLinePopovers();
@@ -1084,6 +1125,8 @@ function handlePluginMessage(msg: any) {
             ui.editModeBtn.classList.add('hidden');
             updateChartTargetStepperUi();
             updateTemplateModeBanner();
+            uiPerfMarkStage('render-empty-state');
+            uiPerfFlush('empty-selection');
             return;
         }
 
@@ -1111,6 +1154,7 @@ function handlePluginMessage(msg: any) {
             normalizeIncomingLocalMask(msg.localStyleOverrideMask)
         );
         recomputeEffectiveStyleSnapshot();
+        uiPerfMarkStage('hydrate-selection-meta');
 
         // Chart type badge
         ui.chartTypeWrapper.classList.remove('hidden');
@@ -1212,6 +1256,7 @@ function handlePluginMessage(msg: any) {
         }
         ensureColHeaderColorEnabledLength(initTotalCols);
         state.markColorSource = msg.markColorSource === 'col' ? 'col' : 'row';
+        uiPerfMarkStage('hydrate-data');
 
         // Apply saved settings
         if (msg.lastCellCount) state.cellCount = Number(msg.lastCellCount);
@@ -1268,6 +1313,7 @@ function handlePluginMessage(msg: any) {
         );
         syncAllHexPreviewsFromDom();
         parent.postMessage({ pluginMessage: { type: 'load_style_templates', chartType: state.chartType } }, '*');
+        uiPerfMarkStage('hydrate-style');
 
         // Line-specific UI
         if (msg.chartType === 'line') {
@@ -1302,12 +1348,14 @@ function handlePluginMessage(msg: any) {
         updateModeButtonState();
         syncYMaxValidationUi();
         applyModeLocks();
-        goToStep(2);
+        goToStep(2, { skipDataRender: true });
         switchTab('data');
         checkCtaValidation();
         updateChartTargetStepperUi();
         state.loadedApplySnapshot = serializeApplySnapshot();
         updateTemplateModeBanner();
+        uiPerfMarkStage('render-active-state');
+        uiPerfFlush('ok');
     }
     if (msg.type === 'style_templates_loaded') {
         setStyleTemplateList(msg.list || []);
@@ -1525,10 +1573,19 @@ function handlePluginMessage(msg: any) {
         state.rowStrokeStyles = msg.payload?.rowStrokeStyles || [];
         syncStyleTabDraftFromExtracted(extractedDraftPayload);
         syncAllHexPreviewsFromDom();
-        renderGrid();
-        renderPreview();
-        renderStylePreview();
-        refreshExportPreview();
+        const dataTabActive = document.getElementById('step-2')?.classList.contains('active') === true;
+        const styleTabActive = document.getElementById('step-style')?.classList.contains('active') === true;
+        const exportTabActive = document.getElementById('step-export')?.classList.contains('active') === true;
+        if (dataTabActive) {
+            renderGrid();
+            renderPreview();
+        }
+        if (styleTabActive || !dataTabActive) {
+            renderStylePreview();
+        }
+        if (exportTabActive) {
+            refreshExportPreview();
+        }
         syncYMaxValidationUi();
         applyModeLocks();
         checkCtaValidation();

@@ -20,6 +20,19 @@ export function collectColumns(node: SceneNode) {
         cols.push({ node: candidate, index });
     };
 
+    if ('findAll' in node) {
+        try {
+            const found = (node as SceneNode & ChildrenMixin).findAll((candidate) => {
+                if (candidate.id === node.id) return false;
+                return MARK_NAME_PATTERNS.COL_ALL.test(candidate.name);
+            }) as SceneNode[];
+            found.forEach((candidate) => pushIfColumn(candidate));
+            return cols.sort((a, b) => a.index - b.index);
+        } catch {
+            // fall through to recursive traversal
+        }
+    }
+
     // 지원 구조:
     // - Graph -> col-N
     // - Graph -> col -> col-N
@@ -32,8 +45,8 @@ export function collectColumns(node: SceneNode) {
     return cols.sort((a, b) => a.index - b.index);
 }
 
-export function getGraphHeight(node: FrameNode) {
-    const xEmptyHeight = getXEmptyHeight(node);
+export function getGraphHeight(node: FrameNode, precomputedCols?: ColRef[]) {
+    const xEmptyHeight = getXEmptyHeight(node, precomputedCols);
     const chartLegendHeight = getChartLegendHeight(node);
     return Math.max(0, node.height - xEmptyHeight - chartLegendHeight);
 }
@@ -119,8 +132,8 @@ export function isColumnXEmptyVisible(colNode: SceneNode): boolean {
     return xEmptyLayer.visible;
 }
 
-export function hasVisibleXEmpty(node: FrameNode): boolean {
-    const columns = collectColumns(node).filter((col) => col.node.visible);
+export function hasVisibleXEmpty(node: FrameNode, precomputedCols?: ColRef[]): boolean {
+    const columns = (precomputedCols ?? collectColumns(node)).filter((col) => col.node.visible);
     if (columns.length > 0) {
         return columns.some((col) => isColumnXEmptyVisible(col.node));
     }
@@ -129,8 +142,8 @@ export function hasVisibleXEmpty(node: FrameNode): boolean {
     return Boolean(fallback?.visible);
 }
 
-export function getXEmptyHeight(node: FrameNode): number {
-    const columns = collectColumns(node).filter((col) => col.node.visible);
+export function getXEmptyHeight(node: FrameNode, precomputedCols?: ColRef[]): number {
+    const columns = (precomputedCols ?? collectColumns(node)).filter((col) => col.node.visible);
     for (const col of columns) {
         if (!isColumnXEmptyVisible(col.node)) continue;
         const xEmpty = findColumnXEmptyLayer(col.node);
@@ -145,6 +158,22 @@ export function getXEmptyHeight(node: FrameNode): number {
 }
 
 export function getChartLegendHeight(node: FrameNode): number {
+    if ('findAll' in node) {
+        try {
+            const found = (node as SceneNode & ChildrenMixin).findAll((candidate) => (
+                candidate.id !== node.id && candidate.name === 'chart_legend'
+            )) as SceneNode[];
+            if (found.length > 0) {
+                return found.reduce((acc, candidate) => {
+                    if (!('height' in candidate) || typeof candidate.height !== 'number') return acc;
+                    return acc + Math.max(0, candidate.height);
+                }, 0);
+            }
+        } catch {
+            // fall through to recursive traversal
+        }
+    }
+
     let total = 0;
     traverse(node, (candidate) => {
         if (candidate.id === node.id) return;

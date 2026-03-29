@@ -9,12 +9,12 @@ import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
 import { MarkVariableBinder } from './drawing/mark-variables';
 import { resolveEffectiveYRange } from './drawing/y-range';
-import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph, syncChartOnResize, type SelectionTargetMeta } from './init';
+import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph, syncChartOnResize, type SelectionTargetMeta, type UiInitPerfTrace } from './init';
 import { normalizeHexColor, rgbToHex, traverse } from './utils';
 import { withLoadingOpacity } from './loading';
 import { deleteStyleTemplate, loadStyleTemplates, overwriteStyleTemplate, renameStyleTemplate, saveStyleTemplate } from './template-store';
 import { PerfTracker, logApplyPerf } from './perf';
-import { debugLog } from './log';
+import { debugLog, isPluginDebugEnabled } from './log';
 import type {
     ColorMode,
     LocalStyleOverrideMask,
@@ -45,6 +45,7 @@ const APPLY_CHUNK_SIZE_STACKED = 20;
 const APPLY_CHUNK_SIZE_LINE = 10;
 const APPLY_CHUNK_SIZE_STROKE = 10;
 let latestApplyRunId = 0;
+let uiInitTraceSeq = 0;
 const targetRevisionMap = new Map<string, number>();
 const styleExtractCache = new Map<string, { revision: number; payload: any }>();
 
@@ -65,6 +66,33 @@ function bumpTargetRevision(targetId: string) {
 
 function getTargetRevision(targetId: string): number {
     return targetRevisionMap.get(targetId) || 0;
+}
+
+function buildUiInitPerfTrace(
+    trigger: UiInitPerfTrace['trigger'],
+    targetNode: SceneNode,
+    selectionCount: number,
+    timings?: Partial<Pick<UiInitPerfTrace, 'selectionStartedAtMs' | 'preInitSingleResolveMs' | 'preInitCollectTargetsMs' | 'preInitTotalMs'>>
+): UiInitPerfTrace {
+    uiInitTraceSeq += 1;
+    return {
+        traceId: `ui-init-${Date.now()}-${uiInitTraceSeq}`,
+        trigger,
+        selectionStartedAtMs: Number.isFinite(Number(timings?.selectionStartedAtMs))
+            ? Number(timings?.selectionStartedAtMs)
+            : Date.now(),
+        targetNodeId: targetNode.id,
+        selectionCount: Math.max(0, Math.floor(selectionCount)),
+        preInitSingleResolveMs: Number.isFinite(Number(timings?.preInitSingleResolveMs))
+            ? Math.max(0, Number(timings?.preInitSingleResolveMs))
+            : undefined,
+        preInitCollectTargetsMs: Number.isFinite(Number(timings?.preInitCollectTargetsMs))
+            ? Math.max(0, Number(timings?.preInitCollectTargetsMs))
+            : undefined,
+        preInitTotalMs: Number.isFinite(Number(timings?.preInitTotalMs))
+            ? Math.max(0, Number(timings?.preInitTotalMs))
+            : undefined
+    };
 }
 
 function normalizeMarkRatio(value: unknown): number | null {
@@ -298,8 +326,10 @@ function resolveBarLabelSourceFromNode(node: SceneNode): 'row' | 'y' {
 
 function isRecognizedChartSelection(node: SceneNode) {
     const savedChartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE);
+    if (savedChartType) return true;
+    if (hasSavedChartData(node)) return true;
     const columnCount = collectColumns(node).length;
-    return Boolean(savedChartType) || columnCount > 0;
+    return columnCount > 0;
 }
 
 function hasSavedChartData(node: SceneNode) {
@@ -416,9 +446,6 @@ function resolveChartTargetWithinSelectionRoot(node: SceneNode): SceneNode {
 function resolveChartTargetFromInnerNode(node: SceneNode): SceneNode {
     if (isPersistedChartOwner(node)) return node;
 
-    const descendantTarget = findSingleDescendantChartTarget(node);
-    if (descendantTarget) return descendantTarget;
-
     let current: BaseNode | null = node;
     while (current && current.type !== 'PAGE') {
         if ('getPluginData' in current) {
@@ -429,6 +456,9 @@ function resolveChartTargetFromInnerNode(node: SceneNode): SceneNode {
         }
         current = current.parent;
     }
+
+    const descendantTarget = findSingleDescendantChartTarget(node);
+    if (descendantTarget) return descendantTarget;
     return node;
 }
 
@@ -465,7 +495,6 @@ function collectSelectedChartTargets(selection: readonly SceneNode[]): SceneNode
     selection.forEach((node) => {
         const resolvedNodes = collectChartTargetsWithinSelectionRoot(node);
         resolvedNodes.forEach((resolvedNode) => {
-            if (!isRecognizedChartSelection(resolvedNode)) return;
             if (!deduped.has(resolvedNode.id)) {
                 deduped.set(resolvedNode.id, resolvedNode);
             }
@@ -918,6 +947,7 @@ function shouldForceBothUpdate(
 }
 
 function logSelectionRecognition(node: SceneNode) {
+    if (!isPluginDebugEnabled()) return;
     const savedChartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE);
     const inferredChartType = inferChartType(node);
     const columnCount = collectColumns(node).length;
@@ -1088,7 +1118,7 @@ function buildStyleExtractPayloadFromNode(node: SceneNode, chartType: string) {
         yCount: structure.cellCount || 4,
         colCount: colCount,
         previewPlotWidth: getPlotAreaWidth(node),
-        previewPlotHeight: getGraphHeight(node as FrameNode),
+        previewPlotHeight: getGraphHeight(node as FrameNode, cols),
 
         colors: styleInfo.colors.length > 0 ? styleInfo.colors : ['#3b82f6', '#9CA3AF'],
         markRatio: markRatioForUi,
@@ -1168,6 +1198,67 @@ figma.ui.onmessage = async (msg) => {
     if (msg.type === 'resize') {
         figma.ui.resize(msg.width, msg.height);
     }
+    else if (msg.type === 'ui_perf_init_ack') {
+        const trace = msg.trace && typeof msg.trace === 'object' ? msg.trace : null;
+        if (!trace || typeof trace.traceId !== 'string') return;
+
+        const selectionStartedAtMs = Number(trace.selectionStartedAtMs);
+        const pluginInitPostedAtMs = Number(trace.pluginInitPostedAtMs);
+        const preInitSingleResolveMs = Number(trace.preInitSingleResolveMs);
+        const preInitCollectTargetsMs = Number(trace.preInitCollectTargetsMs);
+        const preInitTotalMs = Number(trace.preInitTotalMs);
+        const uiReceivedAtMs = Number(msg.uiReceivedAtMs);
+        const uiCompletedAtMs = Number(msg.uiCompletedAtMs);
+        const uiHandleMs = Number(msg.uiHandleMs);
+
+        const endToEndMs = Number.isFinite(selectionStartedAtMs) && Number.isFinite(uiCompletedAtMs)
+            ? Math.max(0, uiCompletedAtMs - selectionStartedAtMs)
+            : null;
+        const bridgeMs = Number.isFinite(pluginInitPostedAtMs) && Number.isFinite(uiReceivedAtMs)
+            ? Math.max(0, uiReceivedAtMs - pluginInitPostedAtMs)
+            : null;
+        const pluginToUiDoneMs = Number.isFinite(pluginInitPostedAtMs) && Number.isFinite(uiCompletedAtMs)
+            ? Math.max(0, uiCompletedAtMs - pluginInitPostedAtMs)
+            : null;
+
+        const summary = [{
+            traceId: String(trace.traceId),
+            trigger: typeof trace.trigger === 'string' ? trace.trigger : '-',
+            status: typeof msg.status === 'string' ? msg.status : '-',
+            chartType: typeof msg.chartType === 'string' ? msg.chartType : '-',
+            rows: Number.isFinite(Number(msg.rows)) ? Number(msg.rows) : '-',
+            cols: Number.isFinite(Number(msg.cols)) ? Number(msg.cols) : '-',
+            selectionCount: Number.isFinite(Number(trace.selectionCount)) ? Number(trace.selectionCount) : '-',
+            preInitSingleResolveMs: Number.isFinite(preInitSingleResolveMs) ? preInitSingleResolveMs : null,
+            preInitCollectTargetsMs: Number.isFinite(preInitCollectTargetsMs) ? preInitCollectTargetsMs : null,
+            preInitTotalMs: Number.isFinite(preInitTotalMs) ? preInitTotalMs : null,
+            endToEndMs,
+            bridgeMs,
+            pluginToUiDoneMs,
+            uiHandleMs: Number.isFinite(uiHandleMs) ? uiHandleMs : null
+        }];
+
+        const stageDurations = msg.stageDurations && typeof msg.stageDurations === 'object'
+            ? Object.entries(msg.stageDurations as Record<string, unknown>)
+                .filter((entry) => Number.isFinite(Number(entry[1])))
+                .map(([stage, ms]) => ({ stage, ms: Number(ms) }))
+                .sort((a, b) => b.ms - a.ms)
+            : [];
+
+        const label = `[chart-plugin][ui-perf] ${String(trace.traceId)} ${endToEndMs ?? '-'}ms`;
+        if (typeof console.groupCollapsed === 'function') {
+            console.groupCollapsed(label);
+            if (typeof console.table === 'function') {
+                console.table(summary);
+                if (stageDurations.length > 0) console.table(stageDurations);
+            } else {
+                console.info(label, { summary: summary[0], stages: stageDurations });
+            }
+            if (typeof console.groupEnd === 'function') console.groupEnd();
+        } else {
+            console.info(label, { summary: summary[0], stages: stageDurations });
+        }
+    }
     else if (msg.type === 'apply_data_padding') {
         const requestedTargetId = typeof msg.targetId === 'string' ? msg.targetId : null;
         const nodes = figma.currentPage.selection;
@@ -1211,7 +1302,7 @@ figma.ui.onmessage = async (msg) => {
                 syncStackedSegmentPadding(
                     targetNode,
                     stackedValues,
-                    getGraphHeight(targetNode),
+                    getGraphHeight(targetNode, columns),
                     mode,
                     Number.isFinite(yMax) ? yMax : null,
                     loaded.markNum,
@@ -1223,7 +1314,7 @@ figma.ui.onmessage = async (msg) => {
             figma.ui.postMessage({
                 type: 'preview_plot_size_updated',
                 previewPlotWidth: getPlotAreaWidth(targetNode),
-                previewPlotHeight: getGraphHeight(targetNode as FrameNode)
+                previewPlotHeight: getGraphHeight(targetNode as FrameNode, columns)
             });
             figma.ui.postMessage({ type: 'data_padding_applied', targetId: targetNode.id });
         });
@@ -1512,13 +1603,13 @@ figma.ui.onmessage = async (msg) => {
             applyColumnXEmptyVisibility(targetNode, xAxisLabelsVisible !== false, columns);
             applyCells(targetNode, cellCount);
             applyYAxis(targetNode, cellCount, { yMin: effectiveY.yMin, yMax: effectiveY.yMax, yLabelFormat });
-            applyYAxisEmptyVisibility(targetNode, hasVisibleXEmpty(targetNode as FrameNode));
+            applyYAxisEmptyVisibility(targetNode, hasVisibleXEmpty(targetNode as FrameNode, columns));
             applyYAxisVisibility(targetNode, yAxisVisible !== false);
         });
 
         // 4. Draw Chart
-        const H = getGraphHeight(targetNode as FrameNode);
-        const xEmptyHeight = getXEmptyHeight(targetNode as FrameNode);
+        const H = getGraphHeight(targetNode as FrameNode, columns);
+        const xEmptyHeight = getXEmptyHeight(targetNode as FrameNode, columns);
         const chartLegendHeight = getChartLegendHeight(targetNode as FrameNode);
         if (type === 'bar') {
             debugLog('[chart-plugin][bar-height-debug][graph]', {
@@ -1918,7 +2009,7 @@ figma.ui.onmessage = async (msg) => {
             figma.ui.postMessage({
                 type: 'preview_plot_size_updated',
                 previewPlotWidth: getPlotAreaWidth(targetNode),
-                previewPlotHeight: getGraphHeight(targetNode as FrameNode)
+                previewPlotHeight: getGraphHeight(targetNode as FrameNode, columns)
             });
             if (msg.type === 'apply') {
                 figma.ui.postMessage({ type: 'apply_completed', targetId: targetNode.id });
@@ -2084,12 +2175,14 @@ figma.ui.onmessage = async (msg) => {
         const nextTarget = selectedChartTargets.find((target) => target.id === requestedTargetId);
         if (!nextTarget || !isRecognizedChartSelection(nextTarget)) return;
         activeTargetId = nextTarget.id;
+        const uiPerfTrace = buildUiInitPerfTrace('target_switch', nextTarget, selectedChartTargets.length);
         initPluginUI(nextTarget, false, {
             reason: 'selection',
             isCType: false,
             selectionTargets: getSelectionTargetsMeta(selectedChartTargets),
             activeTargetId,
-            deferStyleExtract: true
+            deferStyleExtract: true,
+            uiPerfTrace
         });
     }
 };
@@ -2097,31 +2190,40 @@ figma.ui.onmessage = async (msg) => {
 
 // Selection Change
 figma.on("selectionchange", () => {
+    const selectionEventStartedAtMs = Date.now();
     const selection = figma.currentPage.selection;
+    let afterSingleResolveAtMs = selectionEventStartedAtMs;
     if (selection.length === 1) {
         const node = selection[0];
-        const resolvedNode = resolveChartTargetFromInnerNode(node);
-        const isCType = detectCTypeSelection(node, resolvedNode);
-        if (isCType) {
-            const resizedCount = applyCTypeResizeRules(node);
-            if (resizedCount > 0) {
-                debugLog('[chart-plugin][ctype-resize-fill]', {
+        const debugEnabled = isPluginDebugEnabled();
+        if (node.type === 'COMPONENT' || debugEnabled) {
+            const resolvedNode = resolveChartTargetFromInnerNode(node);
+            const isCType = detectCTypeSelection(node, resolvedNode);
+            if (isCType) {
+                const resizedCount = applyCTypeResizeRules(node);
+                if (resizedCount > 0) {
+                    debugLog('[chart-plugin][ctype-resize-fill]', {
+                        selectedNodeId: node.id,
+                        resizedCount
+                    });
+                }
+            }
+            if (debugEnabled) {
+                logSelectionRecognition(resolvedNode);
+                debugLog('[chart-plugin][selection-resolve]', {
                     selectedNodeId: node.id,
-                    resizedCount
+                    resolvedNodeId: resolvedNode.id,
+                    selectedNodeName: node.name,
+                    resolvedNodeName: resolvedNode.name,
+                    isCType
                 });
             }
         }
-        logSelectionRecognition(resolvedNode);
-        debugLog('[chart-plugin][selection-resolve]', {
-            selectedNodeId: node.id,
-            resolvedNodeId: resolvedNode.id,
-            selectedNodeName: node.name,
-            resolvedNodeName: resolvedNode.name,
-            isCType
-        });
     }
+    afterSingleResolveAtMs = Date.now();
 
     selectedChartTargets = collectSelectedChartTargets(selection);
+    const afterCollectTargetsAtMs = Date.now();
     if (selectedChartTargets.length === 0) {
         activeTargetId = null;
         rebuildTrackedTargetSizes([]);
@@ -2141,12 +2243,19 @@ figma.on("selectionchange", () => {
 
     const activeTarget = selectedChartTargets.find((target) => target.id === activeTargetId) || selectedChartTargets[0];
     activeTargetId = activeTarget.id;
+    const uiPerfTrace = buildUiInitPerfTrace('selectionchange', activeTarget, selectedChartTargets.length, {
+        selectionStartedAtMs: selectionEventStartedAtMs,
+        preInitSingleResolveMs: afterSingleResolveAtMs - selectionEventStartedAtMs,
+        preInitCollectTargetsMs: afterCollectTargetsAtMs - afterSingleResolveAtMs,
+        preInitTotalMs: afterCollectTargetsAtMs - selectionEventStartedAtMs
+    });
     initPluginUI(activeTarget, false, {
         reason: 'selection',
         isCType: selection.length === 1 ? detectCTypeSelection(selection[0], activeTarget) : false,
         selectionTargets: getSelectionTargetsMeta(selectedChartTargets),
         activeTargetId,
-        deferStyleExtract: true
+        deferStyleExtract: true,
+        uiPerfTrace
     });
 });
 

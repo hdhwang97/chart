@@ -39,7 +39,7 @@ function collectGridHeaderLabels(): string[] {
         .filter((label) => label.length > 0);
 }
 
-export function goToStep(step: number) {
+export function goToStep(step: number, options?: { skipDataRender?: boolean }) {
     state.currentStep = step;
 
     const allSteps = document.querySelectorAll('.step');
@@ -63,8 +63,10 @@ export function goToStep(step: number) {
 
         // Update settings UI
         updateSettingInputs();
-        renderGrid();
-        setTimeout(() => renderPreview(), 50);
+        if (!options?.skipDataRender) {
+            renderGrid();
+            setTimeout(() => renderPreview(), 50);
+        }
         applyModeLocks();
         checkCtaValidation();
     }

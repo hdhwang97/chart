@@ -75,6 +75,115 @@ type StyleHoverCache = {
     lastTarget: StylePreviewTarget | null;
 };
 const styleHoverCacheByContainer = new WeakMap<HTMLElement, StyleHoverCache>();
+type DataHighlightScope = 'cell' | 'row';
+type DataHighlightMeta = {
+    scope: DataHighlightScope;
+    row?: number;
+    col?: number;
+    group?: number;
+};
+type DataHighlightCache = {
+    svg: SVGSVGElement;
+    marks: SVGElement[];
+    lastKey: string | null;
+};
+const dataHighlightCacheByContainer = new WeakMap<HTMLElement, DataHighlightCache>();
+
+function toSafeOpacity(value: unknown, fallback = 1): number {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    return Math.max(0, numeric);
+}
+
+function setPreviewMarkOpacity(node: any, renderedOpacity: number, defaultOpacity = renderedOpacity) {
+    const safeRendered = toSafeOpacity(renderedOpacity);
+    const safeDefault = toSafeOpacity(defaultOpacity);
+    node
+        .attr('opacity', safeRendered)
+        .attr('data-base-opacity', safeRendered)
+        .attr('data-default-opacity', safeDefault);
+}
+
+function markPreviewHighlightMeta(node: any, meta: DataHighlightMeta) {
+    node
+        .attr('data-highlight-scope', meta.scope);
+    if (typeof meta.row === 'number') node.attr('data-highlight-row', String(meta.row));
+    if (typeof meta.col === 'number') node.attr('data-highlight-col', String(meta.col));
+    if (typeof meta.group === 'number') node.attr('data-highlight-group', String(meta.group));
+}
+
+function parseHighlightIndex(raw: string | null): number | null {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.floor(parsed);
+}
+
+function isMarkMatchedByHighlight(mark: SVGElement, active: HighlightState): boolean {
+    const scope = (mark.getAttribute('data-highlight-scope') || 'cell') as DataHighlightScope;
+    const row = parseHighlightIndex(mark.getAttribute('data-highlight-row'));
+    const col = parseHighlightIndex(mark.getAttribute('data-highlight-col'));
+    const group = parseHighlightIndex(mark.getAttribute('data-highlight-group'));
+
+    if (active.type === 'group') {
+        return group !== null && group === active.index;
+    }
+    if (active.type === 'row') {
+        return row !== null && row === active.index;
+    }
+    if (active.type === 'col') {
+        if (scope === 'row') return true;
+        return col !== null && col === active.index;
+    }
+    if (active.type === 'cell') {
+        const targetRow = typeof active.row === 'number' ? active.row : null;
+        const targetCol = typeof active.col === 'number' ? active.col : null;
+        if (targetRow === null || targetCol === null) return false;
+        if (scope === 'row') return row !== null && row === targetRow;
+        return row !== null && col !== null && row === targetRow && col === targetCol;
+    }
+    return false;
+}
+
+function getHighlightStateKey(active: HighlightState | null): string {
+    if (!active) return 'none';
+    if (active.type === 'cell') return `cell:${active.row ?? -1}:${active.col ?? -1}`;
+    return `${active.type}:${active.index}`;
+}
+
+function applyPreviewHighlightState(containerId = 'chart-preview-container') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const svg = container.querySelector('svg');
+    if (!(svg instanceof SVGSVGElement)) return;
+
+    const cached = dataHighlightCacheByContainer.get(container);
+    const cache = (!cached || cached.svg !== svg)
+        ? {
+            svg,
+            marks: Array.from(container.querySelectorAll<SVGElement>('.preview-mark[data-highlight-scope]')),
+            lastKey: null
+        }
+        : cached;
+    if (cache !== cached) {
+        dataHighlightCacheByContainer.set(container, cache);
+    }
+
+    const key = getHighlightStateKey(highlightState);
+    if (cache.lastKey === key) return;
+    const active = highlightState;
+
+    cache.marks.forEach((mark) => {
+        const fallbackDefault = mark.getAttribute('data-base-opacity');
+        const defaultOpacity = toSafeOpacity(mark.getAttribute('data-default-opacity'), toSafeOpacity(fallbackDefault, 1));
+        const matched = active ? isMarkMatchedByHighlight(mark, active) : true;
+        const nextOpacity = matched ? defaultOpacity : (defaultOpacity * MARK_DIM_OPACITY);
+        const next = String(nextOpacity);
+        mark.style.opacity = next;
+        mark.setAttribute('data-base-opacity', next);
+    });
+
+    cache.lastKey = key;
+}
 
 function getPreviewMarkElements(containerId = 'chart-preview-container'): SVGElement[] {
     return Array.from(document.querySelectorAll<SVGElement>(`#${containerId} .preview-mark`));
@@ -1029,6 +1138,7 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
     }
 
     clearStyleInteractionState(container);
+    dataHighlightCacheByContainer.delete(container);
 
     container.innerHTML = '';
     container.onmouseleave = mode === 'data'
@@ -1099,7 +1209,8 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
         : undefined;
     drawGuides(g, w, h, axisCols, state.cellCount, mode, lineGuidePositions);
 
-    const activeHighlight = mode === 'style' ? null : highlightState;
+    // Hover highlight is applied directly on existing SVG nodes to avoid full re-render on every mouse move.
+    const activeHighlight: HighlightState | null = null;
     if (chartType === 'bar') {
         renderBarPreview(g, numData, w, h, yScale, activeHighlight, mode, containerId);
     } else if (chartType === 'line') {
@@ -1115,7 +1226,10 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
     if (mode === 'style') {
         bindStyleInteractions(container, options.onTargetHover, options.onTargetClick);
         applyStyleTargetHover(container, externalStyleHoverTargets.get(containerId) ?? null);
+        return;
     }
+
+    applyPreviewHighlightState(containerId);
 }
 
 function renderBarPreview(
@@ -1150,6 +1264,7 @@ function renderBarPreview(
             const clusterLayout = computeClusterLayout(colW, ratio, rows);
             const barX = colX + clusterLayout.clusterOffset + (r * (clusterLayout.subBarW + clusterLayout.gapPx));
             const baseOpacity = activeHighlight ? (isHighlighted ? 1 : 0.2) : 1;
+            const defaultOpacity = 1;
 
             const rect = g.append('rect')
                 .attr('class', 'preview-mark')
@@ -1158,9 +1273,9 @@ function renderBarPreview(
                 .attr('width', clusterLayout.subBarW)
                 .attr('height', barH)
                 .attr('fill', getBarPreviewColor(r, c))
-                .attr('opacity', baseOpacity)
-                .attr('data-base-opacity', baseOpacity)
                 .attr('rx', 2);
+            setPreviewMarkOpacity(rect, baseOpacity, defaultOpacity);
+            markPreviewHighlightMeta(rect, { scope: 'cell', row: r, col: c });
 
             if (mode === 'data') {
                 rect.on('mouseenter', function (this: SVGElement) {
@@ -1193,17 +1308,17 @@ function renderBarPreview(
                 const labelText = resolveBarLabelText(r, c, val, barLabelSource);
                 if (labelText) {
                     const labelY = Math.max(8, Math.min(h - 2, yScale(val) - 4));
-                    g.append('text')
+                    const label = g.append('text')
                         .attr('class', 'preview-mark')
                         .attr('x', barX + (clusterLayout.subBarW / 2))
                         .attr('y', labelY)
                         .attr('text-anchor', 'middle')
                         .attr('font-size', 8)
                         .attr('fill', '#111827')
-                        .attr('opacity', baseOpacity)
-                        .attr('data-base-opacity', baseOpacity)
                         .style('pointer-events', 'none')
                         .text(labelText);
+                    setPreviewMarkOpacity(label, baseOpacity, defaultOpacity);
+                    markPreviewHighlightMeta(label, { scope: 'cell', row: r, col: c });
                 }
             }
         }
@@ -1262,6 +1377,7 @@ function renderLinePreview(
         const yDomain = yScale.domain();
         const yBase = Array.isArray(yDomain) && Number.isFinite(Number(yDomain[0])) ? Number(yDomain[0]) : 0;
         const lineBgOpacityFactor = Math.max(0, Math.min(1, Number(styleMark.lineBackgroundOpacity) / 100));
+        const areaDefaultOpacity = lineBgOpacityFactor;
         const areaOpacity = (activeHighlight ? (relatedRow ? 1 : 0.25) : 1) * lineBgOpacityFactor;
         if (areaVisible) {
             const area = d3.area()
@@ -1277,9 +1393,9 @@ function renderLinePreview(
                 .attr('fill', areaColor)
                 .attr('stroke', 'none')
                 .attr('d', area)
-                .attr('opacity', areaOpacity)
-                .attr('data-base-opacity', areaOpacity)
                 .style('pointer-events', mode === 'style' ? 'auto' : 'none');
+            setPreviewMarkOpacity(areaPath, areaOpacity, areaDefaultOpacity);
+            markPreviewHighlightMeta(areaPath, { scope: 'row', row: r });
             if (mode === 'style') {
                 markStyleTarget(areaPath, 'mark', mode);
                 markStyleTargetSeries(areaPath, r, mode);
@@ -1291,9 +1407,9 @@ function renderLinePreview(
             .attr('fill', 'none')
             .attr('stroke', pathStrokeColor)
             .attr('stroke-width', pathStrokeWidth)
-            .attr('d', line)
-            .attr('opacity', pathOpacity)
-            .attr('data-base-opacity', pathOpacity);
+            .attr('d', line);
+        setPreviewMarkOpacity(path, pathOpacity, 1);
+        markPreviewHighlightMeta(path, { scope: 'row', row: r });
 
         if (isRowHighlighted || isCellOnRow) {
             highlightedRows.add(r);
@@ -1348,9 +1464,9 @@ function renderLinePreview(
                     .attr('r', dotRadius)
                     .attr('fill', pointStyle.linePointFillColor)
                     .attr('stroke', pointStyle.linePointStrokeColor)
-                    .attr('stroke-width', Math.max(0, pointStyle.linePointThickness))
-                    .attr('opacity', dotOpacity)
-                    .attr('data-base-opacity', dotOpacity);
+                    .attr('stroke-width', Math.max(0, pointStyle.linePointThickness));
+                setPreviewMarkOpacity(dot, dotOpacity, 1);
+                markPreviewHighlightMeta(dot, { scope: 'cell', row: r, col: i });
 
                 if (mode === 'data') {
                     dot.on('mouseenter', function () {
@@ -1439,9 +1555,10 @@ function renderStackedPreview(
                     .attr('fill', mode === 'style'
                         ? getMarkDraftStyle(Math.max(0, r - startRow)).fillColor
                         : resolveSeriesStyleColor(Math.max(0, r - startRow), 'stackedBar', 'fill'))
-                    .attr('opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 1)
-                    .attr('data-base-opacity', activeHighlight ? (isHighlighted ? 1 : 0.2) : 1)
                     .attr('rx', 1);
+                const stackedOpacity = activeHighlight ? (isHighlighted ? 1 : 0.2) : 1;
+                setPreviewMarkOpacity(rect, stackedOpacity, 1);
+                markPreviewHighlightMeta(rect, { scope: 'cell', row: r, col: flatIdx, group: gIdx });
 
                 if (mode === 'data') {
                     rect.on('mouseenter', function (this: SVGElement) {
@@ -1476,15 +1593,15 @@ function renderStackedPreview(
 
 export function highlightPreview(type: string, index: number) {
     highlightState = { type, index };
-    renderPreview();
+    applyPreviewHighlightState();
 }
 
 export function highlightPreviewCell(row: number, col: number) {
     highlightState = { type: 'cell', index: -1, row, col };
-    renderPreview();
+    applyPreviewHighlightState();
 }
 
 export function resetPreviewHighlight() {
     highlightState = null;
-    renderPreview();
+    applyPreviewHighlightState();
 }

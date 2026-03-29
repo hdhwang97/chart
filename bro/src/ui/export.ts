@@ -32,6 +32,11 @@ const EXPORT_LAYOUT = {
     legendRowHeight: 10
 } as const;
 
+function isExportTabActive() {
+    const stepExport = document.getElementById('step-export');
+    return Boolean(stepExport && stepExport.classList.contains('active'));
+}
+
 function buildPreviewStyleFromState() {
     return {
         chartType: state.chartType || 'bar',
@@ -705,11 +710,13 @@ export function handleStyleExtracted(payload: any) {
         previewPlotWidth: Number.isFinite(Number(payload?.previewPlotWidth)) ? Number(payload.previewPlotWidth) : state.previewPlotWidth,
         previewPlotHeight: Number.isFinite(Number(payload?.previewPlotHeight)) ? Number(payload.previewPlotHeight) : state.previewPlotHeight
     };
+    if (!isExportTabActive()) return;
     renderD3Preview(lastStylePayload);
     updateCodeOutput(lastStylePayload);
 }
 
 export function refreshExportPreview() {
+    if (!isExportTabActive()) return;
     const previewPayload = {
         ...(lastStylePayload || buildPreviewStyleFromState()),
         previewPlotWidth: state.previewPlotWidth,
