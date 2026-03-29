@@ -30,6 +30,14 @@ input[type=number]::-webkit-outer-spin-button {
     background-color: #E0F2FE !important;
 }
 
+.preview-style-hover-active [data-style-target] {
+    opacity: min(var(--style-base-opacity, 1), 0.5);
+}
+
+.preview-style-hover-active [data-style-target].preview-style-target-active {
+    opacity: var(--style-base-opacity, 1);
+}
+
 .col-header.style-grid-linked-col {
     background-color: #EFF6FF !important;
     box-shadow: inset 0 0 0 1px #93C5FD;

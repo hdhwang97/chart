@@ -228,7 +228,9 @@ export function checkCtaValidation() {
     const stackedOverflow = getStackedOverflowState(state.data).hasOverflow;
 
     syncYMaxValidationUi();
-    ui.mainCta.disabled = state.mode === 'edit' || !hasAny || !rangeOk || stackedOverflow;
+    const disabled = state.mode === 'edit' || !hasAny || !rangeOk || stackedOverflow;
+    ui.mainCta.disabled = disabled;
+    ui.dataPaddingCta.disabled = disabled;
     return !ui.mainCta.disabled;
 }
 

@@ -106,6 +106,7 @@ export type StrokeInjectionApplyOptions = {
     applyColumnScopes?: boolean;
     applyLegendScope?: boolean;
     applyGridContainerScope?: boolean;
+    variableBinder?: MarkVariableBinder | null;
 };
 
 function normalizeCellFillStyle(input: unknown): { color?: string; visible?: boolean } | null {
@@ -197,6 +198,11 @@ type ColumnStrokeContext = {
     cells: CellNodeRef[];
     lastVisibleCellIndex: number | null;
     lineBundles: LineBundleStyleTargets[];
+};
+
+type FlatLineFillBotStyleApplyResult = {
+    applied: boolean;
+    targets: SceneNode[];
 };
 
 function createScopeResult(): ScopeResult {
@@ -496,6 +502,10 @@ function hasStrokeWeight(node: SceneNode): node is StrokeWeightNode {
 
 function hasIndividualStrokeToggle(node: SceneNode): node is IndividualStrokeToggleNode {
     return 'individualStrokeWeights' in node;
+}
+
+function supportsIndividualStrokeSideControl(node: SceneNode): boolean {
+    return hasIndividualStrokeWeights(node) || hasIndividualStrokeToggle(node);
 }
 
 function enableIndividualStrokeWeights(node: SceneNode): boolean {
@@ -899,24 +909,59 @@ function setLineSeriesStrokeVisibility(targets: SceneNode[], visible: boolean) {
     });
 }
 
+function collectFlatLineFillBotStrokeTargets(node: SceneNode): SceneNode[] {
+    const targets: SceneNode[] = [];
+    const seen = new Set<string>();
+    const pushIfEligible = (candidate: SceneNode) => {
+        if (!candidate.visible) return;
+        if (!('strokes' in candidate)) return;
+        if (!supportsIndividualStrokeSideControl(candidate)) return;
+        if (seen.has(candidate.id)) return;
+        seen.add(candidate.id);
+        targets.push(candidate);
+    };
+
+    pushIfEligible(node);
+    if (node.type === 'INSTANCE' || 'children' in node) {
+        traverse(node, (child) => {
+            if (child.id === node.id) return;
+            pushIfEligible(child);
+        });
+    }
+    return targets;
+}
+
 function applyFlatLineFillBotStyle(
     node: SceneNode,
     style: NormalizedMarkStyle,
     rowStyleId: string | null,
     skipStrokeColor: boolean
-): boolean {
-    let applied = false;
-    if (rowStyleId) {
-        applied = tryApplyStrokeStyleLink(node, rowStyleId) || applied;
+): FlatLineFillBotStyleApplyResult {
+    const targets = collectFlatLineFillBotStrokeTargets(node);
+    if (targets.length === 0) {
+        return { applied: false, targets: [] };
     }
+
+    let applied = false;
     const topOnlyStyle: NormalizedMarkStyle = {
         ...style,
         sides: { top: true, left: false, right: false }
     };
-    return applyMarkStyleToNode(node, topOnlyStyle, {
-        skipFill: true,
-        skipStrokeColor: skipStrokeColor || Boolean(rowStyleId)
-    }) || applied;
+
+    targets.forEach((target) => {
+        if (rowStyleId) {
+            applied = tryApplyStrokeStyleLink(target, rowStyleId) || applied;
+        }
+        if (applyMarkStyleToNode(target, topOnlyStyle, {
+            skipFill: true,
+            skipStrokeColor: skipStrokeColor || Boolean(rowStyleId),
+            requireIndividualForSides: true
+        })) {
+            applied = true;
+        }
+    });
+
+    return { applied, targets };
 }
 
 function applyLineBundleStylesForColumn(
@@ -950,11 +995,14 @@ function applyLineBundleStylesForColumn(
 
         result.candidates += 1;
         try {
-            if (applyFlatLineFillBotStyle(entry.bundle.fillBot, style, rowStyleId, skipStrokeColorForSeries)) {
-                variableBinder?.bindFlatTopStrokeThickness(entry.bundle.fillBot, seriesIndex, style.thickness);
+            const flatFillBotStyleResult = applyFlatLineFillBotStyle(entry.bundle.fillBot, style, rowStyleId, skipStrokeColorForSeries);
+            flatFillBotStyleResult.targets.forEach((target) => {
+                variableBinder?.bindFlatTopStrokeThickness(target, seriesIndex, style.thickness);
                 if (!skipStrokeColorForSeries && !rowStyleId) {
-                    variableBinder?.bindStrokeColor(entry.bundle.fillBot, seriesIndex, style.strokeColor);
+                    variableBinder?.bindStrokeColor(target, seriesIndex, style.strokeColor);
                 }
+            });
+            if (flatFillBotStyleResult.applied) {
                 result.applied += 1;
             } else {
                 result.skipped += 1;
@@ -1013,7 +1061,7 @@ function applyLineBackgroundStyles(
 function applyMarkStyleToNode(
     node: SceneNode,
     style: NormalizedMarkStyle,
-    options?: { skipFill?: boolean; skipStrokeColor?: boolean }
+    options?: { skipFill?: boolean; skipStrokeColor?: boolean; requireIndividualForSides?: boolean }
 ): boolean {
     let applied = false;
     if (style.enabled === false) {
@@ -1036,7 +1084,11 @@ function applyMarkStyleToNode(
     if (style.sides && hasIndividualStrokeToggle(node)) {
         enableIndividualStrokeWeights(node);
     }
-    if (style.sides && hasIndividualStrokeWeights(node)) {
+    const canApplySideWeights = style.sides ? hasIndividualStrokeWeights(node) : false;
+    if (style.sides && options?.requireIndividualForSides && !canApplySideWeights) {
+        return applied;
+    }
+    if (style.sides && canApplySideWeights) {
         const targetThickness = typeof style.thickness === 'number'
             ? style.thickness
             : (hasStrokeWeight(node) && typeof node.strokeWeight === 'number' ? node.strokeWeight : 0);
@@ -1477,13 +1529,15 @@ export function applyStrokeInjection(
     const cellFillStyle = applyColumnScopes ? resolveCellFillStyle(payload) : null;
     const lineBackgroundStyle = applyColumnScopes ? resolveLineBackgroundStyle(payload) : null;
     const markStyles = resolveMarkStyles(payload);
-    const variableBinder = markStyles.length > 0
+    const variableBinder = options?.variableBinder !== undefined
+        ? options.variableBinder
+        : (markStyles.length > 0
         ? new MarkVariableBinder({
             graphNodeId: graph.id,
             updateMode: payload.variableUpdateMode === 'create' ? 'create' : 'overwrite',
             slotVariableIdMap: payload.markVariableSlotMap
         })
-        : null;
+        : null);
     const legendSync = applyLegendScope
         ? applyLegendMarkSync(graph, markStyles, payload, payload.markNum, payload.chartType, payload.rowColors, columns)
         : { result: createScopeResult(), enabled: false };

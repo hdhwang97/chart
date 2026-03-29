@@ -32,7 +32,7 @@ import { renderPreview } from './preview';
 import { setMode, toggleMode, updateModeButtonState, checkCtaValidation, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
-import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData } from './steps';
+import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData, submitDataPaddingOnly } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
 import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection, UpdateType } from '../shared/style-types';
@@ -1566,6 +1566,11 @@ function bindUiEvents() {
         commitRowColorPopoverIfOpen();
         commitStyleColorPopoverIfOpen();
         submitData({ updateType: resolveSubmissionUpdateType() });
+    });
+    ui.dataPaddingCta.addEventListener('click', () => {
+        commitRowColorPopoverIfOpen();
+        commitStyleColorPopoverIfOpen();
+        submitDataPaddingOnly();
     });
     ui.editModeBtn.addEventListener('click', () => {
         closeRowColorPopover();

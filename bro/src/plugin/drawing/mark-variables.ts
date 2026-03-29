@@ -51,6 +51,10 @@ function normalizeNumber(value: unknown): number | null {
     return parsed;
 }
 
+function nearlyEqual(a: number, b: number, epsilon = 1e-6) {
+    return Math.abs(a - b) <= epsilon;
+}
+
 function ensureCollection(name: string): VariableCollection {
     const existing = figma.variables.getLocalVariableCollections().find((collection) => collection.name === name);
     if (existing) return existing;
@@ -66,6 +70,8 @@ export class MarkVariableBinder {
     private readonly localVariableIdCache = new Map<string, Variable | null>();
     private readonly localColorVariableByName = new Map<string, Variable>();
     private readonly localNumberVariableByName = new Map<string, Variable>();
+    private readonly colorSlotValueSignature = new Map<string, string>();
+    private readonly numberSlotValueSignature = new Map<string, string>();
 
     constructor(params: {
         graphNodeId: string;
@@ -154,7 +160,19 @@ export class MarkVariableBinder {
             paintField: field
         });
         if (!variable) return;
-        variable.setValueForMode(this.colorCollection.defaultModeId, rgbValue);
+        const valueSignature = `${variable.id}:${rgbValue.r}:${rgbValue.g}:${rgbValue.b}:${rgbValue.a}`;
+        if (this.colorSlotValueSignature.get(slotKey) !== valueSignature) {
+            variable.setValueForMode(this.colorCollection.defaultModeId, rgbValue);
+            this.colorSlotValueSignature.set(slotKey, valueSignature);
+        }
+        const boundId = readNodeBoundColorVariableId(node, field);
+        const targetOpacity = typeof opacity === 'number' ? Math.max(0, Math.min(1, opacity)) : undefined;
+        if (boundId === variable.id && first && first.type === 'SOLID') {
+            const currentOpacity = typeof first.opacity === 'number' ? first.opacity : 1;
+            if (targetOpacity === undefined || nearlyEqual(currentOpacity, targetOpacity)) {
+                return;
+            }
+        }
         const boundPaint = figma.variables.setBoundVariableForPaint(solidPaint, 'color', variable);
         current[0] = boundPaint;
         target[field] = current;
@@ -175,9 +193,16 @@ export class MarkVariableBinder {
             numberFields: fields
         });
         if (!variable) return;
-        variable.setValueForMode(this.numberCollection.defaultModeId, numeric);
+        const valueSignature = `${variable.id}:${numeric}`;
+        if (this.numberSlotValueSignature.get(slotKey) !== valueSignature) {
+            variable.setValueForMode(this.numberCollection.defaultModeId, numeric);
+            this.numberSlotValueSignature.set(slotKey, valueSignature);
+        }
         fields.forEach((field) => {
             try {
+                const boundAlias = (node.boundVariables as any)?.[field];
+                const boundId = parseBoundAliasId(boundAlias);
+                if (boundId === variable.id) return;
                 node.setBoundVariable(field, variable);
             } catch {
                 // ignored: not all node types support all fields

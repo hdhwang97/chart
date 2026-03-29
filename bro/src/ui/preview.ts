@@ -53,9 +53,10 @@ const PREVIEW_LAYOUT = {
 const GRID_MARK_HOVER_CLASS = 'grid-cell-mark-hover';
 const MARK_DIM_OPACITY = 0.2;
 const MARK_HOVER_OPACITY = 1;
-const STYLE_DIM_OPACITY = 0.5;
 const DATA_CONTEXT_DIM_OPACITY = 0.15;
 const LINE_HIGHLIGHT_MULTIPLIER = 1.5;
+const STYLE_HOVER_ACTIVE_CLASS = 'preview-style-hover-active';
+const STYLE_TARGET_ACTIVE_CLASS = 'preview-style-target-active';
 const LINE_STYLE_HIT_STROKE_WIDTH = 14;
 const LINE_STYLE_HIT_RADIUS = 9;
 const TAB_BACKGROUND_OPACITY = 1;
@@ -68,6 +69,12 @@ const PREVIEW_LINE_POINT_RADIUS_SCALE =
 type HighlightState = { type: string; index: number; row?: number; col?: number };
 let highlightState: HighlightState | null = null;
 const externalStyleHoverTargets = new Map<string, StylePreviewTarget | null>();
+type StyleHoverCache = {
+    nodes: SVGElement[];
+    byTarget: Map<StylePreviewTarget, SVGElement[]>;
+    lastTarget: StylePreviewTarget | null;
+};
+const styleHoverCacheByContainer = new WeakMap<HTMLElement, StyleHoverCache>();
 
 function getPreviewMarkElements(containerId = 'chart-preview-container'): SVGElement[] {
     return Array.from(document.querySelectorAll<SVGElement>(`#${containerId} .preview-mark`));
@@ -747,106 +754,187 @@ function drawGuides(g: any, w: number, h: number, totalCols: number, yCellCount:
     }
 }
 
-function applyStyleTargetHover(container: HTMLElement, target: StylePreviewTarget | null) {
+function getStyleHoverCache(container: HTMLElement): StyleHoverCache {
+    const cached = styleHoverCacheByContainer.get(container);
+    if (cached) return cached;
     const nodes = Array.from(container.querySelectorAll<SVGElement>('[data-style-target]'));
-    if (nodes.length === 0) return;
+    nodes.forEach((node) => {
+        node.style.setProperty('--style-base-opacity', String(getStyleNodeBaseOpacity(node)));
+    });
+    const byTarget = new Map<StylePreviewTarget, SVGElement[]>();
+    nodes.forEach((node) => {
+        const target = node.getAttribute('data-style-target') as StylePreviewTarget | null;
+        if (!target) return;
+        const bucket = byTarget.get(target);
+        if (bucket) bucket.push(node);
+        else byTarget.set(target, [node]);
+    });
+    const next: StyleHoverCache = {
+        nodes,
+        byTarget,
+        lastTarget: null
+    };
+    styleHoverCacheByContainer.set(container, next);
+    return next;
+}
+
+function restoreStyleNodeBase(node: SVGElement) {
+    const baseStrokeRaw = node.getAttribute('data-style-base-stroke-width');
+    const baseStroke = Number(baseStrokeRaw);
+    const baseStrokeColor = node.getAttribute('data-style-base-stroke');
+    const baseDash = node.getAttribute('data-style-base-stroke-dasharray');
+    const baseFill = node.getAttribute('data-style-base-fill');
+    const baseFillOpacity = node.getAttribute('data-style-base-fill-opacity');
+    const baseRadiusRaw = node.getAttribute('data-style-base-radius');
+    const baseRadius = Number(baseRadiusRaw);
+
+    if (baseStrokeColor !== null) node.setAttribute('stroke', baseStrokeColor);
+    if (baseDash !== null) {
+        if (baseDash) node.setAttribute('stroke-dasharray', baseDash);
+        else node.removeAttribute('stroke-dasharray');
+    }
+    if (baseStrokeRaw && Number.isFinite(baseStroke)) {
+        node.setAttribute('stroke-width', String(baseStroke));
+    }
+    if (baseFill !== null) {
+        if (baseFill) node.setAttribute('fill', baseFill);
+        else node.removeAttribute('fill');
+    }
+    if (baseFillOpacity !== null) {
+        if (baseFillOpacity) node.setAttribute('fill-opacity', baseFillOpacity);
+        else node.removeAttribute('fill-opacity');
+    }
+    if (baseRadiusRaw && Number.isFinite(baseRadius)) {
+        node.setAttribute('r', String(baseRadius));
+    }
+}
+
+function applyStyleTargetAccent(node: SVGElement, target: StylePreviewTarget) {
+    const baseStrokeRaw = node.getAttribute('data-style-base-stroke-width');
+    const baseStroke = Number(baseStrokeRaw);
+    const baseStrokeColor = node.getAttribute('data-style-base-stroke');
+    const baseRadiusRaw = node.getAttribute('data-style-base-radius');
+    const baseRadius = Number(baseRadiusRaw);
     const accentTarget = target === 'grid' || target === 'tab-right' || target === 'cell-top' || target === 'assist-line';
 
-    nodes.forEach((node) => {
-        const nodeTarget = node.getAttribute('data-style-target') as StylePreviewTarget | null;
-        const base = Number(node.getAttribute('data-style-base-opacity') || '1');
-        const safeBase = Number.isFinite(base) ? base : 1;
-        const isSelected = Boolean(target && nodeTarget === target);
-        if (!target || isSelected) {
-            node.style.opacity = String(safeBase);
-        } else {
-            node.style.opacity = String(Math.min(safeBase, STYLE_DIM_OPACITY));
-        }
+    if (
+        accentTarget
+        && baseStrokeColor
+        && baseStrokeColor !== 'transparent'
+        && baseStrokeRaw !== ''
+        && Number.isFinite(baseStroke)
+    ) {
+        const boosted = Math.max(baseStroke + 1, 2);
+        node.style.opacity = '1';
+        node.setAttribute('stroke', '#EF4444');
+        node.setAttribute('stroke-dasharray', '4,2');
+        node.setAttribute('stroke-width', String(boosted));
+    }
 
-        const baseStrokeRaw = node.getAttribute('data-style-base-stroke-width');
-        const baseStroke = Number(baseStrokeRaw);
-        const baseStrokeColor = node.getAttribute('data-style-base-stroke');
-        const baseDash = node.getAttribute('data-style-base-stroke-dasharray');
-        const baseFill = node.getAttribute('data-style-base-fill');
-        const baseFillOpacity = node.getAttribute('data-style-base-fill-opacity');
-        const baseRadiusRaw = node.getAttribute('data-style-base-radius');
-        const baseRadius = Number(baseRadiusRaw);
-        if (baseStrokeColor !== null) {
-            node.setAttribute('stroke', baseStrokeColor);
-        }
-        if (baseDash !== null) {
-            if (baseDash) node.setAttribute('stroke-dasharray', baseDash);
-            else node.removeAttribute('stroke-dasharray');
-        }
-        if (baseStrokeRaw && Number.isFinite(baseStroke)) {
-            node.setAttribute('stroke-width', String(baseStroke));
-        }
-        if (baseFill !== null) {
-            if (baseFill) node.setAttribute('fill', baseFill);
-            else node.removeAttribute('fill');
-        }
-        if (baseFillOpacity !== null) {
-            if (baseFillOpacity) node.setAttribute('fill-opacity', baseFillOpacity);
-            else node.removeAttribute('fill-opacity');
-        }
-        if (baseRadiusRaw && Number.isFinite(baseRadius)) {
-            node.setAttribute('r', String(baseRadius));
-        }
+    if (target === 'cell-fill') {
+        node.setAttribute('fill', '#EF4444');
+        node.setAttribute('fill-opacity', '0.35');
+    }
+    if (target === 'line-background') {
+        node.setAttribute('fill', '#EF4444');
+        node.setAttribute('fill-opacity', '0.35');
+        node.style.opacity = '1';
+    }
+    if (target === 'column') {
+        node.setAttribute('fill', '#EF4444');
+        node.setAttribute('fill-opacity', '0.2');
+        node.style.opacity = '1';
+    }
 
-        if (
-            accentTarget
-            && nodeTarget === target
-            && baseStrokeColor
-            && baseStrokeColor !== 'transparent'
-            && baseStrokeRaw !== ''
-            && Number.isFinite(baseStroke)
-        ) {
-            const boosted = Math.max(baseStroke + 1, 2);
-            node.style.opacity = '1';
-            node.setAttribute('stroke', '#EF4444');
-            node.setAttribute('stroke-dasharray', '4,2');
-            node.setAttribute('stroke-width', String(boosted));
-        }
+    if (
+        target === 'mark'
+        && baseStrokeColor
+        && baseStrokeColor !== 'transparent'
+        && baseStrokeRaw !== ''
+        && Number.isFinite(baseStroke)
+    ) {
+        node.setAttribute('stroke-width', String(Math.max(1, baseStroke * LINE_HIGHLIGHT_MULTIPLIER)));
+    }
+    if (target === 'mark' && baseRadiusRaw && Number.isFinite(baseRadius)) {
+        node.setAttribute('r', String(Math.max(1, baseRadius * LINE_HIGHLIGHT_MULTIPLIER)));
+    }
+}
 
-        if (target === 'cell-fill' && nodeTarget === 'cell-fill') {
-            node.setAttribute('fill', '#EF4444');
-            node.setAttribute('fill-opacity', '0.35');
-        }
-        if (target === 'line-background' && nodeTarget === 'line-background') {
-            node.setAttribute('fill', '#EF4444');
-            node.setAttribute('fill-opacity', '0.35');
-            node.style.opacity = '1';
-        }
-        if (target === 'column' && nodeTarget === 'column') {
-            node.setAttribute('fill', '#EF4444');
-            node.setAttribute('fill-opacity', '0.2');
-            node.style.opacity = '1';
-        }
+function getStyleNodeBaseOpacity(node: SVGElement): number {
+    const base = Number(node.getAttribute('data-style-base-opacity') || '1');
+    return Number.isFinite(base) ? base : 1;
+}
 
-        if (
-            target === 'mark'
-            && nodeTarget === 'mark'
-            && baseStrokeColor
-            && baseStrokeColor !== 'transparent'
-            && baseStrokeRaw !== ''
-            && Number.isFinite(baseStroke)
-        ) {
-            node.setAttribute('stroke-width', String(Math.max(1, baseStroke * LINE_HIGHLIGHT_MULTIPLIER)));
-        }
-        if (target === 'mark' && nodeTarget === 'mark' && baseRadiusRaw && Number.isFinite(baseRadius)) {
-            node.setAttribute('r', String(Math.max(1, baseRadius * LINE_HIGHLIGHT_MULTIPLIER)));
-        }
+function setStyleNodeBaseOpacity(node: SVGElement) {
+    node.style.setProperty('--style-base-opacity', String(getStyleNodeBaseOpacity(node)));
+}
+
+function applyStyleTargetHover(container: HTMLElement, target: StylePreviewTarget | null) {
+    const cache = getStyleHoverCache(container);
+    if (cache.nodes.length === 0) return;
+    if (cache.lastTarget === target) return;
+
+    const previousTarget = cache.lastTarget;
+    const previousNodes = previousTarget ? (cache.byTarget.get(previousTarget) || []) : [];
+    const nextNodes = target ? (cache.byTarget.get(target) || []) : [];
+    cache.lastTarget = target;
+
+    previousNodes.forEach((node) => {
+        node.classList.remove(STYLE_TARGET_ACTIVE_CLASS);
+        restoreStyleNodeBase(node);
+        node.style.removeProperty('opacity');
+    });
+
+    if (!target) {
+        container.classList.remove(STYLE_HOVER_ACTIVE_CLASS);
+        return;
+    }
+
+    container.classList.add(STYLE_HOVER_ACTIVE_CLASS);
+    nextNodes.forEach((node) => {
+        setStyleNodeBaseOpacity(node);
+        node.classList.add(STYLE_TARGET_ACTIVE_CLASS);
+        restoreStyleNodeBase(node);
+        applyStyleTargetAccent(node, target);
     });
 }
 
-export function setStylePreviewHoverTarget(
-    target: StylePreviewTarget | null,
-    containerId = 'style-preview-container'
+function scheduleStyleHoverUpdate(
+    scheduleState: { pending: StylePreviewTarget | null; rafId: number | null },
+    next: StylePreviewTarget | null,
+    commit: (target: StylePreviewTarget | null) => void
 ) {
-    externalStyleHoverTargets.set(containerId, target);
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    applyStyleTargetHover(container, target);
+    scheduleState.pending = next;
+    if (scheduleState.rafId !== null) return;
+    scheduleState.rafId = requestAnimationFrame(() => {
+        scheduleState.rafId = null;
+        commit(scheduleState.pending);
+    });
+}
+
+function cancelScheduledStyleHoverUpdate(scheduleState: { pending: StylePreviewTarget | null; rafId: number | null }) {
+    if (scheduleState.rafId === null) return;
+    cancelAnimationFrame(scheduleState.rafId);
+    scheduleState.rafId = null;
+}
+
+function bindStyleInteractionCleanup(container: HTMLElement, cleanup: () => void) {
+    const prev = (container as HTMLElement & { __styleHoverCleanup?: () => void }).__styleHoverCleanup;
+    if (prev) prev();
+    (container as HTMLElement & { __styleHoverCleanup?: () => void }).__styleHoverCleanup = cleanup;
+}
+
+function runStyleInteractionCleanup(container: HTMLElement) {
+    const host = container as HTMLElement & { __styleHoverCleanup?: () => void };
+    if (!host.__styleHoverCleanup) return;
+    host.__styleHoverCleanup();
+    delete host.__styleHoverCleanup;
+}
+
+function clearStyleInteractionState(container: HTMLElement) {
+    runStyleInteractionCleanup(container);
+    container.classList.remove(STYLE_HOVER_ACTIVE_CLASS);
+    styleHoverCacheByContainer.delete(container);
 }
 
 function bindStyleInteractions(
@@ -858,10 +946,13 @@ function bindStyleInteractions(
         meta: StylePreviewTargetMeta
     ) => void
 ) {
+    runStyleInteractionCleanup(container);
+
     const svg = container.querySelector('svg');
     if (!svg) return;
 
     let hoverTarget: StylePreviewTarget | null = null;
+    const hoverSchedule = { pending: null as StylePreviewTarget | null, rafId: null as number | null };
     const resolveTarget = (eventTarget: EventTarget | null): StylePreviewTarget | null => {
         if (!(eventTarget instanceof Element)) return null;
         const anchor = eventTarget.closest('[data-style-target]') as Element | null;
@@ -877,15 +968,13 @@ function bindStyleInteractions(
         if (onTargetHover) onTargetHover(next);
     };
 
-    svg.addEventListener('mousemove', (event) => {
-        setHover(resolveTarget(event.target));
-    });
-
-    svg.addEventListener('mouseleave', () => {
-        setHover(null);
-    });
-
-    svg.addEventListener('click', (event) => {
+    const onMove = (event: MouseEvent) => {
+        scheduleStyleHoverUpdate(hoverSchedule, resolveTarget(event.target), setHover);
+    };
+    const onLeave = () => {
+        scheduleStyleHoverUpdate(hoverSchedule, null, setHover);
+    };
+    const onClick = (event: MouseEvent) => {
         const target = resolveTarget(event.target);
         if (!target || !onTargetClick) return;
         const elem = (event.target as Element).closest('[data-style-target]') as Element | null;
@@ -903,7 +992,28 @@ function bindStyleInteractions(
         }
         onTargetClick(target, { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }, meta);
         event.stopPropagation();
+    };
+
+    svg.addEventListener('mousemove', onMove, { passive: true });
+    svg.addEventListener('mouseleave', onLeave, { passive: true });
+    svg.addEventListener('click', onClick);
+
+    bindStyleInteractionCleanup(container, () => {
+        cancelScheduledStyleHoverUpdate(hoverSchedule);
+        svg.removeEventListener('mousemove', onMove);
+        svg.removeEventListener('mouseleave', onLeave);
+        svg.removeEventListener('click', onClick);
     });
+}
+
+export function setStylePreviewHoverTarget(
+    target: StylePreviewTarget | null,
+    containerId = 'style-preview-container'
+) {
+    externalStyleHoverTargets.set(containerId, target);
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    applyStyleTargetHover(container, target);
 }
 
 export function renderPreview(options: PreviewRenderOptions = {}) {
@@ -917,6 +1027,8 @@ export function renderPreview(options: PreviewRenderOptions = {}) {
         restoreMarkOpacityFromBase(containerId);
         restoreDataContextLineOpacity(containerId);
     }
+
+    clearStyleInteractionState(container);
 
     container.innerHTML = '';
     container.onmouseleave = mode === 'data'

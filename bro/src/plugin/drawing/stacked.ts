@@ -399,3 +399,110 @@ export function applySegmentsToBar(
         }
     });
 }
+
+function resolveStackedMaxSumForPadding(values: number[][], mode: string, yMax?: number | null): number {
+    if (mode !== 'raw') return 100;
+    const configuredMax = Number(yMax);
+    if (Number.isFinite(configuredMax) && configuredMax > 0) return configuredMax;
+
+    const totalDataCols = values[0]?.length || 0;
+    const colSums = new Array(totalDataCols).fill(0);
+    for (let c = 0; c < totalDataCols; c++) {
+        let sum = 0;
+        for (let r = 0; r < values.length; r++) {
+            sum += Number(values[r]?.[c]) || 0;
+        }
+        colSums[c] = sum;
+    }
+    const inferred = Math.max(...colSums, 0);
+    return inferred > 0 ? inferred : 1;
+}
+
+function applySegmentPaddingOnlyToBar(
+    barInstance: SceneNode,
+    values: number[][],
+    colIndex: number,
+    H: number,
+    maxSum: number,
+    mode: string
+) {
+    if (!('children' in barInstance)) return;
+    const segmentByIndex = buildSegmentLayerMap(barInstance);
+    const rowCount = values.length;
+
+    for (let r = 0; r < rowCount; r++) {
+        const targetNum = r + 1;
+        const targetLayer = segmentByIndex.get(targetNum) || findSegmentLayerByIndex(barInstance, targetNum);
+        if (!targetLayer || !('paddingBottom' in targetLayer)) continue;
+
+        const val = Number(values[r]?.[colIndex]) || 0;
+        let ratio = 0;
+        if (mode === 'raw') {
+            ratio = maxSum === 0 ? 0 : val / maxSum;
+        } else {
+            ratio = Math.min(Math.max(val, 0), 100) / 100;
+        }
+        const finalHeight = Math.max(0, Math.round((H * ratio) * 10) / 10);
+        const currentPadding = Number((targetLayer as any).paddingBottom);
+        if (!Number.isFinite(currentPadding) || Math.abs(currentPadding - finalHeight) >= 0.1) {
+            (targetLayer as any).paddingBottom = finalHeight;
+        }
+    }
+}
+
+export function syncStackedSegmentPadding(
+    graph: SceneNode,
+    values: number[][],
+    H: number,
+    mode: string,
+    yMax?: number | null,
+    markNum?: unknown,
+    precomputedCols?: ColRef[]
+) {
+    if (!Array.isArray(values) || values.length === 0) return;
+    const totalDataCols = values[0]?.length || 0;
+    if (totalDataCols <= 0) return;
+
+    const columns = precomputedCols ?? collectColumns(graph);
+    const maxSum = resolveStackedMaxSumForPadding(values, mode, yMax);
+    let globalDataIdx = 0;
+
+    for (let index = 0; index < columns.length; index++) {
+        if (globalDataIdx >= totalDataCols) break;
+        const colObj = columns[index];
+
+        let currentGroupBarCount = 1;
+        if (Array.isArray(markNum)) {
+            if (index < markNum.length) currentGroupBarCount = Number(markNum[index]) || 1;
+            else currentGroupBarCount = 2;
+        } else {
+            currentGroupBarCount = Number(markNum) || 1;
+        }
+
+        let targetParent: SceneNode = colObj.node;
+        if ('children' in colObj.node) {
+            const tab = (colObj.node as any).children.find((n: SceneNode) => n.name === 'tab');
+            if (tab) targetParent = tab;
+        }
+
+        let groupInstance: InstanceNode | null = null;
+        if ('children' in targetParent) {
+            groupInstance = (targetParent as any).children.find((n: SceneNode) => MARK_NAME_PATTERNS.STACKED_GROUP.test(n.name));
+        }
+        if (!groupInstance || groupInstance.type !== 'INSTANCE') continue;
+
+        const subBars = (groupInstance as any).children.filter((n: SceneNode) => MARK_NAME_PATTERNS.STACKED_SUB_INSTANCE.test(n.name));
+        subBars.sort((a: SceneNode, b: SceneNode) => {
+            const numA = parseInt(a.name.match(/\d+/)?.[0] || '0');
+            const numB = parseInt(b.name.match(/\d+/)?.[0] || '0');
+            return numA - numB;
+        });
+
+        subBars.forEach((subBar: SceneNode, subIdx: number) => {
+            if (subIdx >= currentGroupBarCount) return;
+            if (globalDataIdx >= totalDataCols) return;
+            applySegmentPaddingOnlyToBar(subBar, values, globalDataIdx, H, maxSum, mode);
+            globalDataIdx += 1;
+        });
+    }
+}

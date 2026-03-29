@@ -4,9 +4,10 @@ import { extractStyleFromNode } from './style';
 import { collectColumns, setVariantProperty, setLayerVisibility, applyCells, applyYAxis, applyYAxisEmptyVisibility, applyYAxisVisibility, applyColumnXEmptyVisibility, getChartLegendHeight, getGraphHeight, getPlotAreaWidth, getXEmptyHeight, hasVisibleXEmpty, applyColumnXEmptyAlign, applyColumnXEmptyLabels, applyLegendLabelsFromRowHeaders } from './drawing/shared';
 import { applyBar } from './drawing/bar';
 import { applyLine, syncFlatLineFillBottomPadding } from './drawing/line';
-import { applyStackedBar } from './drawing/stacked';
+import { applyStackedBar, syncStackedSegmentPadding } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
+import { MarkVariableBinder } from './drawing/mark-variables';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph, syncChartOnResize, type SelectionTargetMeta } from './init';
 import { normalizeHexColor, rgbToHex, traverse } from './utils';
@@ -705,6 +706,20 @@ function resolveIncomingSeriesCount(type: string, rows: unknown, markNum: unknow
     return type === 'stackedBar' || type === 'stacked' ? 2 : 1;
 }
 
+function normalizeStackedValuesForPadding(values: unknown, markNum: unknown): number[][] {
+    if (!Array.isArray(values)) return [];
+    const matrix = values.map((row) => (
+        Array.isArray(row)
+            ? row.map((cell) => Number(cell) || 0)
+            : []
+    ));
+    const expectedSeries = resolveIncomingSeriesCount('stackedBar', undefined, markNum);
+    if (expectedSeries !== null && matrix.length === expectedSeries + 1) {
+        return matrix.slice(1);
+    }
+    return matrix;
+}
+
 function resolveSavedSeriesCount(node: SceneNode, chartType: string): number | null {
     const rawValues = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
     if (rawValues) {
@@ -988,6 +1003,69 @@ function postStyleExtracted(
 figma.ui.onmessage = async (msg) => {
     if (msg.type === 'resize') {
         figma.ui.resize(msg.width, msg.height);
+    }
+    else if (msg.type === 'apply_data_padding') {
+        const requestedTargetId = typeof msg.targetId === 'string' ? msg.targetId : null;
+        const nodes = figma.currentPage.selection;
+        let resolvedNode: SceneNode | null = null;
+
+        if (requestedTargetId) {
+            const matchedTarget = selectedChartTargets.find((target) => target.id === requestedTargetId);
+            const requestedNode = matchedTarget || figma.getNodeById(requestedTargetId);
+            if (requestedNode && requestedNode.type !== 'PAGE' && requestedNode.type !== 'DOCUMENT') {
+                resolvedNode = requestedNode as SceneNode;
+            }
+        }
+        if (!resolvedNode && nodes.length > 0) {
+            resolvedNode = resolveChartTargetFromInnerNode(nodes[0]);
+        }
+        if (!resolvedNode || !isRecognizedChartSelection(resolvedNode)) {
+            figma.notify("Please select a chart component instance.");
+            return;
+        }
+
+        const chartType = resolvedNode.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(resolvedNode);
+        if (chartType !== 'line' && !isStackedType(chartType)) {
+            figma.notify('Data padding is currently supported for line and stacked charts only.');
+            return;
+        }
+
+        const runId = ++latestApplyRunId;
+        const targetNode = resolvedNode as FrameNode;
+        await withLoadingOpacity(targetNode, async () => {
+            if (runId !== latestApplyRunId) return;
+            const columns = collectColumns(targetNode);
+            if (chartType === 'line') {
+                syncFlatLineFillBottomPadding(targetNode, columns);
+            } else if (isStackedType(chartType)) {
+                const loaded = await loadChartData(targetNode, chartType);
+                if (runId !== latestApplyRunId) return;
+                const stackedValues = normalizeStackedValuesForPadding(loaded.values, loaded.markNum);
+                const mode = targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE) === 'percent' ? 'percent' : 'raw';
+                const rawYMax = targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
+                const yMax = rawYMax === '' ? null : Number(rawYMax);
+                syncStackedSegmentPadding(
+                    targetNode,
+                    stackedValues,
+                    getGraphHeight(targetNode),
+                    mode,
+                    Number.isFinite(yMax) ? yMax : null,
+                    loaded.markNum,
+                    columns
+                );
+            }
+            if (runId !== latestApplyRunId) return;
+            bumpTargetRevision(targetNode.id);
+            figma.ui.postMessage({
+                type: 'preview_plot_size_updated',
+                previewPlotWidth: getPlotAreaWidth(targetNode),
+                previewPlotHeight: getGraphHeight(targetNode as FrameNode)
+            });
+            figma.ui.postMessage({ type: 'data_padding_applied', targetId: targetNode.id });
+        });
+        if (runId === latestApplyRunId) {
+            figma.notify('Data padding injected.');
+        }
     }
     else if (msg.type === 'generate' || msg.type === 'apply') {
         const {
@@ -1404,6 +1482,13 @@ figma.ui.onmessage = async (msg) => {
             ...readMarkVariableSlotMapFromNode(targetNode),
             ...normalizedMarkVariableSlotMap
         };
+        const sharedVariableBinder = shouldRunStylePass
+            ? new MarkVariableBinder({
+                graphNodeId: targetNode.id,
+                updateMode: normalizedVariableUpdateMode,
+                slotVariableIdMap: latestMarkVariableSlotMap
+            })
+            : null;
         const runtimeStrokePayload = isDataOnlyApply
             ? {
                 chartType: type,
@@ -1519,10 +1604,12 @@ figma.ui.onmessage = async (msg) => {
                 const partial = applyStrokeInjection(targetNode, runtimeStrokePayload, chunk, {
                     applyColumnScopes: true,
                     applyLegendScope: false,
-                    applyGridContainerScope: false
+                    applyGridContainerScope: false,
+                    variableBinder: sharedVariableBinder
                 });
-                latestMarkVariableSlotMap = partial.markVariableSlotMap || latestMarkVariableSlotMap;
-                runtimeStrokePayload.markVariableSlotMap = latestMarkVariableSlotMap;
+                if (!sharedVariableBinder) {
+                    latestMarkVariableSlotMap = partial.markVariableSlotMap || latestMarkVariableSlotMap;
+                }
                 mergeScope(combined.cellFill, partial.cellFill);
                 mergeScope(combined.lineBackground, partial.lineBackground);
                 mergeScope(combined.mark, partial.mark);
@@ -1533,23 +1620,29 @@ figma.ui.onmessage = async (msg) => {
                 combined.resolved.mark = combined.resolved.mark || partial.resolved.mark;
                 combined.resolved.cellTop = combined.resolved.cellTop || partial.resolved.cellTop;
                 combined.resolved.tabRight = combined.resolved.tabRight || partial.resolved.tabRight;
-                combined.markVariableSlotMap = partial.markVariableSlotMap || combined.markVariableSlotMap;
+                if (!sharedVariableBinder) {
+                    combined.markVariableSlotMap = partial.markVariableSlotMap || combined.markVariableSlotMap;
+                }
                 await nextTick();
             }
 
             if (!isCancelled()) {
-                runtimeStrokePayload.markVariableSlotMap = latestMarkVariableSlotMap;
                 const globalScopes = applyStrokeInjection(targetNode, runtimeStrokePayload, columns, {
                     applyColumnScopes: false,
                     applyLegendScope: true,
-                    applyGridContainerScope: true
+                    applyGridContainerScope: true,
+                    variableBinder: sharedVariableBinder
                 });
-                latestMarkVariableSlotMap = globalScopes.markVariableSlotMap || latestMarkVariableSlotMap;
+                if (!sharedVariableBinder) {
+                    latestMarkVariableSlotMap = globalScopes.markVariableSlotMap || latestMarkVariableSlotMap;
+                }
                 mergeScope(combined.legend, globalScopes.legend);
                 mergeScope(combined.gridContainer, globalScopes.gridContainer);
                 combined.resolved.legend = globalScopes.resolved.legend;
                 combined.resolved.gridContainer = globalScopes.resolved.gridContainer;
-                combined.markVariableSlotMap = latestMarkVariableSlotMap;
+                combined.markVariableSlotMap = sharedVariableBinder
+                    ? sharedVariableBinder.getSlotVariableIdMap()
+                    : latestMarkVariableSlotMap;
             } else {
                 wasCancelled = true;
             }
@@ -1557,7 +1650,9 @@ figma.ui.onmessage = async (msg) => {
             return combined;
             })
             : emptyStrokeResult;
-        latestMarkVariableSlotMap = strokeInjectionResult.markVariableSlotMap || latestMarkVariableSlotMap;
+        latestMarkVariableSlotMap = sharedVariableBinder
+            ? sharedVariableBinder.getSlotVariableIdMap()
+            : (strokeInjectionResult.markVariableSlotMap || latestMarkVariableSlotMap);
         if (shouldRunStylePass) {
             debugLog('[chart-plugin][stroke-injection]', strokeInjectionResult);
         }

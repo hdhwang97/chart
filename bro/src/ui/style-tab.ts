@@ -40,6 +40,8 @@ type StyleInjectionTabKey = 'plot-area' | 'mark';
 type StyleSectionKey = 'templates' | 'injection';
 const STYLE_CARD_LINKED_HOVER_CLASS = 'is-preview-linked-hover';
 let styleSettingCardHoverBound = false;
+let styleSettingCardsByTargetCache: Map<StylePreviewTarget, HTMLElement[]> | null = null;
+let activeStyleSettingHoverCards: HTMLElement[] = [];
 
 function markFillEnabled() {
     return chartTypeUsesMarkFill(state.chartType);
@@ -228,7 +230,7 @@ function bindStyleInjectionTabEvents() {
     });
 }
 
-function getStyleSettingCardsByTarget(): Array<{ target: StylePreviewTarget; cards: HTMLElement[] }> {
+function buildStyleSettingCardsByTarget(): Array<{ target: StylePreviewTarget; cards: HTMLElement[] }> {
     const resolveCard = (input: HTMLElement): HTMLElement | null => input.closest<HTMLElement>('.style-injection-card');
     const uniqueCards = (cards: Array<HTMLElement | null | undefined>) => {
         const next: HTMLElement[] = [];
@@ -250,27 +252,55 @@ function getStyleSettingCardsByTarget(): Array<{ target: StylePreviewTarget; car
     ];
 }
 
-export function setStyleSettingCardHoverState(target: StylePreviewTarget | null) {
-    document.querySelectorAll<HTMLElement>(`.style-injection-card.${STYLE_CARD_LINKED_HOVER_CLASS}`)
-        .forEach((card) => card.classList.remove(STYLE_CARD_LINKED_HOVER_CLASS));
-    if (!target) return;
+function getStyleSettingCardsByTargetMap(): Map<StylePreviewTarget, HTMLElement[]> {
+    if (styleSettingCardsByTargetCache) return styleSettingCardsByTargetCache;
+    const map = new Map<StylePreviewTarget, HTMLElement[]>();
+    buildStyleSettingCardsByTarget().forEach(({ target, cards }) => {
+        map.set(target, cards);
+    });
+    styleSettingCardsByTargetCache = map;
+    return map;
+}
 
-    const matched = getStyleSettingCardsByTarget().find((item) => item.target === target);
-    matched?.cards.forEach((card) => card.classList.add(STYLE_CARD_LINKED_HOVER_CLASS));
+function clearStyleSettingHoverCards() {
+    if (activeStyleSettingHoverCards.length === 0) return;
+    activeStyleSettingHoverCards.forEach((card) => card.classList.remove(STYLE_CARD_LINKED_HOVER_CLASS));
+    activeStyleSettingHoverCards = [];
+}
+
+function setStyleSettingHoverCards(cards: HTMLElement[]) {
+    if (
+        cards.length === activeStyleSettingHoverCards.length
+        && cards.every((card, idx) => activeStyleSettingHoverCards[idx] === card)
+    ) {
+        return;
+    }
+    clearStyleSettingHoverCards();
+    cards.forEach((card) => card.classList.add(STYLE_CARD_LINKED_HOVER_CLASS));
+    activeStyleSettingHoverCards = cards;
+}
+
+export function setStyleSettingCardHoverState(target: StylePreviewTarget | null) {
+    if (!target) {
+        clearStyleSettingHoverCards();
+        return;
+    }
+    setStyleSettingHoverCards(getStyleSettingCardsByTargetMap().get(target) || []);
 }
 
 function setStyleSettingCardHoverStateForCard(card: HTMLElement | null) {
-    document.querySelectorAll<HTMLElement>(`.style-injection-card.${STYLE_CARD_LINKED_HOVER_CLASS}`)
-        .forEach((candidate) => candidate.classList.remove(STYLE_CARD_LINKED_HOVER_CLASS));
-    if (!card) return;
-    card.classList.add(STYLE_CARD_LINKED_HOVER_CLASS);
+    if (!card) {
+        clearStyleSettingHoverCards();
+        return;
+    }
+    setStyleSettingHoverCards([card]);
 }
 
 export function bindStyleSettingCardHoverInteractions() {
     if (styleSettingCardHoverBound) return;
     styleSettingCardHoverBound = true;
 
-    getStyleSettingCardsByTarget().forEach(({ target, cards }) => {
+    getStyleSettingCardsByTargetMap().forEach((cards, target) => {
         cards.forEach((card) => {
             card.dataset.stylePreviewTarget = target;
             card.addEventListener('mouseenter', () => {
