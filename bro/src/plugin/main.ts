@@ -703,6 +703,7 @@ type VariableOnlyMarkStyle = {
     fillColor?: string;
     strokeColor?: string;
     lineBackgroundColor?: string;
+    lineBackgroundOpacity?: number;
     linePointStrokeColor?: string;
     linePointFillColor?: string;
     thickness?: number;
@@ -722,24 +723,32 @@ function normalizeVariableOnlyNumber(value: unknown): number | undefined {
     return parsed;
 }
 
+function normalizeVariableOnlyOpacity(value: unknown): number | undefined {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed)) return undefined;
+    return Math.max(0, Math.min(1, parsed));
+}
+
 function normalizeVariableOnlyMarkStyle(value: unknown): VariableOnlyMarkStyle | null {
     if (!value || typeof value !== 'object') return null;
     const source = value as Record<string, unknown>;
     const fillColor = normalizeHexColor(source.fillColor);
     const strokeColor = normalizeHexColor(source.strokeColor);
     const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
+    const lineBackgroundOpacity = normalizeVariableOnlyOpacity(source.lineBackgroundOpacity);
     const linePointStrokeColor = normalizeHexColor(source.linePointStrokeColor);
     const linePointFillColor = normalizeHexColor(source.linePointFillColor);
     const thickness = normalizeVariableOnlyNumber(source.thickness);
     const linePointThickness = normalizeVariableOnlyNumber(source.linePointThickness);
     const linePointPadding = normalizeVariableOnlyNumber(source.linePointPadding);
-    if (!fillColor && !strokeColor && !lineBackgroundColor && !linePointStrokeColor && !linePointFillColor && thickness === undefined && linePointThickness === undefined && linePointPadding === undefined) {
+    if (!fillColor && !strokeColor && !lineBackgroundColor && lineBackgroundOpacity === undefined && !linePointStrokeColor && !linePointFillColor && thickness === undefined && linePointThickness === undefined && linePointPadding === undefined) {
         return null;
     }
     return {
         fillColor: fillColor || undefined,
         strokeColor: strokeColor || undefined,
         lineBackgroundColor: lineBackgroundColor || undefined,
+        lineBackgroundOpacity,
         linePointStrokeColor: linePointStrokeColor || undefined,
         linePointFillColor: linePointFillColor || undefined,
         thickness,
@@ -761,16 +770,19 @@ function resolveVariableOnlyMarkStyles(payload: unknown): VariableOnlyMarkStyle[
     return single ? [single] : [];
 }
 
-function toVariableColorValue(hex: string): RGBA | null {
+function toVariableColorValue(hex: string, alpha?: number): RGBA | null {
     const normalized = normalizeHexColor(hex);
     if (!normalized) return null;
     const raw = normalized.replace('#', '');
     if (!/^[0-9A-F]{6}$/i.test(raw)) return null;
+    const normalizedAlpha = typeof alpha === 'number'
+        ? Math.max(0, Math.min(1, alpha))
+        : 1;
     return {
         r: parseInt(raw.slice(0, 2), 16) / 255,
         g: parseInt(raw.slice(2, 4), 16) / 255,
         b: parseInt(raw.slice(4, 6), 16) / 255,
-        a: 1
+        a: normalizedAlpha
     };
 }
 
@@ -787,6 +799,7 @@ function setColorVariableValueBySlot(
     slotMap: Record<string, string>,
     slotKey: string,
     hex: string | undefined,
+    alpha: number | undefined,
     report: VariableOnlyUpdateReport
 ) {
     if (!hex) return;
@@ -801,7 +814,7 @@ function setColorVariableValueBySlot(
         return;
     }
     const modeId = resolveVariableModeId(variable);
-    const colorValue = toVariableColorValue(hex);
+    const colorValue = toVariableColorValue(hex, alpha);
     if (!modeId || !colorValue) {
         report.errors += 1;
         return;
@@ -851,11 +864,11 @@ function applyVariablesOnlyFromMarkStyles(
     const report: VariableOnlyUpdateReport = { updated: 0, missing: 0, errors: 0 };
     markStyles.forEach((style, index) => {
         const markIndex = index + 1;
-        setColorVariableValueBySlot(slotMap, `color/${markIndex}_str`, style.strokeColor, report);
-        setColorVariableValueBySlot(slotMap, `color/${markIndex}_fill`, style.fillColor, report);
-        setColorVariableValueBySlot(slotMap, `color/${markIndex}_area`, style.lineBackgroundColor, report);
-        setColorVariableValueBySlot(slotMap, `color/${markIndex}_pt_stroke`, style.linePointStrokeColor, report);
-        setColorVariableValueBySlot(slotMap, `color/${markIndex}_pt_fill`, style.linePointFillColor, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_str`, style.strokeColor, undefined, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_fill`, style.fillColor, undefined, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_area`, style.lineBackgroundColor, style.lineBackgroundOpacity, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_pt_stroke`, style.linePointStrokeColor, undefined, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_pt_fill`, style.linePointFillColor, undefined, report);
         setNumberVariableValueBySlot(slotMap, `number/${markIndex}_thk`, style.thickness, report);
         setNumberVariableValueBySlot(slotMap, `number/${markIndex}_pt_thk`, style.linePointThickness, report);
         setNumberVariableValueBySlot(slotMap, `number/${markIndex}_pt_radius`, style.linePointPadding, report);

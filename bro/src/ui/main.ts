@@ -1930,10 +1930,21 @@ function bindUiEvents() {
         requestPaintStyleList();
     });
     document.addEventListener('style-popover-saved', ((event: Event) => {
-        const custom = event as CustomEvent<{ target?: string | null }>;
+        const custom = event as CustomEvent<{ target?: string | null; sourceInputId?: string | null }>;
         const savedTarget = custom.detail?.target;
+        const sourceInputId = custom.detail?.sourceInputId || null;
         if (state.uiMode !== 'edit' || !state.activeTargetId) return;
-        if (savedTarget === 'mark') {
+        const markScopedInputIds = new Set<string>([
+            ui.styleMarkFillColorInput.id,
+            ui.styleMarkStrokeColorInput.id,
+            ui.styleMarkLinePointStrokeInput.id,
+            ui.styleMarkLinePointFillInput.id,
+            ui.styleMarkLineBackgroundColorInput.id
+        ]);
+        const isMarkScopedInputPopover = savedTarget === 'input-color'
+            && typeof sourceInputId === 'string'
+            && markScopedInputIds.has(sourceInputId);
+        if (savedTarget === 'mark' || isMarkScopedInputPopover) {
             submitVariablesOnly();
             return;
         }

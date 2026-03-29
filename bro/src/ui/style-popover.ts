@@ -1160,10 +1160,14 @@ export function bindStylePopoverEvents() {
     ui.styleItemSideLeft.addEventListener('change', syncSidesFromPopover);
     ui.styleItemSaveBtn.addEventListener('click', () => {
         const savedTarget = styleItemPopoverTarget;
+        const sourceInputId = styleItemPopoverSourceInput?.id || null;
         const committed = commitStyleColorPopoverIfOpen();
         if (committed) {
             document.dispatchEvent(new CustomEvent('style-popover-saved', {
-                detail: { target: savedTarget }
+                detail: {
+                    target: savedTarget,
+                    sourceInputId
+                }
             }));
         }
     });

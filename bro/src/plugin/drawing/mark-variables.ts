@@ -13,14 +13,17 @@ function isSceneNodeWithPaintField(node: SceneNode, field: PaintField): node is 
     return field in node;
 }
 
-function toRgbValue(hex: string): RGBA | null {
+function toRgbValue(hex: string, alpha?: number): RGBA | null {
     const normalized = normalizeHexColor(hex);
     if (!normalized) return null;
     const paint = buildSolidPaint(normalized);
     if (!paint) return null;
+    const normalizedAlpha = typeof alpha === 'number'
+        ? Math.max(0, Math.min(1, alpha))
+        : 1;
     return {
         ...paint.color,
-        a: 1
+        a: normalizedAlpha
     };
 }
 
@@ -108,7 +111,9 @@ export class MarkVariableBinder {
     }
 
     bindLineBackgroundColor(node: SceneNode, markIndex: number, hex?: string, opacity?: number) {
-        this.bindPaintColor(node, 'fills', `color/${markIndex}_area`, hex, opacity);
+        this.bindPaintColor(node, 'fills', `color/${markIndex}_area`, hex, opacity, {
+            storeOpacityInColorAlpha: true
+        });
     }
 
     bindLinePointStrokeColor(node: SceneNode, markIndex: number, hex?: string) {
@@ -135,10 +140,21 @@ export class MarkVariableBinder {
         this.bindNumber(node, [`paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft`], `number/${markIndex}_pt_radius`, padding);
     }
 
-    private bindPaintColor(node: SceneNode, field: PaintField, slotKey: string, hex?: string, opacity?: number) {
+    private bindPaintColor(
+        node: SceneNode,
+        field: PaintField,
+        slotKey: string,
+        hex?: string,
+        opacity?: number,
+        options?: { storeOpacityInColorAlpha?: boolean }
+    ) {
         const normalizedHex = typeof hex === 'string' ? normalizeHexColor(hex) : null;
         if (!normalizedHex) return;
-        const rgbValue = toRgbValue(normalizedHex);
+        const targetOpacity = typeof opacity === 'number' ? Math.max(0, Math.min(1, opacity)) : undefined;
+        const rgbValue = toRgbValue(
+            normalizedHex,
+            options?.storeOpacityInColorAlpha ? targetOpacity : undefined
+        );
         if (!rgbValue) return;
         if (!isSceneNodeWithPaintField(node, field)) return;
         const target = node as SceneNode & GeometryMixin;
@@ -166,7 +182,6 @@ export class MarkVariableBinder {
             this.colorSlotValueSignature.set(slotKey, valueSignature);
         }
         const boundId = readNodeBoundColorVariableId(node, field);
-        const targetOpacity = typeof opacity === 'number' ? Math.max(0, Math.min(1, opacity)) : undefined;
         if (boundId === variable.id && first && first.type === 'SOLID') {
             const currentOpacity = typeof first.opacity === 'number' ? first.opacity : 1;
             if (targetOpacity === undefined || nearlyEqual(currentOpacity, targetOpacity)) {
