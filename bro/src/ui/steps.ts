@@ -372,6 +372,21 @@ export function submitData(options?: { force?: boolean; updateType?: UpdateType 
     parent.postMessage({ pluginMessage: { type: built.msgType, payload: built.payload } }, '*');
 }
 
+export function submitVariablesOnly() {
+    const built = buildSubmissionPayload({
+        includeTargetId: true,
+        force: true,
+        updateType: 'style'
+    });
+    if (!built) return;
+    parent.postMessage({
+        pluginMessage: {
+            type: 'update_variables_only',
+            payload: built.payload
+        }
+    }, '*');
+}
+
 export function submitDataPaddingOnly() {
     parent.postMessage({
         pluginMessage: {

@@ -32,7 +32,7 @@ import { renderPreview } from './preview';
 import { setMode, toggleMode, updateModeButtonState, checkCtaValidation, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
-import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData, submitDataPaddingOnly } from './steps';
+import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData, submitDataPaddingOnly, submitVariablesOnly } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
 import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection, UpdateType } from '../shared/style-types';
@@ -1545,6 +1545,12 @@ function handlePluginMessage(msg: any) {
             : state.previewPlotHeight;
         refreshExportPreview();
     }
+    if (msg.type === 'variables_only_applied') {
+        state.loadedApplySnapshot = serializeApplySnapshot();
+    }
+    if (msg.type === 'variables_only_requires_style_apply') {
+        submitData({ force: true, updateType: 'style' });
+    }
     if (msg.type === 'apply_completed') {
         state.loadedApplySnapshot = serializeApplySnapshot();
         if (state.pendingSwitchTargetId && msg.targetId === state.activeTargetId) {
@@ -1866,6 +1872,16 @@ function bindUiEvents() {
     document.addEventListener('request-paint-style-list', () => {
         requestPaintStyleList();
     });
+    document.addEventListener('style-popover-saved', ((event: Event) => {
+        const custom = event as CustomEvent<{ target?: string | null }>;
+        const savedTarget = custom.detail?.target;
+        if (state.uiMode !== 'edit' || !state.activeTargetId) return;
+        if (savedTarget === 'mark') {
+            submitVariablesOnly();
+            return;
+        }
+        submitData({ force: true, updateType: 'style' });
+    }) as EventListener);
     document.addEventListener('style-draft-updated', () => {
         renderGrid();
         renderPreview();

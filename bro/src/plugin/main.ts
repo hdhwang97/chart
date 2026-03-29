@@ -670,6 +670,170 @@ function readMarkVariableSlotMapFromNode(node: SceneNode): Record<string, string
     return parseMarkVariableSlotMap(node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_VARIABLE_SLOT_MAP));
 }
 
+type VariableOnlyMarkStyle = {
+    fillColor?: string;
+    strokeColor?: string;
+    lineBackgroundColor?: string;
+    linePointStrokeColor?: string;
+    linePointFillColor?: string;
+    thickness?: number;
+    linePointThickness?: number;
+    linePointPadding?: number;
+};
+
+type VariableOnlyUpdateReport = {
+    updated: number;
+    missing: number;
+    errors: number;
+};
+
+function normalizeVariableOnlyNumber(value: unknown): number | undefined {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+    return parsed;
+}
+
+function normalizeVariableOnlyMarkStyle(value: unknown): VariableOnlyMarkStyle | null {
+    if (!value || typeof value !== 'object') return null;
+    const source = value as Record<string, unknown>;
+    const fillColor = normalizeHexColor(source.fillColor);
+    const strokeColor = normalizeHexColor(source.strokeColor);
+    const lineBackgroundColor = normalizeHexColor(source.lineBackgroundColor);
+    const linePointStrokeColor = normalizeHexColor(source.linePointStrokeColor);
+    const linePointFillColor = normalizeHexColor(source.linePointFillColor);
+    const thickness = normalizeVariableOnlyNumber(source.thickness);
+    const linePointThickness = normalizeVariableOnlyNumber(source.linePointThickness);
+    const linePointPadding = normalizeVariableOnlyNumber(source.linePointPadding);
+    if (!fillColor && !strokeColor && !lineBackgroundColor && !linePointStrokeColor && !linePointFillColor && thickness === undefined && linePointThickness === undefined && linePointPadding === undefined) {
+        return null;
+    }
+    return {
+        fillColor: fillColor || undefined,
+        strokeColor: strokeColor || undefined,
+        lineBackgroundColor: lineBackgroundColor || undefined,
+        linePointStrokeColor: linePointStrokeColor || undefined,
+        linePointFillColor: linePointFillColor || undefined,
+        thickness,
+        linePointThickness,
+        linePointPadding
+    };
+}
+
+function resolveVariableOnlyMarkStyles(payload: unknown): VariableOnlyMarkStyle[] {
+    if (!payload || typeof payload !== 'object') return [];
+    const source = payload as Record<string, unknown>;
+    if (Array.isArray(source.markStyles)) {
+        const normalized = source.markStyles
+            .map((item) => normalizeVariableOnlyMarkStyle(item))
+            .filter((item): item is VariableOnlyMarkStyle => Boolean(item));
+        if (normalized.length > 0) return normalized;
+    }
+    const single = normalizeVariableOnlyMarkStyle(source.markStyle);
+    return single ? [single] : [];
+}
+
+function toVariableColorValue(hex: string): RGBA | null {
+    const normalized = normalizeHexColor(hex);
+    if (!normalized) return null;
+    const raw = normalized.replace('#', '');
+    if (!/^[0-9A-F]{6}$/i.test(raw)) return null;
+    return {
+        r: parseInt(raw.slice(0, 2), 16) / 255,
+        g: parseInt(raw.slice(2, 4), 16) / 255,
+        b: parseInt(raw.slice(4, 6), 16) / 255,
+        a: 1
+    };
+}
+
+function resolveVariableModeId(variable: Variable): string | null {
+    const collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
+    if (collection?.defaultModeId) return collection.defaultModeId;
+    const valuesByMode = (variable as any).valuesByMode;
+    if (!valuesByMode || typeof valuesByMode !== 'object') return null;
+    const first = Object.keys(valuesByMode)[0];
+    return first || null;
+}
+
+function setColorVariableValueBySlot(
+    slotMap: Record<string, string>,
+    slotKey: string,
+    hex: string | undefined,
+    report: VariableOnlyUpdateReport
+) {
+    if (!hex) return;
+    const variableId = slotMap[slotKey];
+    if (!variableId) {
+        report.missing += 1;
+        return;
+    }
+    const variable = figma.variables.getVariableById(variableId);
+    if (!variable || variable.resolvedType !== 'COLOR') {
+        report.missing += 1;
+        return;
+    }
+    const modeId = resolveVariableModeId(variable);
+    const colorValue = toVariableColorValue(hex);
+    if (!modeId || !colorValue) {
+        report.errors += 1;
+        return;
+    }
+    try {
+        variable.setValueForMode(modeId, colorValue);
+        report.updated += 1;
+    } catch {
+        report.errors += 1;
+    }
+}
+
+function setNumberVariableValueBySlot(
+    slotMap: Record<string, string>,
+    slotKey: string,
+    value: number | undefined,
+    report: VariableOnlyUpdateReport
+) {
+    if (value === undefined) return;
+    const variableId = slotMap[slotKey];
+    if (!variableId) {
+        report.missing += 1;
+        return;
+    }
+    const variable = figma.variables.getVariableById(variableId);
+    if (!variable || variable.resolvedType !== 'FLOAT') {
+        report.missing += 1;
+        return;
+    }
+    const modeId = resolveVariableModeId(variable);
+    if (!modeId) {
+        report.errors += 1;
+        return;
+    }
+    try {
+        variable.setValueForMode(modeId, value);
+        report.updated += 1;
+    } catch {
+        report.errors += 1;
+    }
+}
+
+function applyVariablesOnlyFromMarkStyles(
+    slotMap: Record<string, string>,
+    markStyles: VariableOnlyMarkStyle[]
+): VariableOnlyUpdateReport {
+    const report: VariableOnlyUpdateReport = { updated: 0, missing: 0, errors: 0 };
+    markStyles.forEach((style, index) => {
+        const markIndex = index + 1;
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_str`, style.strokeColor, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_fill`, style.fillColor, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_area`, style.lineBackgroundColor, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_pt_stroke`, style.linePointStrokeColor, report);
+        setColorVariableValueBySlot(slotMap, `color/${markIndex}_pt_fill`, style.linePointFillColor, report);
+        setNumberVariableValueBySlot(slotMap, `number/${markIndex}_thk`, style.thickness, report);
+        setNumberVariableValueBySlot(slotMap, `number/${markIndex}_pt_thk`, style.linePointThickness, report);
+        setNumberVariableValueBySlot(slotMap, `number/${markIndex}_pt_radius`, style.linePointPadding, report);
+    });
+    return report;
+}
+
 function normalizeMarkNumForCompare(value: unknown): number | number[] | null {
     if (Array.isArray(value)) {
         const next = value
@@ -1066,6 +1230,60 @@ figma.ui.onmessage = async (msg) => {
         if (runId === latestApplyRunId) {
             figma.notify('Data padding injected.');
         }
+    }
+    else if (msg.type === 'update_variables_only') {
+        const payload = (msg && typeof msg.payload === 'object') ? msg.payload : {};
+        const requestedTargetId = typeof payload.targetId === 'string' ? payload.targetId : null;
+        const nodes = figma.currentPage.selection;
+        let resolvedNode: SceneNode | null = null;
+
+        if (requestedTargetId) {
+            const matchedTarget = selectedChartTargets.find((target) => target.id === requestedTargetId);
+            const requestedNode = matchedTarget || figma.getNodeById(requestedTargetId);
+            if (requestedNode && requestedNode.type !== 'PAGE' && requestedNode.type !== 'DOCUMENT') {
+                resolvedNode = requestedNode as SceneNode;
+            }
+        }
+        if (!resolvedNode && nodes.length > 0) {
+            resolvedNode = resolveChartTargetFromInnerNode(nodes[0]);
+        }
+        if (!resolvedNode || !isRecognizedChartSelection(resolvedNode)) {
+            figma.notify("Please select a chart component instance.");
+            return;
+        }
+
+        const targetNode = resolvedNode as FrameNode | ComponentNode | InstanceNode;
+        const slotMap = readMarkVariableSlotMapFromNode(targetNode);
+        const markStyles = resolveVariableOnlyMarkStyles(payload);
+        if (Object.keys(slotMap).length === 0 || markStyles.length === 0) {
+            figma.ui.postMessage({
+                type: 'variables_only_requires_style_apply',
+                targetId: targetNode.id
+            });
+            return;
+        }
+
+        const report = applyVariablesOnlyFromMarkStyles(slotMap, markStyles);
+        if (report.updated <= 0) {
+            figma.ui.postMessage({
+                type: 'variables_only_requires_style_apply',
+                targetId: targetNode.id
+            });
+            return;
+        }
+
+        targetNode.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_MARK_VARIABLE_SLOT_MAP,
+            JSON.stringify(slotMap)
+        );
+        bumpTargetRevision(targetNode.id);
+        figma.ui.postMessage({
+            type: 'variables_only_applied',
+            targetId: targetNode.id,
+            updated: report.updated,
+            missing: report.missing,
+            errors: report.errors
+        });
     }
     else if (msg.type === 'generate' || msg.type === 'apply') {
         const {

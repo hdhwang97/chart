@@ -1159,7 +1159,13 @@ export function bindStylePopoverEvents() {
     ui.styleItemSideBottom.addEventListener('change', syncSidesFromPopover);
     ui.styleItemSideLeft.addEventListener('change', syncSidesFromPopover);
     ui.styleItemSaveBtn.addEventListener('click', () => {
-        commitStyleColorPopoverIfOpen();
+        const savedTarget = styleItemPopoverTarget;
+        const committed = commitStyleColorPopoverIfOpen();
+        if (committed) {
+            document.dispatchEvent(new CustomEvent('style-popover-saved', {
+                detail: { target: savedTarget }
+            }));
+        }
     });
     ui.styleItemCancelBtn.addEventListener('click', () => {
         closeStyleItemPopover({ commit: false });
