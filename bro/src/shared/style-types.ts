@@ -2,6 +2,8 @@ export type StrokeAlign = 'CENTER' | 'INSIDE' | 'OUTSIDE';
 export type StyleApplyMode = 'data_only' | 'include_style';
 export type StyleSourceMode = 'master_extracted' | 'local_override';
 export type ColorMode = 'hex' | 'paint_style';
+export type UpdateType = 'data' | 'style' | 'both';
+export type VariableUpdateMode = 'overwrite' | 'create';
 
 export type PaintStyleSelection = {
     id: string;
@@ -96,6 +98,8 @@ export type GridStrokeInjectionStyle = {
 export type StrokeInjectionPayload = {
     // Legacy-compatible alias for mark colors. Runtime source is markStyles/markStyle.
     rowColors?: string[];
+    rowColorModes?: ColorMode[];
+    rowPaintStyleIds?: Array<string | null>;
     linePointVisible?: boolean;
     lineFeature2Enabled?: boolean;
     colColors?: string[];
@@ -112,6 +116,9 @@ export type StrokeInjectionPayload = {
     assistLineStyle?: AssistLineInjectionStyle;
     markStyle?: MarkInjectionStyle;
     markStyles?: MarkInjectionStyle[];
+    updateType?: UpdateType;
+    variableUpdateMode?: VariableUpdateMode;
+    markVariableSlotMap?: Record<string, string>;
 };
 
 export type LocalStyleOverrides = {

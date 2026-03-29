@@ -244,6 +244,7 @@ export const ui = {
     get styleMarkLinePointPaddingInput() { return byId<HTMLInputElement>('style-mark-line-point-padding'); },
     get styleMarkLinePointFillInput() { return byId<HTMLInputElement>('style-mark-line-point-fill'); },
     get styleMarkLinePointFillPreview() { return byId<HTMLElement>('style-mark-line-point-fill-preview'); },
+    get styleVariableUpdateModeInput() { return byId<HTMLSelectElement>('style-variable-update-mode'); },
     get styleCellFillColorInput() { return byId<HTMLInputElement>('style-cell-fill-color'); },
     get styleCellFillColorPreview() { return byId<HTMLElement>('style-cell-fill-color-preview'); },
     get styleCellTopColorPreview() { return byId<HTMLElement>('style-cell-top-color-preview'); },

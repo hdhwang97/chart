@@ -12,7 +12,8 @@ import type {
     LocalStyleOverrides,
     MarkInjectionStyle,
     SideStrokeInjectionStyle,
-    StyleApplyMode
+    StyleApplyMode,
+    UpdateType
 } from '../shared/style-types';
 import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 
@@ -135,6 +136,11 @@ function normalizeStyleIds(value: unknown, count: number): Array<string | null> 
 
 function normalizeStyleApplyMode(value: unknown): StyleApplyMode {
     return value === 'data_only' ? 'data_only' : 'include_style';
+}
+
+function normalizeUpdateType(value: unknown): UpdateType {
+    if (value === 'data' || value === 'style' || value === 'both') return value;
+    return 'both';
 }
 
 function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask {
@@ -434,14 +440,16 @@ export function saveChartData(
     node: SceneNode,
     msg: any,
     styleInfo?: any,
-    options?: { skipDataKeys?: boolean }
+    options?: { skipDataKeys?: boolean; updateType?: UpdateType }
 ) {
     const styleApplyMode = normalizeStyleApplyMode(msg?.styleApplyMode);
-    const shouldSaveStyleKeys = styleApplyMode === 'include_style';
+    const updateType = normalizeUpdateType(options?.updateType ?? msg?.updateType);
+    const shouldSaveStyleKeys = styleApplyMode === 'include_style' && updateType !== 'data';
     const skipDataKeys = Boolean(options?.skipDataKeys);
+    const shouldSaveDataKeys = !skipDataKeys && updateType !== 'style';
 
     node.setPluginData(PLUGIN_DATA_KEYS.CHART_TYPE, msg.type);
-    if (!skipDataKeys) {
+    if (shouldSaveDataKeys) {
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_VALUES, JSON.stringify(msg.rawValues));
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_DRAWING_VALUES, JSON.stringify(msg.values));
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_MODE, msg.mode);
@@ -454,47 +462,47 @@ export function saveChartData(
         node.setPluginData(PLUGIN_DATA_KEYS.LAST_Y_LABEL_FORMAT, normalizeYLabelFormatMode(msg.yLabelFormat));
     }
 
-    node.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(msg.cellCount));
-    if (!skipDataKeys && msg.markNum) {
-        node.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(msg.markNum));
-    }
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS,
-        JSON.stringify(normalizeXAxisLabels(msg.xAxisLabels))
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS_VISIBLE,
-        String(normalizeXAxisLabelsVisible(msg.xAxisLabelsVisible))
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_BAR_LABEL_VISIBLE,
-        String(msg.barLabelVisible !== false)
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_BAR_LABEL_SOURCE,
-        msg.barLabelSource === 'y' ? 'y' : 'row'
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE,
-        String(normalizeYAxisVisible(msg.yAxisVisible))
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED,
-        JSON.stringify(normalizeAssistLineEnabled(msg.assistLineEnabled))
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE,
-        String(Boolean(msg.assistLineVisible))
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_LINE_POINT_VISIBLE,
-        String(msg.linePointVisible !== false)
-    );
-    node.setPluginData(
-        PLUGIN_DATA_KEYS.LAST_LINE_CURVE_ENABLED,
-        String(msg.lineFeature2Enabled === true)
-    );
-    if (!skipDataKeys) {
+    if (shouldSaveDataKeys) {
+        node.setPluginData(PLUGIN_DATA_KEYS.LAST_CELL_COUNT, String(msg.cellCount));
+        if (msg.markNum) {
+            node.setPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM, JSON.stringify(msg.markNum));
+        }
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS,
+            JSON.stringify(normalizeXAxisLabels(msg.xAxisLabels))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_X_AXIS_LABELS_VISIBLE,
+            String(normalizeXAxisLabelsVisible(msg.xAxisLabelsVisible))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_BAR_LABEL_VISIBLE,
+            String(msg.barLabelVisible !== false)
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_BAR_LABEL_SOURCE,
+            msg.barLabelSource === 'y' ? 'y' : 'row'
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE,
+            String(normalizeYAxisVisible(msg.yAxisVisible))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED,
+            JSON.stringify(normalizeAssistLineEnabled(msg.assistLineEnabled))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_VISIBLE,
+            String(Boolean(msg.assistLineVisible))
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_LINE_POINT_VISIBLE,
+            String(msg.linePointVisible !== false)
+        );
+        node.setPluginData(
+            PLUGIN_DATA_KEYS.LAST_LINE_CURVE_ENABLED,
+            String(msg.lineFeature2Enabled === true)
+        );
         const rowCount = Number.isFinite(Number(msg.rows))
             ? Number(msg.rows)
             : (Array.isArray(msg.rawValues) ? msg.rawValues.length : 1);
@@ -545,29 +553,31 @@ export function saveChartData(
     }
 
     // UI에서 직접 넘어온 Stroke Width가 있다면 우선 저장
-    if (msg.strokeWidth) {
-        node.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(msg.strokeWidth));
-    } else if (styleInfo && styleInfo.strokeWidth !== undefined) {
-        node.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(styleInfo.strokeWidth));
-    }
-
-    // 추출된 스타일 정보 저장
-    const requestedRatio = (msg.type === 'bar' || msg.type === 'stackedBar' || msg.type === 'stacked')
-        ? normalizeMarkRatio(msg.markRatio)
-        : null;
-    if (requestedRatio !== null) {
-        node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(requestedRatio));
-    }
-
-    if (styleInfo) {
-        if (requestedRatio === null && styleInfo.markRatio !== undefined) {
-            const fallbackRatio = normalizeMarkRatio(styleInfo.markRatio);
-            if (fallbackRatio !== null) {
-                node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(fallbackRatio));
-            }
+    if (shouldSaveDataKeys) {
+        if (msg.strokeWidth) {
+            node.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(msg.strokeWidth));
+        } else if (styleInfo && styleInfo.strokeWidth !== undefined) {
+            node.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(styleInfo.strokeWidth));
         }
-        if (styleInfo.cornerRadius !== undefined) {
-            node.setPluginData(PLUGIN_DATA_KEYS.LAST_CORNER_RADIUS, String(styleInfo.cornerRadius));
+
+        // 추출된 스타일 정보 저장
+        const requestedRatio = (msg.type === 'bar' || msg.type === 'stackedBar' || msg.type === 'stacked')
+            ? normalizeMarkRatio(msg.markRatio)
+            : null;
+        if (requestedRatio !== null) {
+            node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(requestedRatio));
+        }
+
+        if (styleInfo) {
+            if (requestedRatio === null && styleInfo.markRatio !== undefined) {
+                const fallbackRatio = normalizeMarkRatio(styleInfo.markRatio);
+                if (fallbackRatio !== null) {
+                    node.setPluginData(PLUGIN_DATA_KEYS.LAST_BAR_PADDING, String(fallbackRatio));
+                }
+            }
+            if (styleInfo.cornerRadius !== undefined) {
+                node.setPluginData(PLUGIN_DATA_KEYS.LAST_CORNER_RADIUS, String(styleInfo.cornerRadius));
+            }
         }
     }
 

@@ -10,7 +10,8 @@ import type {
     MarkStrokeSides,
     RowStrokeStyle,
     StrokeStyleSnapshot,
-    StyleTemplateItem
+    StyleTemplateItem,
+    VariableUpdateMode
 } from '../shared/style-types';
 import type { YLabelFormatMode } from '../shared/y-label-format';
 
@@ -226,7 +227,8 @@ export const state = {
     selectedStyleTemplateId: null as string | null,
     styleTemplateOverwritePendingId: null as string | null,
     editingTemplateId: null as string | null,
-    editingTemplateName: '' as string
+    editingTemplateName: '' as string,
+    variableUpdateMode: 'overwrite' as VariableUpdateMode
 };
 
 function cloneOverrideValue<T>(value: T): T {

@@ -10,10 +10,11 @@ import type {
     StrokeInjectionPayload,
     StrokeStyleSnapshot
 } from '../../shared/style-types';
-import { normalizeHexColor, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
+import { normalizeHexColor, rgbToHex, traverse, tryApplyDashPattern, tryApplyFill, tryApplyStroke, tryApplyStrokeStyleLink } from '../utils';
 import { debugLog } from '../log';
 import { collectColumns, type ColRef } from './shared';
 import { collectLineBundlesInColumn, isLineBundleFlat, type LineBundle } from './line-structure';
+import { MarkVariableBinder } from './mark-variables';
 
 type SideName = 'top' | 'right' | 'bottom' | 'left';
 
@@ -98,6 +99,7 @@ export type StrokeInjectionResult = {
         tabRight: boolean;
         gridContainer: boolean;
     };
+    markVariableSlotMap?: Record<string, string>;
 };
 
 export type StrokeInjectionApplyOptions = {
@@ -419,6 +421,15 @@ function setNodeFillVisibility(node: SceneNode, visible: boolean) {
     } catch {
         return false;
     }
+}
+
+function getFirstSolidFillHex(node: SceneNode): string | null {
+    if (!('fills' in node)) return null;
+    const target = node as SceneNode & GeometryMixin;
+    if (!Array.isArray(target.fills) || target.fills.length === 0) return null;
+    const first = target.fills[0];
+    if (!first || first.type !== 'SOLID') return null;
+    return normalizeHexColor(rgbToHex(first.color.r, first.color.g, first.color.b));
 }
 
 function resolveCellTopStyle(payload: StrokeInjectionRuntimePayload): NormalizedSideStyle | null {
@@ -801,7 +812,8 @@ function applyLineSeriesStrokeTargets(
     style: NormalizedMarkStyle,
     skipStrokeColorForSeries: boolean,
     rowStyleId: string | null,
-    result: ScopeResult
+    result: ScopeResult,
+    options?: { markIndex: number; variableBinder?: MarkVariableBinder }
 ) {
     targets.forEach((target) => {
         result.candidates += 1;
@@ -814,6 +826,10 @@ function applyLineSeriesStrokeTargets(
                 skipFill: true,
                 skipStrokeColor: skipStrokeColorForSeries || Boolean(rowStyleId)
             })) applied = true;
+            options?.variableBinder?.bindStrokeThickness(target, options.markIndex, style.thickness);
+            if (!skipStrokeColorForSeries && !rowStyleId) {
+                options?.variableBinder?.bindStrokeColor(target, options.markIndex, style.strokeColor);
+            }
             if (applied) result.applied += 1;
             else result.skipped += 1;
         } catch {
@@ -826,7 +842,8 @@ function applyLinePointTargets(
     targets: SceneNode[],
     style: NormalizedMarkStyle,
     skipStrokeColorForSeries: boolean,
-    result: ScopeResult
+    result: ScopeResult,
+    options?: { markIndex: number; variableBinder?: MarkVariableBinder }
 ) {
     const resolvedPointStroke = style.linePointStrokeColor
         || (!skipStrokeColorForSeries ? style.strokeColor : undefined);
@@ -859,6 +876,12 @@ function applyLinePointTargets(
             if (typeof pointStyle.linePointPadding === 'number') {
                 applied = setUniformPadding(target, pointStyle.linePointPadding) || applied;
             }
+            options?.variableBinder?.bindLinePointThickness(target, options.markIndex, pointStyle.thickness);
+            options?.variableBinder?.bindLinePointRadius(target, options.markIndex, pointStyle.linePointPadding);
+            if (!skipPointStrokeColor) {
+                options?.variableBinder?.bindLinePointStrokeColor(target, options.markIndex, pointStyle.strokeColor);
+            }
+            options?.variableBinder?.bindLinePointFillColor(target, options.markIndex, pointStyle.fillColor);
             if (applied) {
                 result.applied += 1;
             } else {
@@ -901,7 +924,8 @@ function applyLineBundleStylesForColumn(
     styles: NormalizedMarkStyle[],
     rowColorModes: ColorMode[] | undefined,
     payload: StrokeInjectionRuntimePayload | undefined,
-    result: ScopeResult
+    result: ScopeResult,
+    variableBinder?: MarkVariableBinder
 ) {
     column.lineBundles.forEach((entry) => {
         const seriesIndex = entry.rowIndex + 1;
@@ -913,14 +937,24 @@ function applyLineBundleStylesForColumn(
             && rowColorModes[seriesIndex - 1] === 'paint_style';
         const rowStyleId = getRowPaintStyleId(payload, seriesIndex);
 
-        applyLineSeriesStrokeTargets(entry.strokeTargets, style, skipStrokeColorForSeries, rowStyleId, result);
-        applyLinePointTargets(entry.pointTargets, style, skipStrokeColorForSeries, result);
+        applyLineSeriesStrokeTargets(entry.strokeTargets, style, skipStrokeColorForSeries, rowStyleId, result, {
+            markIndex: seriesIndex,
+            variableBinder
+        });
+        applyLinePointTargets(entry.pointTargets, style, skipStrokeColorForSeries, result, {
+            markIndex: seriesIndex,
+            variableBinder
+        });
         setLineSeriesStrokeVisibility(entry.strokeTargets, !entry.isFlat);
         if (!entry.isFlat) return;
 
         result.candidates += 1;
         try {
             if (applyFlatLineFillBotStyle(entry.bundle.fillBot, style, rowStyleId, skipStrokeColorForSeries)) {
+                variableBinder?.bindFlatTopStrokeThickness(entry.bundle.fillBot, seriesIndex, style.thickness);
+                if (!skipStrokeColorForSeries && !rowStyleId) {
+                    variableBinder?.bindStrokeColor(entry.bundle.fillBot, seriesIndex, style.strokeColor);
+                }
                 result.applied += 1;
             } else {
                 result.skipped += 1;
@@ -935,7 +969,7 @@ function applyLineBackgroundStyles(
     columns: ColumnStrokeContext[],
     style: NormalizedLineBackgroundStyle | null,
     markStyles: NormalizedMarkStyle[],
-    options?: { chartType?: string }
+    options?: { chartType?: string; variableBinder?: MarkVariableBinder }
 ): ScopeResult {
     const result = createScopeResult();
     if (options?.chartType !== 'line') return result;
@@ -956,11 +990,13 @@ function applyLineBackgroundStyles(
                     if (typeof visible === 'boolean') {
                         applied = setNodeFillVisibility(target, visible) || applied;
                     }
-                    if (color) {
-                        applied = tryApplyFill(target, color, opacity) || applied;
+                    const effectiveColor = color || getFirstSolidFillHex(target);
+                    if (effectiveColor && (color || typeof opacity === 'number')) {
+                        applied = tryApplyFill(target, effectiveColor, opacity) || applied;
                         if (typeof visible === 'boolean') {
                             applied = setNodeFillVisibility(target, visible) || applied;
                         }
+                        options?.variableBinder?.bindLineBackgroundColor(target, seriesIndex, effectiveColor, opacity);
                     }
                     if (applied) result.applied += 1;
                     else result.skipped += 1;
@@ -1022,6 +1058,7 @@ function applyMarkStyles(
         colColorEnabled?: boolean[];
         rowColorModes?: ColorMode[];
         rowPaintStyleIds?: Array<string | null>;
+        variableBinder?: MarkVariableBinder;
     }
 ): ScopeResult {
     const result = createScopeResult();
@@ -1034,8 +1071,13 @@ function applyMarkStyles(
                 if (!node.visible || !isStackedSubInstanceNode(node)) return;
                 result.candidates += 1;
                 try {
-                    if (applyMarkStyleToNode(node, sharedStyle, { skipFill: true })) result.applied += 1;
-                    else result.skipped += 1;
+                    if (applyMarkStyleToNode(node, sharedStyle, { skipFill: true })) {
+                        options?.variableBinder?.bindStrokeThickness(node, 1, sharedStyle.thickness);
+                        options?.variableBinder?.bindStrokeColor(node, 1, sharedStyle.strokeColor);
+                        result.applied += 1;
+                    } else {
+                        result.skipped += 1;
+                    }
                 } catch {
                     result.errors += 1;
                 }
@@ -1047,7 +1089,7 @@ function applyMarkStyles(
         const colIndex = Math.max(0, col.ref.index - 1);
         const skipColorForColumn = options?.chartType === 'bar' && Boolean(options?.colColorEnabled?.[colIndex]);
         if (options?.chartType === 'line') {
-            applyLineBundleStylesForColumn(col, styles, options?.rowColorModes, options, result);
+            applyLineBundleStylesForColumn(col, styles, options?.rowColorModes, options, result, options?.variableBinder);
             return;
         }
         traverse(col.ref.node, (node) => {
@@ -1062,8 +1104,16 @@ function applyMarkStyles(
                     if (applyMarkStyleToNode(node, style, {
                         skipFill: skipColorForColumn,
                         skipStrokeColor: skipColorForColumn
-                    })) result.applied += 1;
-                    else result.skipped += 1;
+                    })) {
+                        options?.variableBinder?.bindStrokeThickness(node, seriesIndex, style.thickness);
+                        if (!skipColorForColumn) {
+                            options?.variableBinder?.bindStrokeColor(node, seriesIndex, style.strokeColor);
+                            options?.variableBinder?.bindFillColor(node, seriesIndex, style.fillColor);
+                        }
+                        result.applied += 1;
+                    } else {
+                        result.skipped += 1;
+                    }
                 } catch {
                     result.errors += 1;
                 }
@@ -1427,6 +1477,13 @@ export function applyStrokeInjection(
     const cellFillStyle = applyColumnScopes ? resolveCellFillStyle(payload) : null;
     const lineBackgroundStyle = applyColumnScopes ? resolveLineBackgroundStyle(payload) : null;
     const markStyles = resolveMarkStyles(payload);
+    const variableBinder = markStyles.length > 0
+        ? new MarkVariableBinder({
+            graphNodeId: graph.id,
+            updateMode: payload.variableUpdateMode === 'create' ? 'create' : 'overwrite',
+            slotVariableIdMap: payload.markVariableSlotMap
+        })
+        : null;
     const legendSync = applyLegendScope
         ? applyLegendMarkSync(graph, markStyles, payload, payload.markNum, payload.chartType, payload.rowColors, columns)
         : { result: createScopeResult(), enabled: false };
@@ -1437,14 +1494,18 @@ export function applyStrokeInjection(
 
     return {
         cellFill: cellFillStyle ? applyCellFill(contexts, cellFillStyle, payload.chartType) : createScopeResult(),
-        lineBackground: applyLineBackgroundStyles(contexts, lineBackgroundStyle, markStyles, { chartType: payload.chartType }),
+        lineBackground: applyLineBackgroundStyles(contexts, lineBackgroundStyle, markStyles, {
+            chartType: payload.chartType,
+            variableBinder: variableBinder || undefined
+        }),
         mark: skipMarkStyleApply
             ? createScopeResult()
             : applyMarkStyles(contexts, markStyles, {
                 chartType: payload.chartType,
                 colColorEnabled: payload.colColorEnabled,
                 rowColorModes: payload.rowColorModes,
-                rowPaintStyleIds: payload.rowPaintStyleIds
+                rowPaintStyleIds: payload.rowPaintStyleIds,
+                variableBinder: variableBinder || undefined
             }),
         legend: legendSync.result,
         cellTop: cellTopStyle ? applyCellTopStroke(contexts, cellTopStyle) : createScopeResult(),
@@ -1458,6 +1519,7 @@ export function applyStrokeInjection(
             cellTop: Boolean(cellTopStyle),
             tabRight: Boolean(tabRightStyle),
             gridContainer: Boolean(gridContainerStyle)
-        }
+        },
+        markVariableSlotMap: variableBinder ? variableBinder.getSlotVariableIdMap() : payload.markVariableSlotMap
     };
 }

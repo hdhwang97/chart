@@ -8,6 +8,7 @@ import { getEffectiveYDomain } from './y-range';
 import { syncMarkCountFromRows } from './data-ops';
 import { hydrateStyleTab, readStyleTabDraft, setStyleInjectionDraft, toStrokeInjectionPayload, validateStyleTabDraft } from './style-tab';
 import { refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
+import type { UpdateType } from '../shared/style-types';
 
 // ==========================================
 // STEP / TYPE SELECTION / SUBMISSION
@@ -72,7 +73,13 @@ export function goToStep(step: number) {
 type SubmissionBuildOptions = {
     includeTargetId?: boolean;
     force?: boolean;
+    updateType?: UpdateType;
 };
+
+function normalizeUpdateType(value: unknown): UpdateType {
+    if (value === 'data' || value === 'style' || value === 'both') return value;
+    return 'both';
+}
 
 function hasValidSubmissionData() {
     let hasAny = false;
@@ -287,6 +294,11 @@ export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
 
     const msgType = state.uiMode === 'edit' ? 'apply' : 'generate';
     const styleApplyMode = msgType === 'generate' ? 'include_style' : 'include_style';
+    const inferredTabUpdateType = document.getElementById('step-style')?.classList.contains('active')
+        ? 'style'
+        : 'data';
+    const requestedUpdateType = normalizeUpdateType(options?.updateType || inferredTabUpdateType);
+    const effectiveUpdateType: UpdateType = msgType === 'generate' ? 'both' : requestedUpdateType;
 
     const payload = {
         type: state.chartType,
@@ -333,6 +345,8 @@ export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
         localStyleOverrides: state.isInstanceTarget ? state.localStyleOverrides : undefined,
         localStyleOverrideMask: state.isInstanceTarget ? state.localStyleOverrideMask : undefined,
         styleApplyMode,
+        updateType: effectiveUpdateType,
+        variableUpdateMode: state.variableUpdateMode,
         ...(options?.includeTargetId && msgType === 'apply' && state.activeTargetId
             ? { targetId: state.activeTargetId }
             : {}),
@@ -343,13 +357,17 @@ export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
 }
 
 export function serializeApplySnapshot() {
-    const built = buildSubmissionPayload({ force: true });
+    const built = buildSubmissionPayload({ force: true, updateType: 'both' });
     if (!built) return '';
     return JSON.stringify(built.payload);
 }
 
-export function submitData(options?: { force?: boolean }) {
-    const built = buildSubmissionPayload({ includeTargetId: true, force: options?.force });
+export function submitData(options?: { force?: boolean; updateType?: UpdateType }) {
+    const built = buildSubmissionPayload({
+        includeTargetId: true,
+        force: options?.force,
+        updateType: options?.updateType
+    });
     if (!built) return;
     parent.postMessage({ pluginMessage: { type: built.msgType, payload: built.payload } }, '*');
 }

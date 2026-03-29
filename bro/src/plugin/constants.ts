@@ -73,6 +73,7 @@ export const PLUGIN_DATA_KEYS = {
     LAST_ASSIST_LINE_STYLE: "lastAssistLineStyle",
     LAST_MARK_STYLE: "lastMarkStyle",
     LAST_MARK_STYLES: "lastMarkStyles",
+    LAST_MARK_VARIABLE_SLOT_MAP: "lastMarkVariableSlotMapV1",
     LAST_LINE_BACKGROUND_STYLE: "lastLineBackgroundStyle",
     LAST_ROW_HEADER_LABELS: "lastRowHeaderLabels",
     LAST_CELL_FILL_STYLE: "lastCellFillStyle",

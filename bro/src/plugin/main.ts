@@ -19,7 +19,9 @@ import type {
     LocalStyleOverrideMask,
     LocalStyleOverrides,
     PaintStyleSelection,
-    StyleApplyMode
+    StyleApplyMode,
+    UpdateType,
+    VariableUpdateMode
 } from '../shared/style-types';
 
 // ==========================================
@@ -186,6 +188,15 @@ function normalizeStrokeWidth(value: unknown): number | null {
 
 function normalizeStyleApplyMode(value: unknown): StyleApplyMode {
     return value === 'data_only' ? 'data_only' : 'include_style';
+}
+
+function normalizeUpdateType(value: unknown): UpdateType {
+    if (value === 'data' || value === 'style' || value === 'both') return value;
+    return 'both';
+}
+
+function normalizeVariableUpdateMode(value: unknown): VariableUpdateMode {
+    return value === 'create' ? 'create' : 'overwrite';
 }
 
 function normalizeLocalStyleOverrideMask(value: unknown): LocalStyleOverrideMask {
@@ -636,6 +647,97 @@ function resolveColColorEnabledFromNode(node: SceneNode, colCount: number) {
     return next;
 }
 
+function parseMarkVariableSlotMap(raw: unknown): Record<string, string> {
+    if (!raw) return {};
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            return parseMarkVariableSlotMap(parsed);
+        } catch {
+            return {};
+        }
+    }
+    if (typeof raw !== 'object') return {};
+    const next: Record<string, string> = {};
+    Object.entries(raw as Record<string, unknown>).forEach(([slot, id]) => {
+        if (typeof id === 'string' && id) next[slot] = id;
+    });
+    return next;
+}
+
+function readMarkVariableSlotMapFromNode(node: SceneNode): Record<string, string> {
+    return parseMarkVariableSlotMap(node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_VARIABLE_SLOT_MAP));
+}
+
+function normalizeMarkNumForCompare(value: unknown): number | number[] | null {
+    if (Array.isArray(value)) {
+        const next = value
+            .map((item) => Number(item))
+            .filter((item) => Number.isFinite(item))
+            .map((item) => Math.max(0, Math.floor(item)));
+        return next.length > 0 ? next : null;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.max(0, Math.floor(parsed));
+}
+
+function readSavedMarkNumForCompare(node: SceneNode): number | number[] | null {
+    const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_NUM);
+    if (!raw) return null;
+    try {
+        return normalizeMarkNumForCompare(JSON.parse(raw));
+    } catch {
+        return normalizeMarkNumForCompare(raw);
+    }
+}
+
+function resolveIncomingSeriesCount(type: string, rows: unknown, markNum: unknown): number | null {
+    const parsedRows = Number(rows);
+    if (Number.isFinite(parsedRows) && parsedRows > 0) return Math.floor(parsedRows);
+    const normalizedMarkNum = normalizeMarkNumForCompare(markNum);
+    if (Array.isArray(normalizedMarkNum)) {
+        if (normalizedMarkNum.length === 0) return null;
+        const maxSegment = Math.max(...normalizedMarkNum);
+        return maxSegment > 0 ? maxSegment + 1 : 1;
+    }
+    if (typeof normalizedMarkNum === 'number') return normalizedMarkNum;
+    return type === 'stackedBar' || type === 'stacked' ? 2 : 1;
+}
+
+function resolveSavedSeriesCount(node: SceneNode, chartType: string): number | null {
+    const rawValues = node.getPluginData(PLUGIN_DATA_KEYS.LAST_VALUES);
+    if (rawValues) {
+        try {
+            const parsed = JSON.parse(rawValues);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed.length;
+        } catch { }
+    }
+    const savedMarkNum = readSavedMarkNumForCompare(node);
+    return resolveIncomingSeriesCount(chartType, undefined, savedMarkNum);
+}
+
+function shouldForceBothUpdate(
+    node: SceneNode,
+    incoming: {
+        type: string;
+        markNum: unknown;
+        rows: unknown;
+    }
+): boolean {
+    const savedType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
+    if (savedType !== incoming.type) return true;
+    const savedMarkNum = readSavedMarkNumForCompare(node);
+    const incomingMarkNum = normalizeMarkNumForCompare(incoming.markNum);
+    if (JSON.stringify(savedMarkNum) !== JSON.stringify(incomingMarkNum)) return true;
+    const savedSeriesCount = resolveSavedSeriesCount(node, savedType);
+    const incomingSeriesCount = resolveIncomingSeriesCount(incoming.type, incoming.rows, incoming.markNum);
+    if (savedSeriesCount !== null && incomingSeriesCount !== null && savedSeriesCount !== incomingSeriesCount) {
+        return true;
+    }
+    return false;
+}
+
 function logSelectionRecognition(node: SceneNode) {
     const savedChartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE);
     const inferredChartType = inferChartType(node);
@@ -933,6 +1035,9 @@ figma.ui.onmessage = async (msg) => {
             tabRightStyle,
             gridContainerStyle,
             styleApplyMode,
+            updateType,
+            variableUpdateMode,
+            markVariableSlotMap,
             localStyleOverrides,
             localStyleOverrideMask
         } = msg.payload;
@@ -951,6 +1056,11 @@ figma.ui.onmessage = async (msg) => {
             ? colColorEnabled.map((v: unknown) => Boolean(v))
             : [];
         const requestedStyleApplyMode = normalizeStyleApplyMode(styleApplyMode);
+        const requestedUpdateType: UpdateType = msg.type === 'generate'
+            ? 'both'
+            : normalizeUpdateType(updateType);
+        const normalizedVariableUpdateMode = normalizeVariableUpdateMode(variableUpdateMode);
+        const normalizedMarkVariableSlotMap = parseMarkVariableSlotMap(markVariableSlotMap);
         const normalizedLocalOverrides = normalizeLocalStyleOverrides(localStyleOverrides);
         const normalizedLocalMask = normalizeLocalStyleOverrideMask(localStyleOverrideMask);
         const nodes = figma.currentPage.selection;
@@ -1023,14 +1133,24 @@ figma.ui.onmessage = async (msg) => {
         if (msg.type === 'apply') {
             activeTargetId = targetNode.id;
         }
+        let appliedUpdateType: UpdateType = requestedUpdateType;
+        let applyPolicyForReport: ApplyPolicy = targetNode.type === 'INSTANCE' ? 'instance-data' : 'default';
         await withLoadingOpacity(targetNode, async () => {
+        const shouldForceBoth = requestedUpdateType !== 'both'
+            && shouldForceBothUpdate(targetNode, { type, markNum, rows });
+        const resolvedUpdateType: UpdateType = shouldForceBoth ? 'both' : requestedUpdateType;
+        appliedUpdateType = resolvedUpdateType;
+        const shouldRunDataPass = resolvedUpdateType !== 'style';
+        const shouldRunStylePass = resolvedUpdateType !== 'data';
         const isTemplateMasterApply = msg.type === 'apply' && (targetNode as any).type === 'COMPONENT';
         const applyPolicy: ApplyPolicy = isTemplateMasterApply
             ? 'template-master'
             : (targetNode.type === 'INSTANCE' ? 'instance-data' : 'default');
+        applyPolicyForReport = applyPolicy;
         const resolvedStyleApplyMode: StyleApplyMode =
             targetNode.type === 'INSTANCE' ? 'data_only' : requestedStyleApplyMode;
         const isDataOnlyApply = resolvedStyleApplyMode === 'data_only';
+        const shouldPersistStyleKeys = shouldRunStylePass;
         const persistedLocal = targetNode.type === 'INSTANCE'
             ? loadLocalStyleOverrides(targetNode)
             : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
@@ -1041,6 +1161,7 @@ figma.ui.onmessage = async (msg) => {
             ? normalizedLocalOverrides
             : persistedLocal.overrides;
         const columns = await perf.step('collect-columns', () => collectColumns(targetNode));
+        if (shouldRunDataPass) {
         let templateExistingValues: any[][] | null = null;
         let templateExistingMode: 'raw' | 'percent' | null = null;
         if (isTemplateMasterApply) {
@@ -1277,7 +1398,12 @@ figma.ui.onmessage = async (msg) => {
             );
             debugLog('[chart-plugin][legend-label]', { type, ...legendLabelResult });
         });
+        }
 
+        let latestMarkVariableSlotMap: Record<string, string> = {
+            ...readMarkVariableSlotMapFromNode(targetNode),
+            ...normalizedMarkVariableSlotMap
+        };
         const runtimeStrokePayload = isDataOnlyApply
             ? {
                 chartType: type,
@@ -1304,7 +1430,9 @@ figma.ui.onmessage = async (msg) => {
                 ...(effectiveLocalMask.colStrokeStyle ? { colStrokeStyle: effectiveLocalOverrides.colStrokeStyle } : {}),
                 ...(effectiveLocalMask.assistLineStyle ? { assistLineStyle: effectiveLocalOverrides.assistLineStyle } : {}),
                 ...(Array.isArray(rowHeaderLabels) ? { rowHeaderLabels } : {}),
-                ...(Array.isArray(xAxisLabels) ? { xAxisLabels } : {})
+                ...(Array.isArray(xAxisLabels) ? { xAxisLabels } : {}),
+                variableUpdateMode: normalizedVariableUpdateMode,
+                markVariableSlotMap: latestMarkVariableSlotMap
             }
             : {
                 chartType: type,
@@ -1326,10 +1454,32 @@ figma.ui.onmessage = async (msg) => {
                 markStyles,
                 rowStrokeStyles,
                 colStrokeStyle,
-                markNum
+                markNum,
+                variableUpdateMode: normalizedVariableUpdateMode,
+                markVariableSlotMap: latestMarkVariableSlotMap
             };
 
-        const strokeInjectionResult = await perf.step('stroke-injection', async () => {
+        const emptyStrokeResult = {
+            cellFill: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+            lineBackground: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+            mark: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+            legend: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+            cellTop: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+            tabRight: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+            gridContainer: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
+            resolved: {
+                cellFill: false,
+                lineBackground: false,
+                mark: false,
+                legend: false,
+                cellTop: false,
+                tabRight: false,
+                gridContainer: false
+            },
+            markVariableSlotMap: latestMarkVariableSlotMap
+        };
+        const strokeInjectionResult = shouldRunStylePass
+            ? await perf.step('stroke-injection', async () => {
             const mergeScope = (
                 acc: { candidates: number; applied: number; skipped: number; errors: number },
                 next: { candidates: number; applied: number; skipped: number; errors: number }
@@ -1356,7 +1506,8 @@ figma.ui.onmessage = async (msg) => {
                     cellTop: false,
                     tabRight: false,
                     gridContainer: false
-                }
+                },
+                markVariableSlotMap: latestMarkVariableSlotMap
             };
 
             for (let start = 0; start < columns.length; start += APPLY_CHUNK_SIZE_STROKE) {
@@ -1370,6 +1521,8 @@ figma.ui.onmessage = async (msg) => {
                     applyLegendScope: false,
                     applyGridContainerScope: false
                 });
+                latestMarkVariableSlotMap = partial.markVariableSlotMap || latestMarkVariableSlotMap;
+                runtimeStrokePayload.markVariableSlotMap = latestMarkVariableSlotMap;
                 mergeScope(combined.cellFill, partial.cellFill);
                 mergeScope(combined.lineBackground, partial.lineBackground);
                 mergeScope(combined.mark, partial.mark);
@@ -1380,40 +1533,63 @@ figma.ui.onmessage = async (msg) => {
                 combined.resolved.mark = combined.resolved.mark || partial.resolved.mark;
                 combined.resolved.cellTop = combined.resolved.cellTop || partial.resolved.cellTop;
                 combined.resolved.tabRight = combined.resolved.tabRight || partial.resolved.tabRight;
+                combined.markVariableSlotMap = partial.markVariableSlotMap || combined.markVariableSlotMap;
                 await nextTick();
             }
 
             if (!isCancelled()) {
+                runtimeStrokePayload.markVariableSlotMap = latestMarkVariableSlotMap;
                 const globalScopes = applyStrokeInjection(targetNode, runtimeStrokePayload, columns, {
                     applyColumnScopes: false,
                     applyLegendScope: true,
                     applyGridContainerScope: true
                 });
+                latestMarkVariableSlotMap = globalScopes.markVariableSlotMap || latestMarkVariableSlotMap;
                 mergeScope(combined.legend, globalScopes.legend);
                 mergeScope(combined.gridContainer, globalScopes.gridContainer);
                 combined.resolved.legend = globalScopes.resolved.legend;
                 combined.resolved.gridContainer = globalScopes.resolved.gridContainer;
+                combined.markVariableSlotMap = latestMarkVariableSlotMap;
             } else {
                 wasCancelled = true;
             }
 
             return combined;
-        });
-        debugLog('[chart-plugin][stroke-injection]', strokeInjectionResult);
+            })
+            : emptyStrokeResult;
+        latestMarkVariableSlotMap = strokeInjectionResult.markVariableSlotMap || latestMarkVariableSlotMap;
+        if (shouldRunStylePass) {
+            debugLog('[chart-plugin][stroke-injection]', strokeInjectionResult);
+        }
         if (wasCancelled || isCancelled()) {
             wasCancelled = true;
             return;
         }
-        if (type === 'line') {
+        if (shouldRunDataPass && type === 'line') {
             await perf.step('flat-padding-sync', () => syncFlatLineFillBottomPadding(targetNode, columns));
         }
 
         await perf.step('save-and-sync', () => {
+            const persistedStyleApplyMode: StyleApplyMode = shouldPersistStyleKeys
+                ? resolvedStyleApplyMode
+                : 'data_only';
+            const skipDataKeys = isTemplateMasterApply || !shouldRunDataPass;
             saveChartData(
                 targetNode,
-                { ...msg.payload, styleApplyMode: resolvedStyleApplyMode },
+                {
+                    ...msg.payload,
+                    styleApplyMode: persistedStyleApplyMode,
+                    updateType: resolvedUpdateType
+                },
                 undefined,
-                { skipDataKeys: isTemplateMasterApply }
+                {
+                    skipDataKeys,
+                    updateType: resolvedUpdateType
+                }
+            );
+            targetNode.setPluginData(
+                PLUGIN_DATA_KEYS.LAST_MARK_VARIABLE_SLOT_MAP,
+                JSON.stringify(latestMarkVariableSlotMap)
             );
             if (targetNode.type === 'INSTANCE') {
                 saveLocalStyleOverrides(targetNode, effectiveLocalOverrides, effectiveLocalMask);
@@ -1422,7 +1598,9 @@ figma.ui.onmessage = async (msg) => {
             debugLog('[chart-plugin][save-policy]', {
                 applyPolicy,
                 targetNodeId: targetNode.id,
-                skipDataKeys: isTemplateMasterApply
+                skipDataKeys,
+                updateType: resolvedUpdateType,
+                styleApplyMode: persistedStyleApplyMode
             });
             figma.ui.postMessage({
                 type: 'preview_plot_size_updated',
@@ -1449,13 +1627,19 @@ figma.ui.onmessage = async (msg) => {
             targetNodeId: targetNode.id,
             targetNodeName: targetNode.name,
             targetNodeType: targetNode.type,
-            applyPolicy
+            applyPolicy: applyPolicyForReport
         });
 
         if (msg.type === 'generate') {
             figma.notify("Chart Generated!");
         } else {
-            figma.notify("Chart Updated & Style Synced!");
+            if (appliedUpdateType === 'data') {
+                figma.notify("Chart Data Updated!");
+            } else if (appliedUpdateType === 'style') {
+                figma.notify("Chart Style Updated!");
+            } else {
+                figma.notify("Chart Updated & Style Synced!");
+            }
         }
     }
 

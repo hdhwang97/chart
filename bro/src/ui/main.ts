@@ -35,7 +35,7 @@ import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountF
 import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
 import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
-import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection } from '../shared/style-types';
+import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection, UpdateType } from '../shared/style-types';
 import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
 import { uiDebugLog } from './log';
@@ -67,6 +67,12 @@ const lineSwitchToggleClass = 'line-switch-toggle';
 
 function normalizeBarLabelSource(value: unknown): 'row' | 'y' {
     return value === 'y' ? 'y' : 'row';
+}
+
+function resolveSubmissionUpdateType(): UpdateType {
+    if (ui.stepStyle.classList.contains('active')) return 'style';
+    if (ui.step2.classList.contains('active')) return 'data';
+    return 'both';
 }
 
 function getBarLabelSourceLabel(source: 'row' | 'y'): string {
@@ -232,7 +238,7 @@ function queueSwitchToTarget(target: SelectionTargetSummary) {
     const shouldSave = window.confirm('Save changes before switching charts?\n\nOK = Save current chart\nCancel = Discard changes');
     if (shouldSave) {
         state.pendingSwitchTargetId = target.id;
-        submitData({ force: true });
+        submitData({ force: true, updateType: 'both' });
         return;
     }
     state.pendingSwitchTargetId = null;
@@ -1559,7 +1565,7 @@ function bindUiEvents() {
     ui.mainCta.addEventListener('click', () => {
         commitRowColorPopoverIfOpen();
         commitStyleColorPopoverIfOpen();
-        submitData();
+        submitData({ updateType: resolveSubmissionUpdateType() });
     });
     ui.editModeBtn.addEventListener('click', () => {
         closeRowColorPopover();
@@ -1655,6 +1661,9 @@ function bindUiEvents() {
         renderPreview();
         renderStylePreview();
         refreshExportPreview();
+    });
+    ui.styleVariableUpdateModeInput.addEventListener('change', () => {
+        state.variableUpdateMode = ui.styleVariableUpdateModeInput.value === 'create' ? 'create' : 'overwrite';
     });
     const toggleCurveMode = () => {
         state.lineFeature2Enabled = !state.lineFeature2Enabled;
@@ -1965,6 +1974,7 @@ function initializeUi() {
     ensureRowColorsLength(state.rows);
     ensureColHeaderColorEnabledLength(getGridColsForChart(state.chartType, state.cols));
     initializeStyleTabDraft({}, {});
+    ui.styleVariableUpdateModeInput.value = state.variableUpdateMode;
     initializeRowColorPicker();
     if (!rowColorPicker) {
         console.warn('[ui][row-color] iro.js is not available. Falling back to HEX input only.');
