@@ -79,6 +79,7 @@ type NormalizedMarkStyle = {
 
 type NormalizedLineBackgroundStyle = {
     color?: string;
+    opacity?: number;
     visible?: boolean;
 };
 
@@ -125,10 +126,15 @@ function normalizeLineBackgroundStyle(input: unknown): NormalizedLineBackgroundS
     if (!input || typeof input !== 'object') return null;
     const source = input as LineBackgroundInjectionStyle;
     const color = normalizeHexColor(source.color);
+    const opacityRaw = Number(source.opacity);
+    const opacity = Number.isFinite(opacityRaw)
+        ? Math.max(0, Math.min(1, opacityRaw))
+        : undefined;
     const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
-    if (!color && visible === undefined) return null;
+    if (!color && opacity === undefined && visible === undefined) return null;
     return {
         color: color || undefined,
+        opacity,
         visible
     };
 }
@@ -1027,7 +1033,9 @@ function applyLineBackgroundStyles(
             const seriesIndex = entry.rowIndex + 1;
             const markStyle = getMarkStyleBySeries(markStyles, seriesIndex);
             const color = markStyle?.lineBackgroundColor || markStyle?.fillColor || markStyle?.strokeColor || style?.color;
-            const opacity = typeof markStyle?.lineBackgroundOpacity === 'number' ? markStyle.lineBackgroundOpacity : undefined;
+            const opacity = typeof markStyle?.lineBackgroundOpacity === 'number'
+                ? markStyle.lineBackgroundOpacity
+                : (typeof style?.opacity === 'number' ? style.opacity : undefined);
             const visible = typeof markStyle?.lineBackgroundVisible === 'boolean' ? markStyle.lineBackgroundVisible : style?.visible;
             if (entry.backgroundTargets.length === 0) return;
 

@@ -1,7 +1,7 @@
 import { MARK_NAME_PATTERNS } from './constants';
 import { rgbToHex, findAllLineLayers, traverse } from './utils';
 import { collectColumns, type ColRef } from './drawing/shared';
-import { collectLineBundlesInColumn, isLineBundleFlat } from './drawing/line-structure';
+import { collectLineBundlesInColumn, isLineBundleFlat, type LineBundle } from './drawing/line-structure';
 import type { CellFillInjectionStyle, CellStrokeStyle, LineBackgroundInjectionStyle, MarkInjectionStyle, RowStrokeStyle, StrokeStyleSnapshot } from '../shared/style-types';
 
 // ==========================================
@@ -279,6 +279,16 @@ function getSolidFillColor(node: SceneNode): string | null {
     return rgbToHex(first.color.r, first.color.g, first.color.b);
 }
 
+function getSolidFillSnapshot(node: SceneNode | null): { color?: string; opacity?: number } | null {
+    if (!node || !('fills' in node) || !Array.isArray(node.fills) || node.fills.length === 0) return null;
+    const first = node.fills[0];
+    if (first.type !== 'SOLID') return null;
+    return {
+        color: rgbToHex(first.color.r, first.color.g, first.color.b),
+        opacity: typeof first.opacity === 'number' ? Math.max(0, Math.min(1, first.opacity)) : 1
+    };
+}
+
 function resolveLayerVisible(node: SceneNode | null): boolean | undefined {
     if (!node) return undefined;
     if (!node.visible) return false;
@@ -292,17 +302,21 @@ export function extractLineBackgroundStyle(graph: SceneNode, precomputedCols?: C
     const columns = resolveColumns(graph, precomputedCols);
     for (const col of columns) {
         let color: string | null = null;
+        let opacity: number | undefined;
         let visible: boolean | undefined;
         const bundles = collectLineBundlesInColumn(col.node, col.index - 1);
         const sorted = Array.from(bundles.entries()).sort((a, b) => a[0] - b[0]);
         for (const [, bundle] of sorted) {
             const isFlat = isLineBundleFlat(bundle);
+            const areaTarget = isFlat
+                ? (bundle.fillBot || bundle.fillNode)
+                : (bundle.triNode || bundle.fillBot || bundle.fillNode);
             if (!color) {
-                color = getSolidFillColor(
-                    isFlat
-                        ? (bundle.fillBot || bundle.fillNode)
-                        : (bundle.triNode || bundle.fillBot || bundle.fillNode)
-                );
+                const fill = getSolidFillSnapshot(areaTarget);
+                color = fill?.color || null;
+                if (fill && typeof fill.opacity === 'number') {
+                    opacity = fill.opacity;
+                }
             }
             if (visible === undefined) {
                 visible = isFlat ? resolveLayerVisible(bundle.fillBot) : resolveLayerVisible(bundle.triNode);
@@ -312,11 +326,12 @@ export function extractLineBackgroundStyle(graph: SceneNode, precomputedCols?: C
             if (color && visible !== undefined) break;
         }
 
-        if (color || visible !== undefined) {
-            return {
-                ...(color ? { color } : {}),
-                ...(visible !== undefined ? { visible } : {})
-            };
+        if (color || visible !== undefined || opacity !== undefined) {
+            const payload: LineBackgroundInjectionStyle = {};
+            if (color) payload.color = color;
+            if (opacity !== undefined) payload.opacity = opacity;
+            if (visible !== undefined) payload.visible = visible;
+            return payload;
         }
     }
     return null;
@@ -393,7 +408,22 @@ function toMarkStyleSnapshot(node: SceneNode): MarkInjectionStyle | null {
     };
 }
 
-function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
+function toLineAreaStyleFromBundle(bundle: LineBundle | null | undefined): Pick<MarkInjectionStyle, 'lineBackgroundColor' | 'lineBackgroundOpacity' | 'lineBackgroundVisible'> {
+    if (!bundle) return {};
+    const isFlat = isLineBundleFlat(bundle);
+    const areaTarget = isFlat
+        ? (bundle.fillBot || bundle.fillNode)
+        : (bundle.triNode || bundle.fillBot || bundle.fillNode);
+    const fill = getSolidFillSnapshot(areaTarget);
+    const visible = resolveLayerVisible(areaTarget);
+    return {
+        lineBackgroundColor: fill?.color || undefined,
+        lineBackgroundOpacity: typeof fill?.opacity === 'number' ? fill.opacity : undefined,
+        lineBackgroundVisible: typeof visible === 'boolean' ? visible : undefined
+    };
+}
+
+function toLineInstanceMarkStyle(node: SceneNode, bundle?: LineBundle | null): MarkInjectionStyle | null {
     let lineStyle: MarkInjectionStyle | null = null;
     let pointStyle: MarkInjectionStyle | null = null;
     let pointPadding: number | undefined;
@@ -416,7 +446,14 @@ function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
             lineStyle = toMarkStyleSnapshot(child);
         }
     });
-    if (!lineStyle && !pointStyle) return null;
+    const areaStyle = toLineAreaStyleFromBundle(bundle);
+    if (
+        !lineStyle
+        && !pointStyle
+        && !areaStyle.lineBackgroundColor
+        && areaStyle.lineBackgroundOpacity === undefined
+        && areaStyle.lineBackgroundVisible === undefined
+    ) return null;
     return {
         fillColor: lineStyle?.fillColor,
         strokeColor: lineStyle?.strokeColor,
@@ -424,6 +461,9 @@ function toLineInstanceMarkStyle(node: SceneNode): MarkInjectionStyle | null {
         linePointFillColor: pointStyle?.fillColor || pointStyle?.strokeColor || lineStyle?.fillColor,
         linePointThickness: pointStyle?.thickness ?? lineStyle?.thickness,
         linePointPadding: pointPadding,
+        lineBackgroundColor: areaStyle.lineBackgroundColor,
+        lineBackgroundOpacity: areaStyle.lineBackgroundOpacity,
+        lineBackgroundVisible: areaStyle.lineBackgroundVisible,
         thickness: lineStyle?.thickness ?? pointStyle?.thickness,
         strokeStyle: lineStyle?.strokeStyle ?? pointStyle?.strokeStyle
     };
@@ -439,7 +479,7 @@ export function extractMarkStyles(graph: SceneNode, precomputedCols?: ColRef[]):
         sortedBundles.forEach(([rowIndex, bundle]) => {
             const seriesIndex = rowIndex + 1;
             if (byIndex.has(seriesIndex)) return;
-            const lineStyle = toLineInstanceMarkStyle(bundle.lineNode);
+            const lineStyle = toLineInstanceMarkStyle(bundle.lineNode, bundle);
             if (lineStyle) byIndex.set(seriesIndex, lineStyle);
         });
         traverse(col.node, (node) => {

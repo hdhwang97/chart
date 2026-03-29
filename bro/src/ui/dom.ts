@@ -16,7 +16,6 @@ export const ui = {
     get stepStyle() { return byId<HTMLElement>('step-style'); },
     get backBtn() { return byId<HTMLButtonElement>('back-btn'); },
     get mainCta() { return byId<HTMLButtonElement>('main-cta'); },
-    get dataPaddingCta() { return byId<HTMLButtonElement>('data-padding-cta'); },
     get editModeBtn() { return byId<HTMLButtonElement>('edit-mode-btn'); },
 
     get chartTypeWrapper() { return byId<HTMLElement>('chart-type-wrapper'); },

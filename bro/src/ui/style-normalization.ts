@@ -121,7 +121,7 @@ export function normalizeLineBackgroundStyle(value: unknown): LineBackgroundInje
     if (!value || typeof value !== 'object') return null;
     const source = value as LineBackgroundInjectionStyle;
     const color = normalizeHexColorInput(source.color);
-    const opacityRaw = Number((source as any).opacity);
+    const opacityRaw = Number(source.opacity);
     const opacity = Number.isFinite(opacityRaw) ? Math.max(0, Math.min(1, opacityRaw)) : undefined;
     const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
     if (!color && opacity === undefined && visible === undefined) return null;
@@ -129,7 +129,7 @@ export function normalizeLineBackgroundStyle(value: unknown): LineBackgroundInje
         color: color || undefined,
         opacity,
         visible
-    } as any;
+    };
 }
 
 export function draftItemFromLineBackgroundStyle(
@@ -137,11 +137,11 @@ export function draftItemFromLineBackgroundStyle(
     fallback: LineBackgroundStyleInjectionDraftItem
 ): LineBackgroundStyleInjectionDraftItem {
     const color = normalizeHexColorInput(style?.color) || fallback.color;
-    const opacity = typeof (style as any)?.opacity === 'number'
-        ? Math.max(0, Math.min(1, (style as any).opacity))
+    const opacity = typeof style?.opacity === 'number'
+        ? Math.max(0, Math.min(1, style.opacity))
         : fallback.opacity;
     const visible = typeof style?.visible === 'boolean' ? style.visible : fallback.visible;
-    return { color, opacity: opacity as any, visible };
+    return { color, opacity, visible };
 }
 
 export function normalizeCellFillStyle(value: unknown): CellFillInjectionStyle | null {

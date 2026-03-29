@@ -46,6 +46,7 @@ const APPLY_CHUNK_SIZE_LINE = 10;
 const APPLY_CHUNK_SIZE_STROKE = 10;
 let latestApplyRunId = 0;
 let uiInitTraceSeq = 0;
+let deferredStyleExtractSeq = 0;
 const targetRevisionMap = new Map<string, number>();
 const styleExtractCache = new Map<string, { revision: number; payload: any }>();
 
@@ -717,6 +718,20 @@ type VariableOnlyUpdateReport = {
     errors: number;
 };
 
+function applyLineGlobalThicknessOverrideToVariableOnlyStyle(
+    style: VariableOnlyMarkStyle,
+    payload: Record<string, unknown>
+): VariableOnlyMarkStyle {
+    const chartType = typeof payload.type === 'string' ? payload.type : '';
+    if (chartType !== 'line') return style;
+    const globalThickness = normalizeStrokeWidth(payload.strokeWidth);
+    if (globalThickness === null) return style;
+    return {
+        ...style,
+        thickness: globalThickness
+    };
+}
+
 function normalizeVariableOnlyNumber(value: unknown): number | undefined {
     const parsed = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(parsed) || parsed < 0) return undefined;
@@ -764,10 +779,12 @@ function resolveVariableOnlyMarkStyles(payload: unknown): VariableOnlyMarkStyle[
         const normalized = source.markStyles
             .map((item) => normalizeVariableOnlyMarkStyle(item))
             .filter((item): item is VariableOnlyMarkStyle => Boolean(item));
-        if (normalized.length > 0) return normalized;
+        if (normalized.length > 0) {
+            return normalized.map((style) => applyLineGlobalThicknessOverrideToVariableOnlyStyle(style, source));
+        }
     }
     const single = normalizeVariableOnlyMarkStyle(source.markStyle);
-    return single ? [single] : [];
+    return single ? [applyLineGlobalThicknessOverrideToVariableOnlyStyle(single, source)] : [];
 }
 
 function toVariableColorValue(hex: string, alpha?: number): RGBA | null {
@@ -876,6 +893,48 @@ function applyVariablesOnlyFromMarkStyles(
     return report;
 }
 
+function applyLineThicknessVariablesFromStrokeWidth(
+    slotMap: Record<string, string>,
+    strokeWidthValue: unknown,
+    seriesCountValue: unknown
+): VariableOnlyUpdateReport {
+    const report: VariableOnlyUpdateReport = { updated: 0, missing: 0, errors: 0 };
+    const globalThickness = normalizeStrokeWidth(strokeWidthValue);
+    const parsedSeriesCount = Number(seriesCountValue);
+    const seriesCount = Number.isFinite(parsedSeriesCount) ? Math.max(0, Math.floor(parsedSeriesCount)) : 0;
+    if (globalThickness === null || seriesCount <= 0) return report;
+    for (let index = 1; index <= seriesCount; index++) {
+        setNumberVariableValueBySlot(slotMap, `number/${index}_thk`, globalThickness, report);
+    }
+    return report;
+}
+
+function withLineGlobalThicknessPriority(
+    payload: Record<string, unknown>,
+    chartType: string,
+    strokeWidthValue: unknown
+): Record<string, unknown> {
+    if (chartType !== 'line') return payload;
+    const globalThickness = normalizeStrokeWidth(strokeWidthValue);
+    if (globalThickness === null) return payload;
+
+    const next: Record<string, unknown> = { ...payload };
+    if (next.markStyle && typeof next.markStyle === 'object') {
+        next.markStyle = {
+            ...(next.markStyle as Record<string, unknown>),
+            thickness: globalThickness
+        };
+    }
+    if (Array.isArray(next.markStyles)) {
+        next.markStyles = next.markStyles.map((item) => (
+            item && typeof item === 'object'
+                ? { ...(item as Record<string, unknown>), thickness: globalThickness }
+                : item
+        ));
+    }
+    return next;
+}
+
 function normalizeMarkNumForCompare(value: unknown): number | number[] | null {
     if (Array.isArray(value)) {
         const next = value
@@ -910,20 +969,6 @@ function resolveIncomingSeriesCount(type: string, rows: unknown, markNum: unknow
     }
     if (typeof normalizedMarkNum === 'number') return normalizedMarkNum;
     return type === 'stackedBar' || type === 'stacked' ? 2 : 1;
-}
-
-function normalizeStackedValuesForPadding(values: unknown, markNum: unknown): number[][] {
-    if (!Array.isArray(values)) return [];
-    const matrix = values.map((row) => (
-        Array.isArray(row)
-            ? row.map((cell) => Number(cell) || 0)
-            : []
-    ));
-    const expectedSeries = resolveIncomingSeriesCount('stackedBar', undefined, markNum);
-    if (expectedSeries !== null && matrix.length === expectedSeries + 1) {
-        return matrix.slice(1);
-    }
-    return matrix;
 }
 
 function resolveSavedSeriesCount(node: SceneNode, chartType: string): number | null {
@@ -1202,8 +1247,25 @@ function postStyleExtracted(
         type: 'style_extracted',
         source,
         reason,
+        targetId: node.id,
         payload
     });
+}
+
+function queueDeferredStyleExtract(targetId: string) {
+    const scheduledSeq = ++deferredStyleExtractSeq;
+    setTimeout(() => {
+        if (scheduledSeq !== deferredStyleExtractSeq) return;
+        if (activeTargetId !== targetId) return;
+
+        const fromSelection = selectedChartTargets.find((target) => target.id === targetId);
+        const rawNode = fromSelection || figma.getNodeById(targetId);
+        if (!rawNode || rawNode.type === 'PAGE' || rawNode.type === 'DOCUMENT') return;
+
+        const node = rawNode as SceneNode;
+        if (!isRecognizedChartSelection(node)) return;
+        postStyleExtracted(node, 'on_demand', 'style_tab');
+    }, 0);
 }
 
 // Message Handler
@@ -1272,69 +1334,6 @@ figma.ui.onmessage = async (msg) => {
             console.info(label, { summary: summary[0], stages: stageDurations });
         }
     }
-    else if (msg.type === 'apply_data_padding') {
-        const requestedTargetId = typeof msg.targetId === 'string' ? msg.targetId : null;
-        const nodes = figma.currentPage.selection;
-        let resolvedNode: SceneNode | null = null;
-
-        if (requestedTargetId) {
-            const matchedTarget = selectedChartTargets.find((target) => target.id === requestedTargetId);
-            const requestedNode = matchedTarget || figma.getNodeById(requestedTargetId);
-            if (requestedNode && requestedNode.type !== 'PAGE' && requestedNode.type !== 'DOCUMENT') {
-                resolvedNode = requestedNode as SceneNode;
-            }
-        }
-        if (!resolvedNode && nodes.length > 0) {
-            resolvedNode = resolveChartTargetFromInnerNode(nodes[0]);
-        }
-        if (!resolvedNode || !isRecognizedChartSelection(resolvedNode)) {
-            figma.notify("Please select a chart component instance.");
-            return;
-        }
-
-        const chartType = resolvedNode.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(resolvedNode);
-        if (chartType !== 'line' && !isStackedType(chartType)) {
-            figma.notify('Data padding is currently supported for line and stacked charts only.');
-            return;
-        }
-
-        const runId = ++latestApplyRunId;
-        const targetNode = resolvedNode as FrameNode;
-        await withLoadingOpacity(targetNode, async () => {
-            if (runId !== latestApplyRunId) return;
-            const columns = collectColumns(targetNode);
-            if (chartType === 'line') {
-                syncFlatLineFillBottomPadding(targetNode, columns);
-            } else if (isStackedType(chartType)) {
-                const loaded = await loadChartData(targetNode, chartType);
-                if (runId !== latestApplyRunId) return;
-                const stackedValues = normalizeStackedValuesForPadding(loaded.values, loaded.markNum);
-                const mode = targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE) === 'percent' ? 'percent' : 'raw';
-                const rawYMax = targetNode.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MAX);
-                const yMax = rawYMax === '' ? null : Number(rawYMax);
-                syncStackedSegmentPadding(
-                    targetNode,
-                    stackedValues,
-                    getGraphHeight(targetNode, columns),
-                    mode,
-                    Number.isFinite(yMax) ? yMax : null,
-                    loaded.markNum,
-                    columns
-                );
-            }
-            if (runId !== latestApplyRunId) return;
-            bumpTargetRevision(targetNode.id);
-            figma.ui.postMessage({
-                type: 'preview_plot_size_updated',
-                previewPlotWidth: getPlotAreaWidth(targetNode),
-                previewPlotHeight: getGraphHeight(targetNode as FrameNode, columns)
-            });
-            figma.ui.postMessage({ type: 'data_padding_applied', targetId: targetNode.id });
-        });
-        if (runId === latestApplyRunId) {
-            figma.notify('Data padding injected.');
-        }
-    }
     else if (msg.type === 'update_variables_only') {
         const payload = (msg && typeof msg.payload === 'object') ? msg.payload : {};
         const requestedTargetId = typeof payload.targetId === 'string' ? payload.targetId : null;
@@ -1368,6 +1367,23 @@ figma.ui.onmessage = async (msg) => {
         }
 
         const report = applyVariablesOnlyFromMarkStyles(slotMap, markStyles);
+        const payloadSource = payload as Record<string, unknown>;
+        const chartType = typeof payloadSource.type === 'string' ? payloadSource.type : '';
+        if (chartType === 'line') {
+            const inferredSeriesCount = resolveIncomingSeriesCount(
+                chartType,
+                payloadSource.rows,
+                payloadSource.markNum
+            );
+            const lineThicknessReport = applyLineThicknessVariablesFromStrokeWidth(
+                slotMap,
+                payloadSource.strokeWidth,
+                inferredSeriesCount
+            );
+            report.updated += lineThicknessReport.updated;
+            report.missing += lineThicknessReport.missing;
+            report.errors += lineThicknessReport.errors;
+        }
         if (report.updated <= 0) {
             figma.ui.postMessage({
                 type: 'variables_only_requires_style_apply',
@@ -1380,6 +1396,10 @@ figma.ui.onmessage = async (msg) => {
             PLUGIN_DATA_KEYS.LAST_MARK_VARIABLE_SLOT_MAP,
             JSON.stringify(slotMap)
         );
+        const normalizedStrokeWidth = normalizeStrokeWidth((payload as Record<string, unknown>).strokeWidth);
+        if (normalizedStrokeWidth !== null) {
+            targetNode.setPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH, String(normalizedStrokeWidth));
+        }
         bumpTargetRevision(targetNode.id);
         figma.ui.postMessage({
             type: 'variables_only_applied',
@@ -1811,7 +1831,7 @@ figma.ui.onmessage = async (msg) => {
                 slotVariableIdMap: latestMarkVariableSlotMap
             })
             : null;
-        const runtimeStrokePayload = isDataOnlyApply
+        const runtimeStrokePayloadBase = isDataOnlyApply
             ? {
                 chartType: type,
                 markNum,
@@ -1865,6 +1885,11 @@ figma.ui.onmessage = async (msg) => {
                 variableUpdateMode: normalizedVariableUpdateMode,
                 markVariableSlotMap: latestMarkVariableSlotMap
             };
+        const runtimeStrokePayload = withLineGlobalThicknessPriority(
+            runtimeStrokePayloadBase as Record<string, unknown>,
+            type,
+            strokeWidth
+        );
 
         const emptyStrokeResult = {
             cellFill: { candidates: 0, applied: 0, skipped: 0, errors: 0 },
@@ -1977,6 +2002,25 @@ figma.ui.onmessage = async (msg) => {
             : (strokeInjectionResult.markVariableSlotMap || latestMarkVariableSlotMap);
         if (shouldRunStylePass) {
             debugLog('[chart-plugin][stroke-injection]', strokeInjectionResult);
+        }
+        if (type === 'line') {
+            const inferredSeriesCount = resolveIncomingSeriesCount(type, rows, markNum);
+            const lineThicknessVariableReport = applyLineThicknessVariablesFromStrokeWidth(
+                latestMarkVariableSlotMap,
+                strokeWidth,
+                inferredSeriesCount
+            );
+            if (
+                lineThicknessVariableReport.updated > 0
+                || lineThicknessVariableReport.missing > 0
+                || lineThicknessVariableReport.errors > 0
+            ) {
+                debugLog('[chart-plugin][line-global-thickness-variable]', {
+                    seriesCount: inferredSeriesCount,
+                    strokeWidth,
+                    ...lineThicknessVariableReport
+                });
+            }
         }
         if (wasCancelled || isCancelled()) {
             wasCancelled = true;
@@ -2189,7 +2233,7 @@ figma.ui.onmessage = async (msg) => {
         if (!nextTarget || !isRecognizedChartSelection(nextTarget)) return;
         activeTargetId = nextTarget.id;
         const uiPerfTrace = buildUiInitPerfTrace('target_switch', nextTarget, selectedChartTargets.length);
-        initPluginUI(nextTarget, false, {
+        await initPluginUI(nextTarget, false, {
             reason: 'selection',
             isCType: false,
             selectionTargets: getSelectionTargetsMeta(selectedChartTargets),
@@ -2197,6 +2241,7 @@ figma.ui.onmessage = async (msg) => {
             deferStyleExtract: true,
             uiPerfTrace
         });
+        queueDeferredStyleExtract(nextTarget.id);
     }
 };
 
@@ -2262,13 +2307,21 @@ figma.on("selectionchange", () => {
         preInitCollectTargetsMs: afterCollectTargetsAtMs - afterSingleResolveAtMs,
         preInitTotalMs: afterCollectTargetsAtMs - selectionEventStartedAtMs
     });
-    initPluginUI(activeTarget, false, {
+    void initPluginUI(activeTarget, false, {
         reason: 'selection',
         isCType: selection.length === 1 ? detectCTypeSelection(selection[0], activeTarget) : false,
         selectionTargets: getSelectionTargetsMeta(selectedChartTargets),
         activeTargetId,
         deferStyleExtract: true,
         uiPerfTrace
+    }).then(() => {
+        if (activeTargetId !== activeTarget.id) return;
+        queueDeferredStyleExtract(activeTarget.id);
+    }).catch((error) => {
+        debugLog('[chart-plugin][init-ui-error]', {
+            targetId: activeTarget.id,
+            error: error instanceof Error ? error.message : String(error)
+        });
     });
 });
 

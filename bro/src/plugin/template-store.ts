@@ -93,10 +93,15 @@ function normalizeLineBackgroundStyle(value: unknown): LineBackgroundInjectionSt
     if (!value || typeof value !== 'object') return undefined;
     const source = value as LineBackgroundInjectionStyle;
     const color = normalizeHexColor(source.color);
+    const opacityRaw = Number(source.opacity);
+    const opacity = Number.isFinite(opacityRaw)
+        ? Math.max(0, Math.min(1, opacityRaw))
+        : undefined;
     const visible = typeof source.visible === 'boolean' ? source.visible : undefined;
-    if (!color && visible === undefined) return undefined;
+    if (!color && opacity === undefined && visible === undefined) return undefined;
     return {
         color: color || undefined,
+        opacity,
         visible
     };
 }

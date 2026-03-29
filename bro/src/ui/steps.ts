@@ -389,15 +389,6 @@ export function submitVariablesOnly() {
     }, '*');
 }
 
-export function submitDataPaddingOnly() {
-    parent.postMessage({
-        pluginMessage: {
-            type: 'apply_data_padding',
-            targetId: state.activeTargetId || null
-        }
-    }, '*');
-}
-
 // Expose functions that are called from HTML onclick attributes
 (window as any).selectType = selectType;
 (window as any).setMode = setMode;

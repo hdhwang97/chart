@@ -50,6 +50,7 @@ export type CellFillInjectionStyle = {
 
 export type LineBackgroundInjectionStyle = {
     color?: string;
+    opacity?: number;
     visible?: boolean;
 };
 

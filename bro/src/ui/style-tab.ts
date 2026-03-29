@@ -448,13 +448,13 @@ export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSe
     ];
 }
 
-export function syncStyleDraftFromDomAndEmit() {
+export function syncStyleDraftFromDomAndEmit(sourceInputId?: string | null) {
     markStyleInjectionDirty();
     const normalized = validateStyleTabDraft(readStyleTabDraft());
     setStyleInjectionDraft(normalized.draft);
     syncRowColorsFromMarkStyles({ emitLocalOverride: true });
     syncAllHexPreviewsFromDom();
-    emitStyleDraftUpdated();
+    emitStyleDraftUpdated({ sourceInputId: sourceInputId || null });
 }
 
 function syncRowColorsFromMarkStyles(options: { emitLocalOverride: boolean }) {
@@ -524,8 +524,8 @@ export function normalizeColorThicknessFromDom(
     };
 }
 
-export function emitStyleDraftUpdated() {
-    document.dispatchEvent(new CustomEvent('style-draft-updated'));
+export function emitStyleDraftUpdated(detail?: { sourceInputId?: string | null }) {
+    document.dispatchEvent(new CustomEvent('style-draft-updated', { detail }));
 }
 
 export function hydrateStyleTab(draft: StyleInjectionDraft) {
@@ -933,8 +933,8 @@ export function bindStyleTabEvents() {
         });
     });
 
-    const handleChange = debounce(() => {
-        syncStyleDraftFromDomAndEmit();
+    const handleChange = debounce((sourceInputId?: string | null) => {
+        syncStyleDraftFromDomAndEmit(sourceInputId);
     }, 150);
 
     const styleInputsFormContainer = document.querySelector('#style-panel')
@@ -945,7 +945,7 @@ export function bindStyleTabEvents() {
         const trackedInputs = getStyleFormInputsForSnapshot();
         if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) {
             if (trackedInputs.includes(target)) {
-                handleChange();
+                handleChange(target.id || null);
             }
         }
     });
@@ -956,7 +956,7 @@ export function bindStyleTabEvents() {
         const isStyleInput = target instanceof HTMLInputElement || target instanceof HTMLSelectElement;
 
         if (isStyleInput && trackedInputs.includes(target as any)) {
-            handleChange();
+            handleChange((target as HTMLInputElement | HTMLSelectElement).id || null);
         }
     });
 
@@ -992,7 +992,7 @@ export function bindStyleTabEvents() {
         } else if (styleItemPopoverOpen) {
             syncPopoverNavigatorUi();
         }
-        syncStyleDraftFromDomAndEmit();
+        syncStyleDraftFromDomAndEmit(ui.styleMarkIndexInput.id);
     });
 
     ui.styleMarkStrokeToggle.addEventListener('change', () => {
@@ -1035,12 +1035,12 @@ export function bindStyleTabEvents() {
         if (styleItemPopoverOpen && styleItemPopoverTarget === 'mark' && styleItemPopoverConfig) {
             syncStyleItemPopoverFromConfig(styleItemPopoverConfig);
         }
-        syncStyleDraftFromDomAndEmit();
+        syncStyleDraftFromDomAndEmit(ui.styleMarkStrokeToggle.id);
     });
 
     [ui.styleMarkStrokeSidesTopInput, ui.styleMarkStrokeSidesLeftInput, ui.styleMarkStrokeSidesRightInput].forEach((input) => {
         input.addEventListener('change', () => {
-            syncStyleDraftFromDomAndEmit();
+            syncStyleDraftFromDomAndEmit(input.id);
         });
     });
 

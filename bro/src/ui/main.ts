@@ -32,7 +32,7 @@ import { renderPreview } from './preview';
 import { setMode, toggleMode, updateModeButtonState, checkCtaValidation, syncYMaxValidationUi, applyModeLocks } from './mode';
 import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
-import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData, submitDataPaddingOnly, submitVariablesOnly } from './steps';
+import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData, submitVariablesOnly } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
 import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection, UpdateType } from '../shared/style-types';
@@ -73,6 +73,12 @@ function resolveSubmissionUpdateType(): UpdateType {
     if (ui.stepStyle.classList.contains('active')) return 'style';
     if (ui.step2.classList.contains('active')) return 'data';
     return 'both';
+}
+
+function submitVariablesOnlyIfEditableTarget() {
+    if (state.uiMode !== 'edit') return;
+    if (!state.activeTargetId) return;
+    submitVariablesOnly();
 }
 
 function getBarLabelSourceLabel(source: 'row' | 'y'): string {
@@ -676,6 +682,7 @@ function commitRowColorPopoverIfOpen() {
         parent.postMessage({ pluginMessage: { type: 'update_paint_style_color', id: styleId, colorHex: draftColor } }, '*');
         const applied = applyColorHex(activeColorTarget, draftColor, true);
         closeRowColorPopover();
+        if (applied) submitVariablesOnlyIfEditableTarget();
         return applied;
     }
     setColorModeForTarget(activeColorTarget, 'hex');
@@ -703,10 +710,12 @@ function commitRowColorPopoverIfOpen() {
         renderStylePreview();
         refreshExportPreview();
         closeRowColorPopover();
+        submitVariablesOnlyIfEditableTarget();
         return true;
     }
     const applied = applyColorHex(activeColorTarget, draftColor, true);
     closeRowColorPopover();
+    if (applied) submitVariablesOnlyIfEditableTarget();
     return applied;
 }
 
@@ -1426,6 +1435,16 @@ function handlePluginMessage(msg: any) {
     }
 
     if (msg.type === 'style_extracted') {
+        const messageTargetId = typeof msg.targetId === 'string' ? msg.targetId : null;
+        if (messageTargetId && state.activeTargetId && messageTargetId !== state.activeTargetId) {
+            uiDebugLog('[ui][style-extracted][skip-stale]', {
+                source: msg.source,
+                reason: msg.reason,
+                messageTargetId,
+                activeTargetId: state.activeTargetId
+            });
+            return;
+        }
         if (msg.payload) {
             if (msg.payload.isInstanceTarget !== undefined) {
                 state.isInstanceTarget = Boolean(msg.payload.isInstanceTarget);
@@ -1630,11 +1649,6 @@ function bindUiEvents() {
         commitStyleColorPopoverIfOpen();
         submitData({ updateType: resolveSubmissionUpdateType() });
     });
-    ui.dataPaddingCta.addEventListener('click', () => {
-        commitRowColorPopoverIfOpen();
-        commitStyleColorPopoverIfOpen();
-        submitDataPaddingOnly();
-    });
     ui.editModeBtn.addEventListener('click', () => {
         closeRowColorPopover();
         toggleMode();
@@ -1643,7 +1657,10 @@ function bindUiEvents() {
     // Settings inputs
     ui.settingColInput.addEventListener('change', handleDimensionInput);
     ui.settingCellInput.addEventListener('change', handleDimensionInput);
-    ui.settingStrokeInput.addEventListener('change', handleDimensionInput);
+    ui.settingStrokeInput.addEventListener('change', (event) => {
+        handleDimensionInput(event);
+        submitVariablesOnlyIfEditableTarget();
+    });
     ui.settingMarkRatioInput.addEventListener('change', () => {
         state.markRatio = parseMarkRatioPercentInput(ui.settingMarkRatioInput.value);
         ui.settingMarkRatioInput.value = formatMarkRatioPercentInput(state.markRatio);
@@ -1950,12 +1967,27 @@ function bindUiEvents() {
         }
         submitData({ force: true, updateType: 'style' });
     }) as EventListener);
-    document.addEventListener('style-draft-updated', () => {
+    document.addEventListener('style-draft-updated', ((event: Event) => {
+        const custom = event as CustomEvent<{ sourceInputId?: string | null }>;
+        const sourceInputId = custom.detail?.sourceInputId || null;
         renderGrid();
         renderPreview();
         renderStylePreview();
         refreshExportPreview();
-    });
+        const markNumberVariableInputIds = new Set<string>([
+            ui.styleMarkThicknessInput.id,
+            ui.styleMarkLinePointThicknessInput.id,
+            ui.styleMarkLinePointPaddingInput.id
+        ]);
+        if (
+            sourceInputId
+            && markNumberVariableInputIds.has(sourceInputId)
+            && state.uiMode === 'edit'
+            && Boolean(state.activeTargetId)
+        ) {
+            submitVariablesOnly();
+        }
+    }) as EventListener);
     document.addEventListener('line-feature-state-updated', () => {
         updateLineFeatureToggleUi();
         updateBarLabelToggleUi();

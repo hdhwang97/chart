@@ -79,6 +79,103 @@ function resolveMarkRatioFromNode(node: SceneNode, extractedRatio?: number): num
     return 0.8;
 }
 
+function normalizeStrokeWidth(value: unknown): number | null {
+    const n = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+}
+
+function nearlyEqual(a: number, b: number, epsilon = 1e-6) {
+    return Math.abs(a - b) <= epsilon;
+}
+
+function parseMarkVariableSlotMap(raw: unknown): Record<string, string> {
+    if (!raw) return {};
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            return parseMarkVariableSlotMap(parsed);
+        } catch {
+            return {};
+        }
+    }
+    if (typeof raw !== 'object') return {};
+    const next: Record<string, string> = {};
+    Object.entries(raw as Record<string, unknown>).forEach(([slot, id]) => {
+        if (typeof id === 'string' && id) next[slot] = id;
+    });
+    return next;
+}
+
+function resolveVariableModeId(variable: Variable): string | null {
+    const collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
+    if (collection?.defaultModeId) return collection.defaultModeId;
+    const valuesByMode = (variable as any).valuesByMode;
+    if (!valuesByMode || typeof valuesByMode !== 'object') return null;
+    const first = Object.keys(valuesByMode)[0];
+    return first || null;
+}
+
+function readFloatVariableValue(variable: Variable): number | null {
+    if (variable.resolvedType !== 'FLOAT') return null;
+    const modeId = resolveVariableModeId(variable);
+    if (!modeId) return null;
+    const valuesByMode = (variable as any).valuesByMode;
+    if (!valuesByMode || typeof valuesByMode !== 'object') return null;
+    const value = valuesByMode[modeId];
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+function resolveLineStrokeWidthFromVariableSlots(node: SceneNode, seriesCount: number): number | null {
+    if (seriesCount <= 0) return null;
+    const slotMap = parseMarkVariableSlotMap(
+        node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_VARIABLE_SLOT_MAP)
+    );
+    if (Object.keys(slotMap).length === 0) return null;
+
+    const collected: number[] = [];
+    for (let i = 1; i <= seriesCount; i++) {
+        const variableId = slotMap[`number/${i}_thk`];
+        if (!variableId) continue;
+        const variable = figma.variables.getVariableById(variableId);
+        if (!variable) continue;
+        const value = readFloatVariableValue(variable);
+        if (value !== null) collected.push(value);
+    }
+
+    if (collected.length === 0) {
+        Object.entries(slotMap).forEach(([slot, variableId]) => {
+            if (!/^number\/\d+_thk$/.test(slot)) return;
+            const variable = figma.variables.getVariableById(variableId);
+            if (!variable) return;
+            const value = readFloatVariableValue(variable);
+            if (value !== null) collected.push(value);
+        });
+    }
+
+    if (collected.length === 0) return null;
+    const first = collected[0];
+    const isUniform = collected.every((value) => nearlyEqual(value, first));
+    return isUniform ? first : null;
+}
+
+function resolveStrokeWidthForInit(
+    node: SceneNode,
+    chartType: string,
+    fallbackStrokeWidth: unknown,
+    seriesCount: number
+): number {
+    if (chartType === 'line') {
+        const variableStrokeWidth = resolveLineStrokeWidthFromVariableSlots(node, Math.max(1, seriesCount));
+        if (variableStrokeWidth !== null) return variableStrokeWidth;
+    }
+    const fallback = normalizeStrokeWidth(fallbackStrokeWidth);
+    if (fallback !== null) return fallback;
+    return 2;
+}
+
 function resolveAssistLineEnabledFromNode(node: SceneNode) {
     const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
     if (!raw) {
@@ -523,6 +620,12 @@ export async function syncChartOnResize(
         const colCount = chartType === 'stackedBar' || chartType === 'stacked'
             ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((acc, cur) => acc + (Number(cur) || 0), 0) : 0)
             : (Array.isArray(valuesToUse) && Array.isArray(valuesToUse[0]) ? valuesToUse[0].length : 1);
+        const strokeWidthForPayload = resolveStrokeWidthForInit(
+            node,
+            chartType,
+            lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
+            rowCount
+        );
         const payload = {
             type: chartType,
             mode,
@@ -536,7 +639,7 @@ export async function syncChartOnResize(
             yMax: effectiveY.yMax,
             rawYMaxAuto: effectiveY.rawYMaxAuto,
             markNum: chartData.markNum,
-            strokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
+            strokeWidth: strokeWidthForPayload,
             markRatio: (chartType === 'bar' || chartType === 'stackedBar' || chartType === 'stacked')
                 ? resolveMarkRatioFromNode(node)
                 : undefined,
@@ -659,6 +762,13 @@ export async function initPluginUI(
 
     // 저장된 두께 값 로드
     const lastStrokeWidth = node.getPluginData(PLUGIN_DATA_KEYS.LAST_STROKE_WIDTH);
+    const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
+    const initStrokeWidth = resolveStrokeWidthForInit(
+        node,
+        chartType,
+        lastStrokeWidth ? Number(lastStrokeWidth) : undefined,
+        rowColorCount
+    );
 
     const lastMode = node.getPluginData(PLUGIN_DATA_KEYS.LAST_MODE);
     const lastYMin = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_MIN);
@@ -666,7 +776,6 @@ export async function initPluginUI(
     const lastYLabelFormat = normalizeYLabelFormatMode(node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_LABEL_FORMAT));
     const parsedLastYMin = lastYMin !== '' && Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : undefined;
     const parsedLastYMax = lastYMax !== '' && Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : undefined;
-    const rowColorCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
     const colCount = chartType === 'stackedBar' || chartType === 'stacked'
         ? (Array.isArray(chartData.markNum) ? chartData.markNum.reduce((a, b) => a + b, 0) : 0)
         : (Array.isArray(chartData.values) && chartData.values.length > 0 ? chartData.values[0].length : 0);
@@ -692,7 +801,7 @@ export async function initPluginUI(
             colors: [] as string[],
             markRatio: undefined,
             cornerRadius: 0,
-            strokeWidth: Number.isFinite(Number(lastStrokeWidth)) ? Number(lastStrokeWidth) : 2,
+            strokeWidth: initStrokeWidth,
             cellFillStyle: null,
             lineBackgroundStyle: null,
             markStyle: null,
@@ -868,7 +977,7 @@ export async function initPluginUI(
         colPaintStyleIds,
         colColorEnabled,
         markColorSource,
-        lastStrokeWidth: lastStrokeWidth ? Number(lastStrokeWidth) : 2,
+        lastStrokeWidth: initStrokeWidth,
         markRatio,
         xAxisLabelsVisible,
         barLabelVisible,
