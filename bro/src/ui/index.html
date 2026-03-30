@@ -551,14 +551,13 @@
                                 <button type="button" class="style-injection-tab is-active" data-style-injection-tab="mark">Mark</button>
                                 <button type="button" class="style-injection-tab" data-style-injection-tab="plot-area">Plot Area</button>
                             </div>
-                            <label class="style-variable-mode">
-                                <span class="style-variable-mode-label">Variable Mode</span>
-                                <select id="style-variable-update-mode"
-                                    class="style-variable-mode-select">
-                                    <option value="overwrite" selected>overwrite</option>
-                                    <option value="create">create</option>
-                                </select>
-                            </label>
+                            <div class="style-variable-mode">
+                                <span class="style-variable-mode-label">Variable Action</span>
+                                <div class="style-variable-mode-actions">
+                                    <button id="style-variable-overwrite-btn" type="button" class="style-variable-action-btn is-primary">Overwrite</button>
+                                    <button id="style-variable-create-btn" type="button" class="style-variable-action-btn">Create Variable</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1008,6 +1007,19 @@
                 <span class="block text-[10px] text-text-sub mb-0.5">Variable Color</span>
                 <code id="style-item-style-id-text" class="style-item-style-id-text"></code>
             </div>
+        </div>
+        <div id="style-item-variable-status-row" class="hidden mb-2">
+            <span class="block text-[10px] text-text-sub mb-0.5">Variable Status</span>
+            <div class="style-variable-status-box">
+                <span id="style-item-variable-status-badge" class="style-variable-status-badge">Unlinked</span>
+                <span id="style-item-variable-status-text" class="style-variable-status-text"></span>
+            </div>
+        </div>
+        <div id="style-item-variable-actions-row" class="hidden mb-2 flex items-center justify-end gap-1.5">
+            <button id="style-item-overwrite-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-primary hover:bg-blue-50 cursor-pointer">Overwrite</button>
+            <button id="style-item-create-variable-btn" type="button"
+                class="px-2 py-1 text-xxs font-semibold rounded border border-border text-text-sub hover:bg-gray-50 cursor-pointer">Create Variable</button>
         </div>
 
         <label id="style-item-primary-color-row" class="block mb-2">

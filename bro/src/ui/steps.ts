@@ -371,17 +371,20 @@ export function submitData(options?: { force?: boolean; updateType?: UpdateType 
     parent.postMessage({ pluginMessage: { type: built.msgType, payload: built.payload } }, '*');
 }
 
-export function submitVariablesOnly() {
+export function submitVariablesOnly(options?: { colorsOnly?: boolean }) {
     const built = buildSubmissionPayload({
         includeTargetId: true,
         force: true,
         updateType: 'style'
     });
     if (!built) return;
+    const payloadWithOptions = options?.colorsOnly
+        ? { ...built.payload, colorsOnly: true }
+        : built.payload;
     parent.postMessage({
         pluginMessage: {
             type: 'update_variables_only',
-            payload: built.payload
+            payload: payloadWithOptions
         }
     }, '*');
 }

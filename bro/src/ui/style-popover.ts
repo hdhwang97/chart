@@ -3,7 +3,7 @@ import { clampOpacityPercent, cloneDraft, ensureMarkDraftSeriesCount, getActiveM
 import { emitStyleDraftUpdated, getHexPreviewElement, getHexPreviewFallback, getStyleColorInputs, getStyleFormInputsForSnapshot, hydrateStyleTab, markStyleInjectionDirty, resolveStyleColorLabel, setStyleInjectionDraft, syncAllHexPreviewsFromDom, syncStyleDraftFromDomAndEmit, updateHexPreview } from './style-tab';
 import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, setLocalStyleOverrideField, state } from './state';
 import { ui } from './dom';
-import { isMarkColorInputId, resolveMarkVariableStyleIdForInputId, setMarkVariableStyleIdForInputId } from './mark-variable';
+import { isMarkColorInputId, resolveMarkVariableSlotKeysForInputId, resolveMarkVariableStyleIdForInputId, setMarkVariableStyleIdForInputId } from './mark-variable';
 import { formatColorVariableDisplayName } from './variable-display';
 
 import type { ColorMode, PaintStyleSelection } from '../shared/style-types';
@@ -75,6 +75,17 @@ type PopoverSessionSnapshot = {
     markStrokeSidesByIndex: Array<{ top: boolean; left: boolean; right: boolean }>;
 };
 
+type VariableLinkUiState = 'unlinked' | 'owned' | 'foreign-linked' | 'missing' | 'remote-locked' | 'mixed';
+type VariableLinkSlotInfo = {
+    slotKey: string;
+    id: string | null;
+    exists: boolean;
+    remote: boolean;
+    owned: boolean;
+    name: string | null;
+    resolvedType: string | null;
+};
+
 function escapeHtml(value: string): string {
     return value
         .replace(/&/g, '&amp;')
@@ -105,6 +116,310 @@ export const styleItemPopoverSegmentIndexCache: Record<PopoverSegment, number> =
 };
 export let isSyncingStyleColorPicker = false;
 export let stylePopoverPaintStyles: PaintStyleSelection[] = [];
+let styleItemVariableLinkState: VariableLinkUiState = 'unlinked';
+let styleItemVariableLinkSlots: VariableLinkSlotInfo[] = [];
+let styleItemVariableLinkMessage = '';
+let styleItemVariableActionBusy = false;
+let variableLinkRequestSeq = 0;
+let variableActionRequestSeq = 0;
+let pendingVariableLinkRequestId: number | null = null;
+const variableAutoRecoveryAttemptedKeys = new Set<string>();
+
+function isMarkVariablePopoverContext() {
+    if (!styleItemPopoverOpen) return false;
+    if (styleItemPopoverTarget === 'mark') return true;
+    if (styleItemPopoverTarget === 'input-color') {
+        return isMarkColorInputId(styleItemPopoverSourceInput?.id || null);
+    }
+    return false;
+}
+
+function resolveActiveVariableInputId() {
+    if (!isMarkVariablePopoverContext()) return null;
+    return resolveMarkVariableInputId(styleItemPopoverTarget as StyleItemPopoverTarget, styleItemPopoverSourceInput);
+}
+
+function resolveActiveVariableSlotKeys() {
+    const inputId = resolveActiveVariableInputId();
+    if (!inputId) return [];
+    return resolveMarkVariableSlotKeysForInputId(inputId);
+}
+
+function resolveSlotKeyCollection() {
+    const slotKeys = resolveActiveVariableSlotKeys();
+    return slotKeys.length > 0 ? slotKeys : styleItemVariableLinkSlots.map((slot) => slot.slotKey);
+}
+
+function updateVariableActionButtonsUi() {
+    const showVariableControls = isMarkVariablePopoverContext();
+    ui.styleItemVariableStatusRow.classList.toggle('hidden', !showVariableControls);
+    // Variable writes are controlled from Style Setting action buttons.
+    ui.styleItemVariableActionsRow.classList.add('hidden');
+    if (!showVariableControls) {
+        return;
+    }
+
+    const badge = ui.styleItemVariableStatusBadge;
+    const stateLabel: Record<VariableLinkUiState, string> = {
+        unlinked: 'Unlinked',
+        owned: 'Owned',
+        'foreign-linked': 'Foreign-linked',
+        missing: 'Missing',
+        'remote-locked': 'Remote locked',
+        mixed: 'Mixed'
+    };
+    badge.textContent = stateLabel[styleItemVariableLinkState];
+    badge.dataset.state = styleItemVariableLinkState;
+    ui.styleItemVariableStatusText.textContent = styleItemVariableLinkMessage;
+
+    const color = normalizeHexColorInput(ui.styleItemPrimaryColorInput.value);
+    const hasWritableLinkedColor = styleItemVariableLinkSlots.some((slot) => (
+        Boolean(slot.id)
+        && slot.exists
+        && slot.resolvedType === 'COLOR'
+        && !slot.remote
+    ));
+    const canOverwrite = Boolean(color) && hasWritableLinkedColor && !styleItemVariableActionBusy;
+    const canCreate = Boolean(color) && styleItemVariableLinkState !== 'owned' && !styleItemVariableActionBusy;
+
+    ui.styleItemOverwriteBtn.disabled = !canOverwrite;
+    ui.styleItemCreateVariableBtn.disabled = !canCreate;
+    ui.styleItemCreateVariableBtn.classList.toggle('hidden', styleItemVariableLinkState === 'owned');
+}
+
+function buildVariableContextForActions() {
+    const targetId = state.activeTargetId;
+    const sourceInputId = resolveActiveVariableInputId();
+    const slotKeys = resolveSlotKeyCollection();
+    const colorHex = normalizeHexColorInput(ui.styleItemPrimaryColorInput.value);
+    if (!targetId || !sourceInputId || slotKeys.length === 0 || !colorHex) {
+        return null;
+    }
+    const opacityInput = styleItemPopoverConfig?.opacityInput;
+    const opacityPercent = opacityInput
+        ? clampOpacityPercent(opacityInput.value, 100)
+        : null;
+    const opacity = opacityPercent === null ? undefined : Math.max(0, Math.min(1, opacityPercent / 100));
+    return {
+        targetId,
+        sourceInputId,
+        slotKeys,
+        colorHex,
+        opacity
+    };
+}
+
+function buildVariableRecoveryKey(targetId: string, sourceInputId: string) {
+    return `${targetId}::${sourceInputId}`;
+}
+
+function requestMarkVariableLinkState() {
+    if (!isMarkVariablePopoverContext()) return;
+    const targetId = state.activeTargetId;
+    const sourceInputId = resolveActiveVariableInputId();
+    const slotKeys = resolveActiveVariableSlotKeys();
+    if (!targetId || !sourceInputId || slotKeys.length === 0) {
+        styleItemVariableLinkState = 'unlinked';
+        styleItemVariableLinkSlots = [];
+        styleItemVariableLinkMessage = '';
+        updateVariableActionButtonsUi();
+        return;
+    }
+    const requestId = ++variableLinkRequestSeq;
+    pendingVariableLinkRequestId = requestId;
+    parent.postMessage({
+        pluginMessage: {
+            type: 'resolve_mark_variable_links',
+            requestId,
+            targetId,
+            sourceInputId,
+            slotKeys
+        }
+    }, '*');
+}
+
+function triggerCreateVariableAction(options?: { autoRecovery?: boolean }) {
+    const context = buildVariableContextForActions();
+    if (!context) return;
+    styleItemVariableActionBusy = true;
+    updateVariableActionButtonsUi();
+    const requestId = ++variableActionRequestSeq;
+    const recoveryKey = buildVariableRecoveryKey(context.targetId, context.sourceInputId);
+    if (options?.autoRecovery) variableAutoRecoveryAttemptedKeys.add(recoveryKey);
+    parent.postMessage({
+        pluginMessage: {
+            type: 'create_mark_variables_for_slots',
+            requestId,
+            targetId: context.targetId,
+            sourceInputId: context.sourceInputId,
+            slotKeys: context.slotKeys,
+            colorHex: context.colorHex,
+            ...(typeof context.opacity === 'number' ? { opacity: context.opacity } : {})
+        }
+    }, '*');
+}
+
+function triggerOverwriteVariableAction() {
+    const context = buildVariableContextForActions();
+    if (!context) return;
+    styleItemVariableActionBusy = true;
+    updateVariableActionButtonsUi();
+    const requestId = ++variableActionRequestSeq;
+    parent.postMessage({
+        pluginMessage: {
+            type: 'overwrite_mark_variable_slots',
+            requestId,
+            targetId: context.targetId,
+            sourceInputId: context.sourceInputId,
+            slotKeys: context.slotKeys,
+            colorHex: context.colorHex,
+            ...(typeof context.opacity === 'number' ? { opacity: context.opacity } : {})
+        }
+    }, '*');
+}
+
+function applyResolvedSlotMap(slots: VariableLinkSlotInfo[]) {
+    if (!Array.isArray(slots) || slots.length === 0) return;
+    const next = { ...(state.markVariableSlotMap || {}) };
+    slots.forEach((slot) => {
+        if (slot.id) next[slot.slotKey] = slot.id;
+        else delete next[slot.slotKey];
+    });
+    state.markVariableSlotMap = next;
+}
+
+function resolveVariableLinkUiState(slots: VariableLinkSlotInfo[]): { state: VariableLinkUiState; message: string } {
+    if (slots.length === 0) {
+        return { state: 'unlinked', message: 'No variable slots detected for this input.' };
+    }
+    const ids = slots.map((slot) => slot.id).filter((id): id is string => Boolean(id));
+    if (ids.length === 0) {
+        return { state: 'unlinked', message: 'No linked variable. Create Variable to start.' };
+    }
+    const hasMissing = slots.some((slot) => slot.id && !slot.exists);
+    const hasRemoteLocked = slots.some((slot) => slot.exists && slot.remote);
+    const hasForeign = slots.some((slot) => slot.exists && !slot.remote && !slot.owned);
+    const hasOwned = slots.some((slot) => slot.exists && !slot.remote && slot.owned);
+    const hasInvalidType = slots.some((slot) => slot.exists && slot.resolvedType !== null && slot.resolvedType !== 'COLOR');
+    const hasUnlinked = slots.some((slot) => !slot.id);
+
+    if (hasMissing && !hasRemoteLocked && !hasForeign && !hasOwned && !hasInvalidType) {
+        return { state: 'missing', message: 'Linked variable not found. Create Variable is recommended.' };
+    }
+    if (hasRemoteLocked && !hasMissing && !hasForeign && !hasOwned && !hasInvalidType) {
+        return { state: 'remote-locked', message: 'Remote variable is read-only. Create Variable to detach locally.' };
+    }
+    if (hasOwned && !hasMissing && !hasRemoteLocked && !hasForeign && !hasInvalidType && !hasUnlinked) {
+        return { state: 'owned', message: 'This input is linked to a variable owned by this chart.' };
+    }
+    if (hasForeign && !hasMissing && !hasRemoteLocked && !hasOwned && !hasInvalidType && !hasUnlinked) {
+        return { state: 'foreign-linked', message: 'Linked variable belongs to another chart. Create Variable to detach.' };
+    }
+    return { state: 'mixed', message: 'Variable links are mixed across slots. Create Variable to normalize.' };
+}
+
+function updateVariableLinkStateFromSlots(slots: VariableLinkSlotInfo[]) {
+    styleItemVariableLinkSlots = Array.isArray(slots) ? slots.slice() : [];
+    const resolved = resolveVariableLinkUiState(styleItemVariableLinkSlots);
+    styleItemVariableLinkState = resolved.state;
+    styleItemVariableLinkMessage = resolved.message;
+    const distinctExistingIds = Array.from(new Set(
+        styleItemVariableLinkSlots
+            .filter((slot) => slot.id && slot.exists && slot.resolvedType === 'COLOR')
+            .map((slot) => slot.id as string)
+    ));
+    if (distinctExistingIds.length === 1) {
+        styleItemPopoverSelectedStyleId = distinctExistingIds[0];
+        styleItemPopoverVariableEligible = true;
+    } else if (distinctExistingIds.length === 0) {
+        styleItemPopoverSelectedStyleId = null;
+        styleItemPopoverVariableEligible = false;
+    } else {
+        styleItemPopoverSelectedStyleId = null;
+        styleItemPopoverVariableEligible = true;
+    }
+    updateVariableActionButtonsUi();
+}
+
+export function handleMarkVariableLinksResolvedMessage(msg: any) {
+    if (!isMarkVariablePopoverContext()) return;
+    const requestId = Number(msg?.requestId);
+    if (!Number.isFinite(requestId) || pendingVariableLinkRequestId !== Number(requestId)) return;
+    pendingVariableLinkRequestId = null;
+    const slots = Array.isArray(msg?.slots) ? msg.slots : [];
+    const normalizedSlots: VariableLinkSlotInfo[] = slots.map((slot: any) => ({
+        slotKey: typeof slot?.slotKey === 'string' ? slot.slotKey : '',
+        id: typeof slot?.id === 'string' && slot.id.trim() ? slot.id : null,
+        exists: Boolean(slot?.exists),
+        remote: Boolean(slot?.remote),
+        owned: Boolean(slot?.owned),
+        name: typeof slot?.name === 'string' ? slot.name : null,
+        resolvedType: typeof slot?.resolvedType === 'string' ? slot.resolvedType : null
+    })).filter((slot: VariableLinkSlotInfo) => Boolean(slot.slotKey));
+    applyResolvedSlotMap(normalizedSlots);
+    updateVariableLinkStateFromSlots(normalizedSlots);
+    syncAllHexPreviewsFromDom();
+}
+
+export function handleMarkVariableOverwriteResultMessage(msg: any): { toast?: string } {
+    styleItemVariableActionBusy = false;
+    updateVariableActionButtonsUi();
+    const slots = Array.isArray(msg?.slots) ? msg.slots : [];
+    const normalizedSlots: VariableLinkSlotInfo[] = slots.map((slot: any) => ({
+        slotKey: typeof slot?.slotKey === 'string' ? slot.slotKey : '',
+        id: typeof slot?.id === 'string' && slot.id.trim() ? slot.id : null,
+        exists: Boolean(slot?.exists),
+        remote: Boolean(slot?.remote),
+        owned: Boolean(slot?.owned),
+        name: typeof slot?.name === 'string' ? slot.name : null,
+        resolvedType: typeof slot?.resolvedType === 'string' ? slot.resolvedType : null
+    })).filter((slot: VariableLinkSlotInfo) => Boolean(slot.slotKey));
+    if (normalizedSlots.length > 0) {
+        applyResolvedSlotMap(normalizedSlots);
+        updateVariableLinkStateFromSlots(normalizedSlots);
+    } else {
+        requestMarkVariableLinkState();
+    }
+    const code = typeof msg?.code === 'string' ? msg.code : '';
+    if (code === 'NOT_FOUND') {
+        const targetId = typeof msg?.targetId === 'string' ? msg.targetId : '';
+        const sourceInputId = typeof msg?.sourceInputId === 'string' ? msg.sourceInputId : '';
+        const recoveryKey = buildVariableRecoveryKey(targetId, sourceInputId);
+        if (targetId && sourceInputId && !variableAutoRecoveryAttemptedKeys.has(recoveryKey)) {
+            triggerCreateVariableAction({ autoRecovery: true });
+            return { toast: 'Linked variable was missing. Created a new local variable automatically.' };
+        }
+    }
+    if (!Boolean(msg?.ok) && typeof msg?.reason === 'string' && msg.reason) {
+        return { toast: msg.reason };
+    }
+    return {};
+}
+
+export function handleMarkVariableCreateResultMessage(msg: any): { toast?: string } {
+    styleItemVariableActionBusy = false;
+    updateVariableActionButtonsUi();
+    const slots = Array.isArray(msg?.slots) ? msg.slots : [];
+    const normalizedSlots: VariableLinkSlotInfo[] = slots.map((slot: any) => ({
+        slotKey: typeof slot?.slotKey === 'string' ? slot.slotKey : '',
+        id: typeof slot?.id === 'string' && slot.id.trim() ? slot.id : null,
+        exists: Boolean(slot?.exists),
+        remote: Boolean(slot?.remote),
+        owned: Boolean(slot?.owned),
+        name: typeof slot?.name === 'string' ? slot.name : null,
+        resolvedType: typeof slot?.resolvedType === 'string' ? slot.resolvedType : null
+    })).filter((slot: VariableLinkSlotInfo) => Boolean(slot.slotKey));
+    if (normalizedSlots.length > 0) {
+        applyResolvedSlotMap(normalizedSlots);
+        updateVariableLinkStateFromSlots(normalizedSlots);
+    } else {
+        requestMarkVariableLinkState();
+    }
+    if (!Boolean(msg?.ok) && typeof msg?.reason === 'string' && msg.reason) {
+        return { toast: msg.reason };
+    }
+    return {};
+}
 
 export function initializeStyleColorPicker() {
     if (styleColorPicker || typeof iro === 'undefined') return;
@@ -629,6 +944,7 @@ export function refreshStyleItemModeUi() {
         input.classList.toggle('style-item-color-input-readonly', !canEditColors);
     });
     syncMarkLinkUiState();
+    updateVariableActionButtonsUi();
 }
 
 function syncStyleItemStyleIdUi() {
@@ -661,16 +977,8 @@ export function canApplyStylePopoverColorEdit() {
 }
 
 export function requestPaintStyleColorUpdateIfNeeded(colorHex: string) {
-    if (styleItemPopoverMode !== 'paint_style') return;
-    const styleId = styleItemPopoverSelectedStyleId;
-    if (!styleId) return;
-    const selected = stylePopoverPaintStyles.find((item) => item.id === styleId);
-    if (selected?.remote) return;
-    const next = normalizeHexColorInput(colorHex);
-    if (!next) return;
-    const current = normalizeHexColorInput(selected?.colorHex);
-    if (current && current === next) return;
-    parent.postMessage({ pluginMessage: { type: 'update_color_variable', id: styleId, colorHex: next } }, '*');
+    void colorHex;
+    return;
 }
 
 export function setStyleItemPaintStyleOptions() {
@@ -710,6 +1018,7 @@ export function applyStylePopoverHexInputValue(input: HTMLInputElement) {
     const normalized = normalizeHexColorInput(input.value);
     if (!normalized) {
         input.classList.add('style-color-hex-error');
+        updateVariableActionButtonsUi();
         return;
     }
     input.classList.remove('style-color-hex-error');
@@ -725,6 +1034,7 @@ export function applyStylePopoverHexInputValue(input: HTMLInputElement) {
         syncColumnPopoverStateAndEmit();
         requestPaintStyleColorUpdateIfNeeded(normalized);
         updateStyleItemPopoverPreview();
+        updateVariableActionButtonsUi();
         return;
     }
     const targetInput = input === ui.styleItemSecondaryColorInput
@@ -757,6 +1067,7 @@ export function applyStylePopoverHexInputValue(input: HTMLInputElement) {
     syncStyleDraftFromDomAndEmit();
     requestPaintStyleColorUpdateIfNeeded(normalized);
     updateStyleItemPopoverPreview();
+    updateVariableActionButtonsUi();
 }
 
 export function applySelectedPaintStyleColor() {
@@ -1113,6 +1424,8 @@ export function openStyleItemPopoverInternal(
     ui.styleItemPopover.classList.remove('hidden');
     syncStyleItemPopoverFromConfig(config);
     positionStyleItemPopover(anchorRect);
+    requestMarkVariableLinkState();
+    updateVariableActionButtonsUi();
     return true;
 }
 
@@ -1153,6 +1466,11 @@ export function closeStyleItemPopover(options: { commit: boolean }) {
     styleItemPopoverNavigator = null;
     styleItemPopoverSessionSnapshot = null;
     styleItemPopoverVariableEligible = false;
+    styleItemVariableActionBusy = false;
+    styleItemVariableLinkState = 'unlinked';
+    styleItemVariableLinkSlots = [];
+    styleItemVariableLinkMessage = '';
+    pendingVariableLinkRequestId = null;
     ui.styleItemPopover.classList.add('hidden');
     ui.styleItemNavRow.classList.add('hidden');
     setStylePopoverLinkedColumn(null);
@@ -1161,6 +1479,7 @@ export function closeStyleItemPopover(options: { commit: boolean }) {
     if (!options.commit && sessionSnapshot) {
         restorePopoverSessionSnapshot(sessionSnapshot);
     }
+    updateVariableActionButtonsUi();
     return true;
 }
 
@@ -1178,6 +1497,7 @@ export function setStylePopoverPaintStyles(list: PaintStyleSelection[]) {
     if (styleItemPopoverOpen) {
         setStyleItemPaintStyleOptions();
         refreshStyleItemModeUi();
+        requestMarkVariableLinkState();
     }
     syncAllHexPreviewsFromDom();
 }
@@ -1318,6 +1638,12 @@ export function bindStylePopoverEvents() {
                 }
             }));
         }
+    });
+    ui.styleItemOverwriteBtn.addEventListener('click', () => {
+        triggerOverwriteVariableAction();
+    });
+    ui.styleItemCreateVariableBtn.addEventListener('click', () => {
+        triggerCreateVariableAction();
     });
     ui.styleItemCancelBtn.addEventListener('click', () => {
         closeStyleItemPopover({ commit: false });

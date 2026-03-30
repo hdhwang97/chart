@@ -34,7 +34,7 @@ import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
 import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData, submitVariablesOnly } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
-import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncLineMarkThicknessFromStrokeWidth, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
+import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, handleMarkVariableCreateResultMessage, handleMarkVariableLinksResolvedMessage, handleMarkVariableOverwriteResultMessage, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncLineMarkThicknessFromStrokeWidth, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection, UpdateType } from '../shared/style-types';
 import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
@@ -78,10 +78,45 @@ function resolveSubmissionUpdateType(): UpdateType {
     return 'both';
 }
 
+function showTransientErrorToast(message: string) {
+    const toast = ui.errorToast;
+    const msgNode = toast.querySelector('span');
+    if (msgNode) {
+        msgNode.textContent = message;
+    }
+    toast.classList.remove('hidden');
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+    });
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(8px)';
+        setTimeout(() => toast.classList.add('hidden'), 300);
+    }, 3000);
+}
+
 function submitVariablesOnlyIfEditableTarget() {
     if (state.uiMode !== 'edit') return;
     if (!state.activeTargetId) return;
     submitVariablesOnly();
+}
+
+function runStyleVariableAction(mode: 'overwrite' | 'create') {
+    commitStyleColorPopoverIfOpen();
+    if (state.uiMode !== 'edit' || !state.activeTargetId) {
+        showTransientErrorToast('Edit 모드에서 차트를 선택한 뒤 실행해주세요.');
+        return;
+    }
+    if (mode === 'overwrite') {
+        submitVariablesOnly({ colorsOnly: true });
+        return;
+    }
+    state.variableUpdateMode = mode;
+    submitData({ force: true, updateType: 'style' });
+    if (mode === 'create') {
+        state.variableUpdateMode = 'overwrite';
+    }
 }
 
 function getBarLabelSourceLabel(source: 'row' | 'y'): string {
@@ -1486,7 +1521,22 @@ function handlePluginMessage(msg: any) {
         window.alert(msg.reason || 'Paint Style 처리 중 오류가 발생했습니다.');
     }
     if (msg.type === 'color_variable_error') {
-        window.alert(msg.reason || 'Color Variable 처리 중 오류가 발생했습니다.');
+        showTransientErrorToast(msg.reason || 'Color Variable 처리 중 오류가 발생했습니다.');
+    }
+    if (msg.type === 'mark_variable_links_resolved') {
+        handleMarkVariableLinksResolvedMessage(msg);
+    }
+    if (msg.type === 'mark_variable_slots_overwritten') {
+        const handled = handleMarkVariableOverwriteResultMessage(msg);
+        if (handled.toast) {
+            showTransientErrorToast(handled.toast);
+        }
+    }
+    if (msg.type === 'mark_variable_slots_created') {
+        const handled = handleMarkVariableCreateResultMessage(msg);
+        if (handled.toast) {
+            showTransientErrorToast(handled.toast);
+        }
     }
     if (msg.type === 'style_template_saved') {
         state.styleTemplateOverwritePendingId = null;
@@ -1895,8 +1945,11 @@ function bindUiEvents() {
     ui.styleLineBackgroundVisibleInput.addEventListener('change', () => {
         updateLineFeatureToggleUi();
     });
-    ui.styleVariableUpdateModeInput.addEventListener('change', () => {
-        state.variableUpdateMode = ui.styleVariableUpdateModeInput.value === 'create' ? 'create' : 'overwrite';
+    ui.styleVariableOverwriteBtn.addEventListener('click', () => {
+        runStyleVariableAction('overwrite');
+    });
+    ui.styleVariableCreateBtn.addEventListener('click', () => {
+        runStyleVariableAction('create');
     });
     ui.styleAssistLineToggleBtn.addEventListener('click', () => {
         setAssistLineVisible(!state.assistLineVisible);
@@ -2101,46 +2154,16 @@ function bindUiEvents() {
     });
     document.addEventListener('style-popover-saved', ((event: Event) => {
         const custom = event as CustomEvent<{ target?: string | null; sourceInputId?: string | null }>;
-        const savedTarget = custom.detail?.target;
-        const sourceInputId = custom.detail?.sourceInputId || null;
-        if (state.uiMode !== 'edit' || !state.activeTargetId) return;
-        const markScopedInputIds = new Set<string>([
-            ui.styleMarkFillColorInput.id,
-            ui.styleMarkStrokeColorInput.id,
-            ui.styleMarkLinePointStrokeInput.id,
-            ui.styleMarkLinePointFillInput.id,
-            ui.styleMarkLineBackgroundColorInput.id
-        ]);
-        const isMarkScopedInputPopover = savedTarget === 'input-color'
-            && typeof sourceInputId === 'string'
-            && markScopedInputIds.has(sourceInputId);
-        if (savedTarget === 'mark' || isMarkScopedInputPopover) {
-            submitVariablesOnly();
-            return;
-        }
-        submitData({ force: true, updateType: 'style' });
+        void custom;
     }) as EventListener);
     document.addEventListener('style-draft-updated', ((event: Event) => {
         const custom = event as CustomEvent<{ sourceInputId?: string | null }>;
-        const sourceInputId = custom.detail?.sourceInputId || null;
+        void custom;
         renderGrid();
         renderPreview();
         renderStylePreview();
         refreshExportPreview();
         updateLineFeatureToggleUi();
-        const markNumberVariableInputIds = new Set<string>([
-            ui.styleMarkThicknessInput.id,
-            ui.styleMarkLinePointThicknessInput.id,
-            ui.styleMarkLinePointPaddingInput.id
-        ]);
-        if (
-            sourceInputId
-            && markNumberVariableInputIds.has(sourceInputId)
-            && state.uiMode === 'edit'
-            && Boolean(state.activeTargetId)
-        ) {
-            submitVariablesOnly();
-        }
     }) as EventListener);
     document.addEventListener('line-feature-state-updated', () => {
         updateLineFeatureToggleUi();
@@ -2249,7 +2272,6 @@ function initializeUi() {
     ensureRowColorsLength(state.rows);
     ensureColHeaderColorEnabledLength(getGridColsForChart(state.chartType, state.cols));
     initializeStyleTabDraft({}, {});
-    ui.styleVariableUpdateModeInput.value = state.variableUpdateMode;
     initializeRowColorPicker();
     if (!rowColorPicker) {
         console.warn('[ui][row-color] iro.js is not available. Falling back to HEX input only.');
