@@ -610,12 +610,17 @@ export function syncMarkLinkUiState() {
 }
 
 export function refreshStyleItemModeUi() {
-    const isHex = styleItemPopoverMode === 'hex';
-    const canEditColors = isHex || (styleItemPopoverVariableEligible && styleItemPopoverMode === 'paint_style' && Boolean(styleItemPopoverSelectedStyleId));
     const hasStyleId = styleItemPopoverVariableEligible && Boolean(styleItemPopoverSelectedStyleId);
+    const variableLocked = hasStyleId;
+    if (variableLocked && styleItemPopoverMode !== 'paint_style') {
+        styleItemPopoverMode = 'paint_style';
+    }
+    const isHex = styleItemPopoverMode === 'hex';
+    const canEditColors = isHex || (styleItemPopoverVariableEligible && styleItemPopoverMode === 'paint_style' && hasStyleId);
     ui.styleItemModeTabHex.classList.toggle('is-active', isHex);
     ui.styleItemModeTabStyle.classList.toggle('is-active', !isHex);
-    ui.styleItemModeTabs.classList.toggle('hidden', !styleItemPopoverVariableEligible);
+    ui.styleItemModeTabHex.classList.toggle('hidden', variableLocked);
+    ui.styleItemModeTabs.classList.add('hidden');
     ui.styleItemStyleRow.classList.toggle('hidden', !hasStyleId);
     syncStyleItemStyleIdUi();
 
@@ -775,7 +780,8 @@ export function applyQuickSwatchColor(hex: string) {
     if (!styleItemPopoverOpen) return;
     const normalized = normalizeHexColorInput(hex);
     if (!normalized) return;
-    if (styleItemPopoverMode !== 'hex') {
+    const hasLinkedVariable = styleItemPopoverVariableEligible && Boolean(styleItemPopoverSelectedStyleId);
+    if (styleItemPopoverMode !== 'hex' && !hasLinkedVariable) {
         styleItemPopoverMode = 'hex';
         refreshStyleItemModeUi();
         syncMarkVariableModeState();
@@ -1179,6 +1185,9 @@ export function setStylePopoverPaintStyles(list: PaintStyleSelection[]) {
 export function bindStylePopoverEvents() {
     ui.styleItemPopover.addEventListener('click', (e) => e.stopPropagation());
     ui.styleItemModeTabHex.addEventListener('click', () => {
+        if (styleItemPopoverVariableEligible && styleItemPopoverSelectedStyleId) {
+            return;
+        }
         styleItemPopoverMode = 'hex';
         refreshStyleItemModeUi();
         syncMarkVariableModeState();
