@@ -157,6 +157,7 @@ export const state = {
     colHeaderColorModes: [] as ColorMode[],
     colHeaderPaintStyleIds: [] as Array<string | null>,
     colHeaderColorEnabled: [] as boolean[],
+    markVariableSlotMap: {} as Record<string, string>,
     markColorSource: 'row' as 'row' | 'col',
     assistLineVisible: false,
     assistLineEnabled: { min: false, max: false, avg: false, ctr: false },

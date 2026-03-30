@@ -1,8 +1,10 @@
 import { type MarkStyleInjectionDraftItem } from './state';
 import { clampOpacityPercent, cloneDraft, ensureMarkDraftSeriesCount, getActiveMarkDraft, setActiveMarkStrokeLinked, isActiveMarkStrokeLinked, toHex6FromRgb } from './style-normalization';
 import { emitStyleDraftUpdated, getHexPreviewElement, getHexPreviewFallback, getStyleColorInputs, getStyleFormInputsForSnapshot, hydrateStyleTab, markStyleInjectionDirty, resolveStyleColorLabel, setStyleInjectionDraft, syncAllHexPreviewsFromDom, syncStyleDraftFromDomAndEmit, updateHexPreview } from './style-tab';
-import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, getGridColsForChart, getRowColor, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, setLocalStyleOverrideField, state } from './state';
+import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, setLocalStyleOverrideField, state } from './state';
 import { ui } from './dom';
+import { isMarkColorInputId, resolveMarkVariableStyleIdForInputId, setMarkVariableStyleIdForInputId } from './mark-variable';
+import { formatColorVariableDisplayName } from './variable-display';
 
 import type { ColorMode, PaintStyleSelection } from '../shared/style-types';
 import type { StylePreviewTarget } from './preview';
@@ -61,10 +63,13 @@ type PopoverSessionSnapshot = {
     styleInjectionDraft: any;
     markStylesDraft: any[];
     rowColors: string[];
+    rowColorModes: ColorMode[];
+    rowPaintStyleIds: Array<string | null>;
     colHeaderColors: string[];
     colHeaderColorEnabled: boolean[];
     colHeaderColorModes: ColorMode[];
     colHeaderPaintStyleIds: Array<string | null>;
+    markVariableSlotMap: Record<string, string>;
     activeMarkStyleIndex: number;
     markStrokeLinkByIndex: boolean[];
     markStrokeSidesByIndex: Array<{ top: boolean; left: boolean; right: boolean }>;
@@ -92,6 +97,7 @@ export let styleItemPopoverColumnIndex: number | null = null;
 export let styleItemPopoverNavigator: PopoverNavigatorState | null = null;
 export let styleItemPopoverSessionSnapshot: PopoverSessionSnapshot | null = null;
 export let suppressOutsideCloseFromInsidePointerDown = false;
+export let styleItemPopoverVariableEligible = false;
 export const styleItemPopoverSegmentIndexCache: Record<PopoverSegment, number> = {
     mark: 0,
     column: 0,
@@ -244,10 +250,13 @@ export function buildPopoverSessionSnapshot(): PopoverSessionSnapshot {
         styleInjectionDraft: cloneDraft(state.styleInjectionDraft),
         markStylesDraft: cloneMarkStylesDraft(state.markStylesDraft),
         rowColors: state.rowColors.slice(),
+        rowColorModes: state.rowColorModes.slice(),
+        rowPaintStyleIds: state.rowPaintStyleIds.slice(),
         colHeaderColors: state.colHeaderColors.slice(),
         colHeaderColorEnabled: state.colHeaderColorEnabled.slice(),
         colHeaderColorModes: state.colHeaderColorModes.slice(),
         colHeaderPaintStyleIds: state.colHeaderPaintStyleIds.slice(),
+        markVariableSlotMap: { ...(state.markVariableSlotMap || {}) },
         activeMarkStyleIndex: state.activeMarkStyleIndex,
         markStrokeLinkByIndex: cloneMarkStrokeLinks(state.markStrokeLinkByIndex),
         markStrokeSidesByIndex: cloneMarkStrokeSides(state.markStrokeSidesByIndex as Array<{ top?: boolean; left?: boolean; right?: boolean }>)
@@ -261,10 +270,13 @@ export function restorePopoverSessionSnapshot(snapshot: PopoverSessionSnapshot) 
     state.markStrokeSidesByIndex = cloneMarkStrokeSides(snapshot.markStrokeSidesByIndex);
     state.activeMarkStyleIndex = Math.max(0, Math.min(snapshot.activeMarkStyleIndex, Math.max(0, state.markStylesDraft.length - 1)));
     state.rowColors = snapshot.rowColors.slice();
+    state.rowColorModes = snapshot.rowColorModes.slice();
+    state.rowPaintStyleIds = snapshot.rowPaintStyleIds.slice();
     state.colHeaderColors = snapshot.colHeaderColors.slice();
     state.colHeaderColorEnabled = snapshot.colHeaderColorEnabled.slice();
     state.colHeaderColorModes = snapshot.colHeaderColorModes.slice();
     state.colHeaderPaintStyleIds = snapshot.colHeaderPaintStyleIds.slice();
+    state.markVariableSlotMap = { ...(snapshot.markVariableSlotMap || {}) };
     setStyleInjectionDraft(cloneDraft(snapshot.styleInjectionDraft));
     hydrateStyleTab(state.styleInjectionDraft);
     emitStyleDraftUpdated();
@@ -310,6 +322,92 @@ export function getActiveColumnOverrideIndex() {
     }
     const cached = styleItemPopoverSegmentIndexCache.column ?? 0;
     return Math.max(0, Math.min(totalCols - 1, Math.floor(cached)));
+}
+
+function resolveMarkVariableInputId(target: StyleItemPopoverTarget, sourceInput?: HTMLInputElement | null) {
+    if (target === 'input-color') {
+        return sourceInput?.id || null;
+    }
+    if (target === 'mark') {
+        return styleItemPopoverConfig?.primaryInput?.id || null;
+    }
+    return null;
+}
+
+function getPopoverVariableState(
+    target: StyleItemPopoverTarget,
+    sourceInput?: HTMLInputElement | null,
+    colIndex?: number
+): { eligible: boolean; mode: ColorMode; styleId: string | null } {
+    if (target === 'mark') {
+        const inputId = resolveMarkVariableInputId(target, sourceInput || null);
+        const variableState = resolveMarkVariableStyleIdForInputId(inputId);
+        const hasStyleId = Boolean(variableState.styleId);
+        return { eligible: hasStyleId, mode: hasStyleId ? 'paint_style' : 'hex', styleId: variableState.styleId };
+    }
+    if (target === 'column' && Number.isFinite(colIndex)) {
+        const snapshot = getColumnPopoverSnapshot(Number(colIndex));
+        if (snapshot.mode === 'paint_style' && snapshot.styleId) {
+            return { eligible: true, mode: 'paint_style', styleId: snapshot.styleId };
+        }
+        return { eligible: true, mode: 'hex', styleId: null };
+    }
+    if (target === 'input-color' && isMarkColorInputId(sourceInput?.id || null)) {
+        const inputId = resolveMarkVariableInputId(target, sourceInput || null);
+        const variableState = resolveMarkVariableStyleIdForInputId(inputId);
+        const hasStyleId = Boolean(variableState.styleId);
+        return { eligible: hasStyleId, mode: hasStyleId ? 'paint_style' : 'hex', styleId: variableState.styleId };
+    }
+    return { eligible: false, mode: 'hex', styleId: null };
+}
+
+function syncMarkVariableModeState() {
+    const isMarkPopover = styleItemPopoverTarget === 'mark'
+        || (styleItemPopoverTarget === 'input-color' && isMarkColorInputId(styleItemPopoverSourceInput?.id || null));
+    if (!isMarkPopover) return;
+
+    const inputId = resolveMarkVariableInputId(styleItemPopoverTarget as StyleItemPopoverTarget, styleItemPopoverSourceInput);
+    const isPrimaryPaletteInput = state.chartType === 'line'
+        ? inputId === ui.styleMarkStrokeColorInput.id
+        : inputId === ui.styleMarkFillColorInput.id;
+
+    if (inputId) {
+        if (styleItemPopoverMode === 'paint_style' && styleItemPopoverSelectedStyleId) {
+            setMarkVariableStyleIdForInputId(inputId, styleItemPopoverSelectedStyleId);
+        } else {
+            setMarkVariableStyleIdForInputId(inputId, null);
+        }
+    }
+
+    if (!isPrimaryPaletteInput) {
+        syncAllHexPreviewsFromDom();
+        return;
+    }
+
+    const rowCount = Math.max(1, state.rows);
+    const rowModes = ensureRowColorModesLength(rowCount);
+    const rowPaintStyleIds = ensureRowPaintStyleIdsLength(rowCount);
+    const seriesIndex = Math.max(0, Math.floor(state.activeMarkStyleIndex));
+    const rowIndex = (state.chartType === 'stackedBar' || state.chartType === 'stacked')
+        ? Math.max(0, Math.min(rowCount - 1, seriesIndex + 1))
+        : Math.max(0, Math.min(rowCount - 1, seriesIndex));
+
+    if (styleItemPopoverMode === 'paint_style') {
+        rowModes[rowIndex] = 'paint_style';
+        if (styleItemPopoverSelectedStyleId) {
+            rowPaintStyleIds[rowIndex] = styleItemPopoverSelectedStyleId;
+        }
+    } else {
+        rowModes[rowIndex] = 'hex';
+        rowPaintStyleIds[rowIndex] = null;
+    }
+
+    if (state.isInstanceTarget) {
+        setLocalStyleOverrideField('rowColorModes', rowModes.slice());
+        setLocalStyleOverrideField('rowPaintStyleIds', rowPaintStyleIds.slice());
+        recomputeEffectiveStyleSnapshot();
+    }
+    syncAllHexPreviewsFromDom();
 }
 
 export function syncEnableOverrideControl() {
@@ -513,16 +611,42 @@ export function syncMarkLinkUiState() {
 
 export function refreshStyleItemModeUi() {
     const isHex = styleItemPopoverMode === 'hex';
-    const canEditColors = isHex || (styleItemPopoverMode === 'paint_style' && Boolean(styleItemPopoverSelectedStyleId));
+    const canEditColors = isHex || (styleItemPopoverVariableEligible && styleItemPopoverMode === 'paint_style' && Boolean(styleItemPopoverSelectedStyleId));
+    const hasStyleId = styleItemPopoverVariableEligible && Boolean(styleItemPopoverSelectedStyleId);
     ui.styleItemModeTabHex.classList.toggle('is-active', isHex);
     ui.styleItemModeTabStyle.classList.toggle('is-active', !isHex);
-    ui.styleItemStyleRow.classList.toggle('hidden', isHex);
+    ui.styleItemModeTabs.classList.toggle('hidden', !styleItemPopoverVariableEligible);
+    ui.styleItemStyleRow.classList.toggle('hidden', !hasStyleId);
+    syncStyleItemStyleIdUi();
 
     [ui.styleItemPrimaryColorInput, ui.styleItemSecondaryColorInput].forEach((input) => {
         input.readOnly = !canEditColors;
         input.classList.toggle('style-item-color-input-readonly', !canEditColors);
     });
     syncMarkLinkUiState();
+}
+
+function syncStyleItemStyleIdUi() {
+    if (!styleItemPopoverVariableEligible) {
+        ui.styleItemStyleIdRow.classList.add('hidden');
+        ui.styleItemStyleIdText.textContent = '';
+        ui.styleItemStyleIdText.title = '';
+        return;
+    }
+    const styleId = styleItemPopoverSelectedStyleId || '';
+    const hasStyleId = Boolean(styleId);
+    const linked = hasStyleId
+        ? stylePopoverPaintStyles.find((item) => item.id === styleId) || null
+        : null;
+    if (hasStyleId && !linked) {
+        document.dispatchEvent(new CustomEvent('request-color-variable-list'));
+    }
+    const styleName = hasStyleId
+        ? (linked?.name || styleId)
+        : '';
+    ui.styleItemStyleIdRow.classList.toggle('hidden', !hasStyleId);
+    ui.styleItemStyleIdText.textContent = hasStyleId ? styleName : '';
+    ui.styleItemStyleIdText.title = hasStyleId ? styleName : '';
 }
 
 export function canApplyStylePopoverColorEdit() {
@@ -541,24 +665,31 @@ export function requestPaintStyleColorUpdateIfNeeded(colorHex: string) {
     if (!next) return;
     const current = normalizeHexColorInput(selected?.colorHex);
     if (current && current === next) return;
-    parent.postMessage({ pluginMessage: { type: 'update_paint_style_color', id: styleId, colorHex: next } }, '*');
+    parent.postMessage({ pluginMessage: { type: 'update_color_variable', id: styleId, colorHex: next } }, '*');
 }
 
 export function setStyleItemPaintStyleOptions() {
     const select = ui.styleItemStyleSelect;
-    const list = stylePopoverPaintStyles.filter((item) => item.isSolid !== false);
-    if (list.length === 0) {
-        select.innerHTML = '<option value="">No local paint styles</option>';
+    if (!styleItemPopoverVariableEligible) {
+        select.innerHTML = '<option value="">No variable</option>';
         select.disabled = true;
         styleItemPopoverSelectedStyleId = null;
+        return;
+    }
+    const list = stylePopoverPaintStyles.filter((item) => item.isSolid !== false);
+    if (list.length === 0) {
+        select.innerHTML = '<option value="">No local color variables</option>';
+        select.disabled = true;
         return;
     }
     const isColumnTarget = styleItemPopoverTarget === 'column';
     const allowEmptySelection = isColumnTarget;
     select.disabled = false;
-    const optionsHtml = list.map((item) => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+    const optionsHtml = list
+        .map((item) => `<option value="${item.id}">${escapeHtml(formatColorVariableDisplayName(item.name))}</option>`)
+        .join('');
     select.innerHTML = allowEmptySelection
-        ? `<option value="">Select Paint Style</option>${optionsHtml}`
+        ? `<option value="">Select Color Variable</option>${optionsHtml}`
         : optionsHtml;
     const exists = styleItemPopoverSelectedStyleId && list.some((item) => item.id === styleItemPopoverSelectedStyleId);
     const selected = exists
@@ -647,6 +778,10 @@ export function applyQuickSwatchColor(hex: string) {
     if (styleItemPopoverMode !== 'hex') {
         styleItemPopoverMode = 'hex';
         refreshStyleItemModeUi();
+        syncMarkVariableModeState();
+        if (styleItemPopoverTarget === 'column') {
+            syncColumnPopoverStateAndEmit();
+        }
     }
     const canUseSecondary = styleItemPopoverActiveColorField === 'secondary'
         && !ui.styleItemSecondaryColorRow.classList.contains('hidden')
@@ -873,6 +1008,9 @@ export function syncStyleItemPopoverFromConfig(config: StylePopoverConfig) {
     }
 
     setStyleItemPaintStyleOptions();
+    if (styleItemPopoverVariableEligible && styleItemPopoverMode === 'paint_style') {
+        document.dispatchEvent(new CustomEvent('request-color-variable-list'));
+    }
     refreshStyleItemModeUi();
     styleItemPopoverActiveColorField = 'primary';
     if (styleItemPopoverTarget === 'mark' && hasSecondary && isActiveMarkStrokeLinked()) {
@@ -954,17 +1092,13 @@ export function openStyleItemPopoverInternal(
     styleItemPopoverConfig = config;
     styleItemPopoverSourceInput = sourceInput || null;
     styleItemPopoverColumnIndex = null;
+    const variableState = getPopoverVariableState(resolvedTarget, sourceInput || null, resolvedColIndex);
+    styleItemPopoverVariableEligible = variableState.eligible;
+    styleItemPopoverMode = variableState.mode;
+    styleItemPopoverSelectedStyleId = variableState.styleId;
     if (resolvedTarget === 'column' && Number.isFinite(resolvedColIndex)) {
         const snapshot = getColumnPopoverSnapshot(Number(resolvedColIndex));
-        if (snapshot.mode === 'paint_style' && !snapshot.styleId) {
-            snapshot.mode = 'hex';
-        }
         styleItemPopoverColumnIndex = snapshot.colIndex;
-        styleItemPopoverMode = snapshot.mode;
-        styleItemPopoverSelectedStyleId = snapshot.styleId;
-    } else if (!keepSession) {
-        styleItemPopoverMode = 'hex';
-        styleItemPopoverSelectedStyleId = null;
     }
     syncPopoverNavigatorFromTarget(resolvedTarget, seriesIndex, resolvedColIndex);
     styleItemPopoverAnchorRect = anchorRect;
@@ -1012,6 +1146,7 @@ export function closeStyleItemPopover(options: { commit: boolean }) {
     styleItemPopoverAnchorRect = null;
     styleItemPopoverNavigator = null;
     styleItemPopoverSessionSnapshot = null;
+    styleItemPopoverVariableEligible = false;
     ui.styleItemPopover.classList.add('hidden');
     ui.styleItemNavRow.classList.add('hidden');
     setStylePopoverLinkedColumn(null);
@@ -1038,6 +1173,7 @@ export function setStylePopoverPaintStyles(list: PaintStyleSelection[]) {
         setStyleItemPaintStyleOptions();
         refreshStyleItemModeUi();
     }
+    syncAllHexPreviewsFromDom();
 }
 
 export function bindStylePopoverEvents() {
@@ -1045,6 +1181,7 @@ export function bindStylePopoverEvents() {
     ui.styleItemModeTabHex.addEventListener('click', () => {
         styleItemPopoverMode = 'hex';
         refreshStyleItemModeUi();
+        syncMarkVariableModeState();
         if (styleItemPopoverTarget === 'column') {
             syncColumnPopoverStateAndEmit();
         }
@@ -1052,7 +1189,8 @@ export function bindStylePopoverEvents() {
     ui.styleItemModeTabStyle.addEventListener('click', () => {
         styleItemPopoverMode = 'paint_style';
         refreshStyleItemModeUi();
-        document.dispatchEvent(new CustomEvent('request-paint-style-list'));
+        syncMarkVariableModeState();
+        document.dispatchEvent(new CustomEvent('request-color-variable-list'));
         if (styleItemPopoverTarget === 'column') {
             syncColumnPopoverStateAndEmit();
         }
@@ -1060,6 +1198,7 @@ export function bindStylePopoverEvents() {
     ui.styleItemStyleSelect.addEventListener('change', () => {
         styleItemPopoverSelectedStyleId = ui.styleItemStyleSelect.value || null;
         refreshStyleItemModeUi();
+        syncMarkVariableModeState();
         applySelectedPaintStyleColor();
         if (styleItemPopoverTarget === 'column') {
             syncColumnPopoverStateAndEmit();

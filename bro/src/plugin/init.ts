@@ -14,7 +14,7 @@ import { applyStackedBar } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
 import { getGraphHeight, getPlotAreaWidth, getXEmptyHeight } from './drawing/shared';
-import { detectLineSeriesCountInColumns, hasLineBundleStructureInColumns } from './drawing/line-structure';
+import { buildLineBundleMatrix, detectLineSeriesCountInColumns, hasLineBundleStructureInColumns } from './drawing/line-structure';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { PerfTracker, logApplyPerf } from './perf';
 import type {
@@ -552,6 +552,7 @@ export async function syncChartOnResize(
 ) {
     const perf = new PerfTracker();
     const reason = opts?.reason || 'auto-resize';
+    const layoutOnly = reason === 'auto-resize';
     const chartType = node.getPluginData(PLUGIN_DATA_KEYS.CHART_TYPE) || inferChartType(node);
     const chartData = await perf.step('load-chart-data', () => loadChartData(node, chartType));
     if (!chartData.isSaved) return;
@@ -572,6 +573,16 @@ export async function syncChartOnResize(
         } else if (isStacked && Array.isArray(chartData.values)) {
             valuesToUse = chartData.values.slice(1);
         }
+        const precomputedLineCols = chartType === 'line' ? collectColumns(node) : undefined;
+        const precomputedVisibleLineCols = chartType === 'line'
+            ? (precomputedLineCols || []).filter((col) => col.node.visible)
+            : undefined;
+        const precomputedLineMatrix = chartType === 'line'
+            ? buildLineBundleMatrix(
+                precomputedVisibleLineCols || [],
+                Array.isArray(valuesToUse) ? valuesToUse.length : 0
+            )
+            : undefined;
 
         const yMinInput = Number.isFinite(Number(lastYMin)) ? Number(lastYMin) : 0;
         const yMaxInput = lastYMax === '' ? null : (Number.isFinite(Number(lastYMax)) ? Number(lastYMax) : null);
@@ -592,29 +603,29 @@ export async function syncChartOnResize(
         const barLabelSource = resolveBarLabelSourceFromNode(node);
         const yAxisVisible = resolveYAxisVisibleFromNode(node);
         const linePointVisible = chartType === 'line'
-            ? resolveLinePointVisibleFromNode(node)
+            ? resolveLinePointVisibleFromNode(node, precomputedLineCols)
             : true;
         const lineFeature2Enabled = chartType === 'line'
-            ? resolveLineFeature2EnabledFromNode(node)
+            ? resolveLineFeature2EnabledFromNode(node, precomputedLineCols)
             : false;
         const localOverrideState = node.type === 'INSTANCE'
             ? loadLocalStyleOverrides(node)
             : { overrides: {} as LocalStyleOverrides, mask: {} as LocalStyleOverrideMask };
-        const runtimeRowColors = localOverrideState.mask.rowColors ? localOverrideState.overrides.rowColors : undefined;
-        const runtimeRowColorModes = localOverrideState.mask.rowColorModes ? localOverrideState.overrides.rowColorModes : undefined;
-        const runtimeRowPaintStyleIds = localOverrideState.mask.rowPaintStyleIds ? localOverrideState.overrides.rowPaintStyleIds : undefined;
-        const runtimeColColors = localOverrideState.mask.colColors ? localOverrideState.overrides.colColors : undefined;
-        const runtimeColColorModes = localOverrideState.mask.colColorModes ? localOverrideState.overrides.colColorModes : undefined;
-        const runtimeColPaintStyleIds = localOverrideState.mask.colPaintStyleIds ? localOverrideState.overrides.colPaintStyleIds : undefined;
-        const runtimeColEnabled = localOverrideState.mask.colColorEnabled
+        const runtimeRowColors = !layoutOnly && localOverrideState.mask.rowColors ? localOverrideState.overrides.rowColors : undefined;
+        const runtimeRowColorModes = !layoutOnly && localOverrideState.mask.rowColorModes ? localOverrideState.overrides.rowColorModes : undefined;
+        const runtimeRowPaintStyleIds = !layoutOnly && localOverrideState.mask.rowPaintStyleIds ? localOverrideState.overrides.rowPaintStyleIds : undefined;
+        const runtimeColColors = !layoutOnly && localOverrideState.mask.colColors ? localOverrideState.overrides.colColors : undefined;
+        const runtimeColColorModes = !layoutOnly && localOverrideState.mask.colColorModes ? localOverrideState.overrides.colColorModes : undefined;
+        const runtimeColPaintStyleIds = !layoutOnly && localOverrideState.mask.colPaintStyleIds ? localOverrideState.overrides.colPaintStyleIds : undefined;
+        const runtimeColEnabled = !layoutOnly && localOverrideState.mask.colColorEnabled
             ? localOverrideState.overrides.colColorEnabled
             : undefined;
-        const runtimeMarkColorSource = localOverrideState.mask.markColorSource ? localOverrideState.overrides.markColorSource : undefined;
-        const runtimeAssistLineStyle = localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined;
-        const savedMarkStyle = parseSavedMarkStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLE);
-        const savedMarkStyles = parseSavedMarkStylesFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLES);
-        const runtimeMarkStyle = localOverrideState.mask.markStyle ? localOverrideState.overrides.markStyle : undefined;
-        const runtimeMarkStyles = localOverrideState.mask.markStyles ? localOverrideState.overrides.markStyles : undefined;
+        const runtimeMarkColorSource = !layoutOnly && localOverrideState.mask.markColorSource ? localOverrideState.overrides.markColorSource : undefined;
+        const runtimeAssistLineStyle = !layoutOnly && localOverrideState.mask.assistLineStyle ? localOverrideState.overrides.assistLineStyle : undefined;
+        const savedMarkStyle = !layoutOnly ? parseSavedMarkStyleFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLE) : undefined;
+        const savedMarkStyles = !layoutOnly ? parseSavedMarkStylesFromNode(node, PLUGIN_DATA_KEYS.LAST_MARK_STYLES) : undefined;
+        const runtimeMarkStyle = !layoutOnly && localOverrideState.mask.markStyle ? localOverrideState.overrides.markStyle : undefined;
+        const runtimeMarkStyles = !layoutOnly && localOverrideState.mask.markStyles ? localOverrideState.overrides.markStyles : undefined;
         const savedRowHeaderLabels = parseSavedRowHeaderLabelsFromNode(node, PLUGIN_DATA_KEYS.LAST_ROW_HEADER_LABELS);
         const rowCount = Array.isArray(chartData.values) ? chartData.values.length : 1;
         const colCount = chartType === 'stackedBar' || chartType === 'stacked'
@@ -650,19 +661,20 @@ export async function syncChartOnResize(
             lineFeature2Enabled,
             assistLineVisible,
             assistLineEnabled,
-            rowColors: runtimeRowColors ?? resolveRowColorsFromNode(node, chartType, Math.max(1, rowCount)),
-            rowColorModes: runtimeRowColorModes ?? resolveRowColorModesFromNode(node, Math.max(1, rowCount)),
-            rowPaintStyleIds: runtimeRowPaintStyleIds ?? resolveRowPaintStyleIdsFromNode(node, Math.max(1, rowCount)),
-            colColors: runtimeColColors ?? resolveColColorsFromNode(node, Math.max(1, colCount)),
-            colColorModes: runtimeColColorModes ?? resolveColColorModesFromNode(node, Math.max(1, colCount)),
-            colPaintStyleIds: runtimeColPaintStyleIds ?? resolveColPaintStyleIdsFromNode(node, Math.max(1, colCount)),
+            rowColors: layoutOnly ? undefined : (runtimeRowColors ?? resolveRowColorsFromNode(node, chartType, Math.max(1, rowCount))),
+            rowColorModes: layoutOnly ? undefined : (runtimeRowColorModes ?? resolveRowColorModesFromNode(node, Math.max(1, rowCount))),
+            rowPaintStyleIds: layoutOnly ? undefined : (runtimeRowPaintStyleIds ?? resolveRowPaintStyleIdsFromNode(node, Math.max(1, rowCount))),
+            colColors: layoutOnly ? undefined : (runtimeColColors ?? resolveColColorsFromNode(node, Math.max(1, colCount))),
+            colColorModes: layoutOnly ? undefined : (runtimeColColorModes ?? resolveColColorModesFromNode(node, Math.max(1, colCount))),
+            colPaintStyleIds: layoutOnly ? undefined : (runtimeColPaintStyleIds ?? resolveColPaintStyleIdsFromNode(node, Math.max(1, colCount))),
             colColorEnabled: runtimeColEnabled
-                ?? resolveColColorEnabledFromNode(node, Math.max(1, colCount)),
+                ?? (layoutOnly ? undefined : resolveColColorEnabledFromNode(node, Math.max(1, colCount))),
             markColorSource: runtimeMarkColorSource,
             markStyle: runtimeMarkStyle ?? savedMarkStyle ?? undefined,
             markStyles: runtimeMarkStyles ?? savedMarkStyles ?? undefined,
             assistLineStyle: runtimeAssistLineStyle,
             deferLineSegmentStrokeStyling: chartType === 'line',
+            layoutOnly,
             reason
         };
 
@@ -679,7 +691,10 @@ export async function syncChartOnResize(
             } else if (chartType === 'bar') {
                 await applyBar(payload, H, node);
             } else if (chartType === 'line') {
-                const lineResult = await applyLine(payload, H, node);
+                const lineResult = await applyLine(payload, H, node, undefined, {
+                    cols: precomputedVisibleLineCols,
+                    matrix: precomputedLineMatrix
+                });
                 if (!lineResult.ok) {
                     if (lineResult.errorCode === 'cancelled') {
                         return;
@@ -722,7 +737,11 @@ export async function syncChartOnResize(
             }));
         }
         if (hasLocalStyleOverrides && chartType === 'line') {
-            await perf.step('flat-padding-sync', () => syncFlatLineFillBottomPadding(node));
+            await perf.step('flat-padding-sync', () => syncFlatLineFillBottomPadding(
+                node,
+                precomputedVisibleLineCols,
+                precomputedLineMatrix
+            ));
         }
         if (opts?.postPreviewUpdate) {
             await perf.step('post-preview-update', () => figma.ui.postMessage({
@@ -949,6 +968,9 @@ export async function initPluginUI(
             pluginInitReason: opts?.reason || 'selection'
         }
         : undefined;
+    const markVariableSlotMap = parseMarkVariableSlotMap(
+        node.getPluginData(PLUGIN_DATA_KEYS.LAST_MARK_VARIABLE_SLOT_MAP)
+    );
 
     await perf.step('post-message', () => figma.ui.postMessage({
         type: 'init',
@@ -976,6 +998,7 @@ export async function initPluginUI(
         colColorModes,
         colPaintStyleIds,
         colColorEnabled,
+        markVariableSlotMap,
         markColorSource,
         lastStrokeWidth: initStrokeWidth,
         markRatio,

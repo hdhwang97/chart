@@ -60,6 +60,7 @@ let activeColorTarget: { type: 'row' | 'col'; index: number } | null = null;
 let rowColorPicker: any = null;
 let isSyncingFromPicker = false;
 let localPaintStyles: PaintStyleSelection[] = [];
+let localColorVariables: PaintStyleSelection[] = [];
 let rowColorStyleEditMode = false;
 let rowColorDraftHex: string | null = null;
 let rowColorDraftMode: ColorMode | null = null;
@@ -207,6 +208,17 @@ function normalizeIncomingLocalOverrides(value: unknown): LocalStyleOverrides {
     }
     if (Array.isArray(source.rowStrokeStyles)) next.rowStrokeStyles = source.rowStrokeStyles;
     if (source.colStrokeStyle) next.colStrokeStyle = source.colStrokeStyle;
+    return next;
+}
+
+function normalizeIncomingMarkVariableSlotMap(value: unknown): Record<string, string> {
+    if (!value || typeof value !== 'object') return {};
+    const next: Record<string, string> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([slotKey, variableId]) => {
+        if (typeof slotKey !== 'string' || !slotKey.trim()) return;
+        if (typeof variableId !== 'string' || !variableId.trim()) return;
+        next[slotKey] = variableId;
+    });
     return next;
 }
 
@@ -367,6 +379,10 @@ function setPaintStyleIdForTarget(target: { type: 'row' | 'col'; index: number }
 
 function requestPaintStyleList() {
     parent.postMessage({ pluginMessage: { type: 'list_paint_styles' } }, '*');
+}
+
+function requestColorVariableList() {
+    parent.postMessage({ pluginMessage: { type: 'list_color_variables' } }, '*');
 }
 
 function resolveDefaultColorForTarget(target: { type: 'row' | 'col'; index: number }): string {
@@ -1146,6 +1162,7 @@ function handlePluginMessage(msg: any) {
             state.colHeaderColorModes = ['hex', 'hex', 'hex'];
             state.colHeaderPaintStyleIds = [null, null, null];
             state.colHeaderColorEnabled = [false, false, false];
+            state.markVariableSlotMap = {};
             state.markColorSource = 'row';
             state.assistLineVisible = false;
             state.assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
@@ -1198,6 +1215,7 @@ function handlePluginMessage(msg: any) {
             ? Math.max(0, Number(msg.activeTargetIndex))
             : 0;
         state.pendingSwitchTargetId = null;
+        state.markVariableSlotMap = normalizeIncomingMarkVariableSlotMap(msg.markVariableSlotMap);
         state.extractedStyleSnapshot = normalizeIncomingLocalOverrides(msg.extractedStyleSnapshot);
         setLocalStyleOverrideSnapshot(
             normalizeIncomingLocalOverrides(msg.localStyleOverrides),
@@ -1422,10 +1440,22 @@ function handlePluginMessage(msg: any) {
                 remote: Boolean(item?.remote)
             }))
             .filter((item: PaintStyleSelection) => Boolean(item.id) && Boolean(item.name));
-        setStylePopoverPaintStyles(localPaintStyles);
         if (rowColorPopoverOpen && activeColorTarget) {
             updateColorPopoverUi(activeColorTarget, ui.rowColorHexInput.value);
         }
+    }
+    if (msg.type === 'color_variables_loaded') {
+        const incoming = Array.isArray(msg.list) ? msg.list : [];
+        localColorVariables = incoming
+            .map((item: any) => ({
+                id: typeof item?.id === 'string' ? item.id : '',
+                name: typeof item?.name === 'string' ? item.name : '',
+                colorHex: normalizeHexColorInput(item?.colorHex) || '#000000',
+                isSolid: true,
+                remote: Boolean(item?.remote)
+            }))
+            .filter((item: PaintStyleSelection) => Boolean(item.id) && Boolean(item.name));
+        setStylePopoverPaintStyles(localColorVariables);
     }
     if (msg.type === 'paint_style_created') {
         if (!activeColorTarget || !msg.style) return;
@@ -1454,6 +1484,9 @@ function handlePluginMessage(msg: any) {
     }
     if (msg.type === 'paint_style_error') {
         window.alert(msg.reason || 'Paint Style 처리 중 오류가 발생했습니다.');
+    }
+    if (msg.type === 'color_variable_error') {
+        window.alert(msg.reason || 'Color Variable 처리 중 오류가 발생했습니다.');
     }
     if (msg.type === 'style_template_saved') {
         state.styleTemplateOverwritePendingId = null;
@@ -1512,6 +1545,7 @@ function handlePluginMessage(msg: any) {
             }
             state.previewPlotWidth = Number.isFinite(Number(msg.payload.previewPlotWidth)) ? Math.max(0, Number(msg.payload.previewPlotWidth)) : state.previewPlotWidth;
             state.previewPlotHeight = Number.isFinite(Number(msg.payload.previewPlotHeight)) ? Math.max(0, Number(msg.payload.previewPlotHeight)) : state.previewPlotHeight;
+            state.markVariableSlotMap = normalizeIncomingMarkVariableSlotMap(msg.payload.markVariableSlotMap);
             state.extractedStyleSnapshot = normalizeIncomingLocalOverrides(msg.payload.extractedStyleSnapshot);
             setLocalStyleOverrideSnapshot(
                 normalizeIncomingLocalOverrides(msg.payload.localStyleOverrides),
@@ -2058,6 +2092,9 @@ function bindUiEvents() {
     });
     document.addEventListener('request-paint-style-list', () => {
         requestPaintStyleList();
+    });
+    document.addEventListener('request-color-variable-list', () => {
+        requestColorVariableList();
     });
     document.addEventListener('style-popover-saved', ((event: Event) => {
         const custom = event as CustomEvent<{ target?: string | null; sourceInputId?: string | null }>;

@@ -210,6 +210,7 @@ export async function applyStackedBar(
     control?: StackedDrawChunkControl
 ) {
     const { values, mode, markNum, markRatio } = config;
+    const layoutOnly = config?.layoutOnly === true;
     if (!values || values.length === 0) return;
 
     const rowCount = values.length;
@@ -309,7 +310,8 @@ export async function applyStackedBar(
                         mode,
                         config.rowColors,
                         config.rowColorModes,
-                        config.rowPaintStyleIds
+                        config.rowPaintStyleIds,
+                        !layoutOnly
                     );
                     applySegmentResizeModes(subBar);
                     globalDataIdx++;
@@ -337,17 +339,18 @@ export function applySegmentsToBar(
     mode: string,
     rowColors?: string[],
     rowColorModes?: string[],
-    rowPaintStyleIds?: Array<string | null>
+    rowPaintStyleIds?: Array<string | null>,
+    applyStyle = true
 ) {
     if (!('children' in barInstance)) return;
     const segmentByIndex = buildSegmentLayerMap(barInstance);
-    const normalizedRowColors = Array.isArray(rowColors)
+    const normalizedRowColors = applyStyle && Array.isArray(rowColors)
         ? rowColors.map((color) => normalizeHexColor(color))
         : [];
-    const normalizedModes = Array.isArray(rowColorModes)
+    const normalizedModes = applyStyle && Array.isArray(rowColorModes)
         ? rowColorModes.map((value) => value === 'paint_style' ? 'paint_style' : 'hex')
         : [];
-    const normalizedStyleIds = Array.isArray(rowPaintStyleIds)
+    const normalizedStyleIds = applyStyle && Array.isArray(rowPaintStyleIds)
         ? rowPaintStyleIds.map((value) => (typeof value === 'string' && value.trim()) ? value : null)
         : [];
 
@@ -362,18 +365,20 @@ export function applySegmentsToBar(
                 setVisibleIfChanged(targetLayer, false);
             } else {
                 setVisibleIfChanged(targetLayer, true);
-                const rowMode = normalizedModes[r + 1] || 'hex';
-                const rowStyleId = normalizedStyleIds[r + 1];
-                let appliedViaStyleLink = false;
-                if (rowMode === 'paint_style' && rowStyleId) {
-                    if (tryApplyFillStyleLink(targetLayer as SceneNode, rowStyleId)) appliedViaStyleLink = true;
-                    if (tryApplyStrokeStyleLink(targetLayer as SceneNode, rowStyleId)) appliedViaStyleLink = true;
-                }
-                if (!appliedViaStyleLink && rowColor) {
-                    if (!hasSameSolidFill(targetLayer as SceneNode, rowColor)) {
-                        tryApplyFill(targetLayer as SceneNode, rowColor);
+                if (applyStyle) {
+                    const rowMode = normalizedModes[r + 1] || 'hex';
+                    const rowStyleId = normalizedStyleIds[r + 1];
+                    let appliedViaStyleLink = false;
+                    if (rowMode === 'paint_style' && rowStyleId) {
+                        if (tryApplyFillStyleLink(targetLayer as SceneNode, rowStyleId)) appliedViaStyleLink = true;
+                        if (tryApplyStrokeStyleLink(targetLayer as SceneNode, rowStyleId)) appliedViaStyleLink = true;
                     }
-                    tryApplyStroke(targetLayer as SceneNode, rowColor);
+                    if (!appliedViaStyleLink && rowColor) {
+                        if (!hasSameSolidFill(targetLayer as SceneNode, rowColor)) {
+                            tryApplyFill(targetLayer as SceneNode, rowColor);
+                        }
+                        tryApplyStroke(targetLayer as SceneNode, rowColor);
+                    }
                 }
                 let ratio = 0;
                 if (mode === 'raw') {

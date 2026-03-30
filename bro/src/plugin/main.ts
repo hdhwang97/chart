@@ -8,6 +8,7 @@ import { applyStackedBar, syncStackedSegmentPadding } from './drawing/stacked';
 import { applyAssistLines } from './drawing/assist-line';
 import { applyStrokeInjection } from './drawing/stroke-injection';
 import { MarkVariableBinder } from './drawing/mark-variables';
+import { buildLineBundleMatrix } from './drawing/line-structure';
 import { resolveEffectiveYRange } from './drawing/y-range';
 import { getOrImportComponent, initPluginUI, inferChartType, inferStructureFromGraph, syncChartOnResize, type SelectionTargetMeta, type UiInitPerfTrace } from './init';
 import { normalizeHexColor, rgbToHex, traverse } from './utils';
@@ -662,6 +663,63 @@ async function loadLocalPaintStyleSelections(): Promise<PaintStyleSelection[]> {
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 }
 
+function resolveColorVariableHex(variable: Variable, seen = new Set<string>()): string | null {
+    if (variable.resolvedType !== 'COLOR') return null;
+    if (seen.has(variable.id)) return null;
+    seen.add(variable.id);
+    const modeId = resolveVariableModeId(variable);
+    if (!modeId) return null;
+    const valuesByMode = (variable as any).valuesByMode;
+    if (!valuesByMode || typeof valuesByMode !== 'object') return null;
+    const value = valuesByMode[modeId];
+    if (!value || typeof value !== 'object') return null;
+
+    const aliasId = typeof (value as any).id === 'string' ? (value as any).id : null;
+    const aliasType = typeof (value as any).type === 'string' ? (value as any).type : '';
+    if (aliasType === 'VARIABLE_ALIAS' && aliasId) {
+        const alias = figma.variables.getVariableById(aliasId);
+        if (!alias || alias.resolvedType !== 'COLOR') return null;
+        return resolveColorVariableHex(alias, seen);
+    }
+
+    const r = Number((value as any).r);
+    const g = Number((value as any).g);
+    const b = Number((value as any).b);
+    if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return null;
+    return rgbToHex(r, g, b);
+}
+
+function toColorVariableSelection(variable: Variable): PaintStyleSelection {
+    return {
+        id: variable.id,
+        name: variable.name,
+        colorHex: resolveColorVariableHex(variable) || '#000000',
+        isSolid: true,
+        remote: Boolean((variable as any).remote)
+    };
+}
+
+function buildColorVariableValueFromHex(hex: string): RGBA | null {
+    const normalized = normalizeHexColor(hex);
+    if (!normalized) return null;
+    const raw = normalized.slice(1);
+    return {
+        r: parseInt(raw.slice(0, 2), 16) / 255,
+        g: parseInt(raw.slice(2, 4), 16) / 255,
+        b: parseInt(raw.slice(4, 6), 16) / 255,
+        a: 1
+    };
+}
+
+async function loadLocalColorVariableSelections(): Promise<PaintStyleSelection[]> {
+    const variables = figma.variables
+        .getLocalVariables()
+        .filter((item) => item.resolvedType === 'COLOR');
+    return variables
+        .map((variable) => toColorVariableSelection(variable))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
 function resolveColColorEnabledFromNode(node: SceneNode, colCount: number) {
     const raw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_COL_COLOR_ENABLED);
     let saved: any[] = [];
@@ -1158,6 +1216,7 @@ function buildStyleExtractPayloadFromNode(node: SceneNode, chartType: string) {
     const barLabelVisible = resolveBarLabelVisibleFromNode(node);
     const barLabelSource = resolveBarLabelSourceFromNode(node);
     const yAxisVisible = node.getPluginData(PLUGIN_DATA_KEYS.LAST_Y_AXIS_VISIBLE) !== 'false';
+    const markVariableSlotMap = readMarkVariableSlotMapFromNode(node);
     const assistLineEnabledRaw = node.getPluginData(PLUGIN_DATA_KEYS.LAST_ASSIST_LINE_ENABLED);
     let assistLineEnabled = { min: false, max: false, avg: false, ctr: false };
     if (assistLineEnabledRaw) {
@@ -1189,6 +1248,7 @@ function buildStyleExtractPayloadFromNode(node: SceneNode, chartType: string) {
         colColorModes: colColorModesForUi,
         colPaintStyleIds: colPaintStyleIdsForUi,
         colColorEnabled: colColorEnabledForUi,
+        markVariableSlotMap,
         markColorSource,
         xAxisLabelsVisible,
         barLabelVisible,
@@ -1483,6 +1543,9 @@ figma.ui.onmessage = async (msg) => {
             : normalizeUpdateType(updateType);
         const normalizedVariableUpdateMode = normalizeVariableUpdateMode(variableUpdateMode);
         const normalizedMarkVariableSlotMap = parseMarkVariableSlotMap(markVariableSlotMap);
+        const hasIncomingMarkVariableSlotMap =
+            Boolean(msg?.payload)
+            && Object.prototype.hasOwnProperty.call(msg.payload as Record<string, unknown>, 'markVariableSlotMap');
         const normalizedLocalOverrides = normalizeLocalStyleOverrides(localStyleOverrides);
         const normalizedLocalMask = normalizeLocalStyleOverrideMask(localStyleOverrideMask);
         const nodes = figma.currentPage.selection;
@@ -1735,6 +1798,15 @@ figma.ui.onmessage = async (msg) => {
             markStyles: drawMarkStyles,
             deferLineSegmentStrokeStyling: type === 'line'
         };
+        const precomputedLineCols = type === 'line'
+            ? columns.filter((col) => col.node.visible)
+            : undefined;
+        const precomputedLineMatrix = type === 'line'
+            ? buildLineBundleMatrix(
+                precomputedLineCols || [],
+                Array.isArray(drawValues) ? drawValues.length : 0
+            )
+            : undefined;
 
         const lineApplyResult = await perf.step('draw-chart', async () => {
             if (type === "bar") {
@@ -1755,6 +1827,9 @@ figma.ui.onmessage = async (msg) => {
                     chunkSize: APPLY_CHUNK_SIZE_LINE,
                     shouldCancel: isCancelled,
                     yieldControl: nextTick
+                }, {
+                    cols: precomputedLineCols,
+                    matrix: precomputedLineMatrix
                 });
                 if (!result.ok) return result;
                 if (isCancelled()) {
@@ -1822,10 +1897,12 @@ figma.ui.onmessage = async (msg) => {
         });
         }
 
-        let latestMarkVariableSlotMap: Record<string, string> = {
-            ...readMarkVariableSlotMapFromNode(targetNode),
-            ...normalizedMarkVariableSlotMap
-        };
+        let latestMarkVariableSlotMap: Record<string, string> = hasIncomingMarkVariableSlotMap
+            ? { ...normalizedMarkVariableSlotMap }
+            : {
+                ...readMarkVariableSlotMapFromNode(targetNode),
+                ...normalizedMarkVariableSlotMap
+            };
         const sharedVariableBinder = shouldRunStylePass
             ? new MarkVariableBinder({
                 graphNodeId: targetNode.id,
@@ -2029,7 +2106,11 @@ figma.ui.onmessage = async (msg) => {
             return;
         }
         if (shouldRunDataPass && type === 'line') {
-            await perf.step('flat-padding-sync', () => syncFlatLineFillBottomPadding(targetNode, columns));
+            await perf.step('flat-padding-sync', () => syncFlatLineFillBottomPadding(
+                targetNode,
+                precomputedLineCols,
+                precomputedLineMatrix
+            ));
         }
 
         await perf.step('save-and-sync', () => {
@@ -2135,6 +2216,10 @@ figma.ui.onmessage = async (msg) => {
         const list = await loadLocalPaintStyleSelections();
         figma.ui.postMessage({ type: 'paint_styles_loaded', list });
     }
+    else if (msg.type === 'list_color_variables') {
+        const list = await loadLocalColorVariableSelections();
+        figma.ui.postMessage({ type: 'color_variables_loaded', list });
+    }
     else if (msg.type === 'create_paint_style') {
         const name = typeof msg.name === 'string' ? msg.name.trim() : '';
         const paint = buildSolidPaintFromHex(msg.colorHex);
@@ -2191,6 +2276,31 @@ figma.ui.onmessage = async (msg) => {
         (style as PaintStyle).paints = [paint];
         figma.ui.postMessage({ type: 'paint_style_updated', id, colorHex: normalizeHexColor(msg.colorHex) || '#000000' });
         figma.ui.postMessage({ type: 'paint_styles_loaded', list: await loadLocalPaintStyleSelections() });
+    }
+    else if (msg.type === 'update_color_variable') {
+        const id = typeof msg.id === 'string' ? msg.id : '';
+        const colorValue = buildColorVariableValueFromHex(msg.colorHex);
+        if (!id || !colorValue) {
+            figma.ui.postMessage({ type: 'color_variable_error', reason: 'Invalid variable id or color.' });
+            return;
+        }
+        const variable = figma.variables.getVariableById(id);
+        if (!variable || variable.resolvedType !== 'COLOR') {
+            figma.ui.postMessage({ type: 'color_variable_error', reason: 'Color variable not found.' });
+            return;
+        }
+        if (Boolean((variable as any).remote)) {
+            figma.ui.postMessage({ type: 'color_variable_error', reason: 'Remote variable cannot be updated.' });
+            return;
+        }
+        const modeId = resolveVariableModeId(variable);
+        if (!modeId) {
+            figma.ui.postMessage({ type: 'color_variable_error', reason: 'Variable mode not found.' });
+            return;
+        }
+        variable.setValueForMode(modeId, colorValue);
+        figma.ui.postMessage({ type: 'color_variable_updated', id, colorHex: normalizeHexColor(msg.colorHex) || '#000000' });
+        figma.ui.postMessage({ type: 'color_variables_loaded', list: await loadLocalColorVariableSelections() });
     }
     else if (msg.type === 'load_style_templates') {
         const list = await loadStyleTemplates(msg.chartType);

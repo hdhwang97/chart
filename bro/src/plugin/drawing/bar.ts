@@ -277,10 +277,11 @@ function applyBarMarkColor(target: SceneNode, color?: string | null, styleId?: s
 
 export async function applyBar(config: any, H: number, graph: SceneNode, control?: DrawChunkControl) {
     const { values, mode, markNum, reason, markRatio } = config;
+    const layoutOnly = config?.layoutOnly === true;
     const cols = collectColumns(graph);
     if (!Array.isArray(values) || values.length === 0 || !Array.isArray(values[0])) return;
-    const rowHeaderLabels = Array.isArray(config?.rowHeaderLabels) ? config.rowHeaderLabels : [];
-    const rawValues = Array.isArray(config?.rawValues) ? config.rawValues : [];
+    const rowHeaderLabels = !layoutOnly && Array.isArray(config?.rowHeaderLabels) ? config.rowHeaderLabels : [];
+    const rawValues = !layoutOnly && Array.isArray(config?.rawValues) ? config.rawValues : [];
     const barLabelVisible = resolveBarLabelVisible(config);
     const barLabelSource = resolveBarLabelSource(config);
 
@@ -347,7 +348,9 @@ export async function applyBar(config: any, H: number, graph: SceneNode, control
             const clusterLayout = computeClusterLayout(measureWidth, targetRatio, numMarks);
             // Figma 컴포넌트의 'markNum' Variant 속성 변경
             setMarkNumVariantWithFallback(barInst, numMarks);
-            setBarLabelVisibility(barInst, barLabelVisible);
+            if (!layoutOnly) {
+                setBarLabelVisibility(barInst, barLabelVisible);
+            }
             // Variant 변경 직후 인스턴스 내부 레이어가 재구성될 수 있으므로 반드시 재조회한다.
             const barLayerPool = resolveBarMarkLayerPool(barInst);
             // markNum 기준으로 활성 범위 레이어는 항상 visible=true로 강제한다.
@@ -376,7 +379,7 @@ export async function applyBar(config: any, H: number, graph: SceneNode, control
                 const barLayer = findBarLayerByIndex(barLayerPool, targetNum);
 
                 if (barLayer) {
-                    if (barLabelVisible) {
+                    if (!layoutOnly && barLabelVisible) {
                         if (barLabelSource === 'y') {
                             const raw = Array.isArray(rawValues[m]) ? rawValues[m][cIdx] : undefined;
                             const rawText = raw === null || raw === undefined ? '' : String(raw).trim();
@@ -387,9 +390,11 @@ export async function applyBar(config: any, H: number, graph: SceneNode, control
                             applyBarLabelText(barLayer as SceneNode, rowLabel);
                         }
                     }
-                    const markColor = getBarColor(config, m, cIdx);
-                    const markStyleId = getBarStyleId(config, m, cIdx);
-                    applyBarMarkColor(barLayer as SceneNode, markColor, markStyleId);
+                    if (!layoutOnly) {
+                        const markColor = getBarColor(config, m, cIdx);
+                        const markStyleId = getBarStyleId(config, m, cIdx);
+                        applyBarMarkColor(barLayer as SceneNode, markColor, markStyleId);
+                    }
                     if (measureWidth > 0) {
                         try {
                             const barWidthBefore = getNodeContentWidth(barLayer);

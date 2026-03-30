@@ -16,10 +16,12 @@ import {
     type ExtractedStylePayload,
     type SavedStylePayload
 } from './style-normalization';
-import { applyQuickSwatchColor, applySelectedPaintStyleColor, applyStylePopoverHexInputValue, bindStylePopoverEvents, canApplyStylePopoverColorEdit, closeStyleItemPopover, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, normalizePopoverSegmentIndex, openStyleColorPopover, openStyleItemPopover, openStyleItemPopoverWithMeta, positionStyleItemPopover, refreshStyleItemModeUi, setStylePopoverPaintStyles, stepStyleItemPopoverNavigator, styleItemPopoverActiveColorField, styleItemPopoverAnchorRect, styleItemPopoverConfig, styleItemPopoverMode, styleItemPopoverNavigator, styleItemPopoverOpen, styleItemPopoverSegmentIndexCache, styleItemPopoverSelectedStyleId, styleItemPopoverTarget, suppressOutsideCloseFromInsidePointerDown, switchStyleItemPopoverSegment, syncColumnPopoverStateAndEmit, syncMarkLinkUiState, syncPopoverNavigatorUi, syncStyleItemPopoverFromConfig, updateStyleItemPopoverPreview } from './style-popover';
+import { applyQuickSwatchColor, applySelectedPaintStyleColor, applyStylePopoverHexInputValue, bindStylePopoverEvents, canApplyStylePopoverColorEdit, closeStyleItemPopover, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, normalizePopoverSegmentIndex, openStyleColorPopover, openStyleItemPopover, openStyleItemPopoverWithMeta, positionStyleItemPopover, refreshStyleItemModeUi, setStylePopoverPaintStyles, stepStyleItemPopoverNavigator, styleItemPopoverActiveColorField, styleItemPopoverAnchorRect, styleItemPopoverConfig, styleItemPopoverMode, styleItemPopoverNavigator, styleItemPopoverOpen, styleItemPopoverSegmentIndexCache, styleItemPopoverSelectedStyleId, styleItemPopoverTarget, stylePopoverPaintStyles, suppressOutsideCloseFromInsidePointerDown, switchStyleItemPopoverSegment, syncColumnPopoverStateAndEmit, syncMarkLinkUiState, syncPopoverNavigatorUi, syncStyleItemPopoverFromConfig, updateStyleItemPopoverPreview } from './style-popover';
 import { applyTemplateToDraft, bindStyleTemplateEvents, closeTemplateNameEditor, normalizeTemplateNameInput, renderStyleTemplateGallery, requestNewTemplateName, setStyleTemplateList, setStyleTemplateMode } from './style-templates';
 import { ui } from './dom';
 import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, chartTypeUsesMarkFill, chartTypeUsesMarkLineBackground, deriveRowColorsFromMarkStyles, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, seedMarkStylesFromRowColorsIfNeeded, setLocalStyleOverrideField, state, type AssistLineStyleInjectionDraftItem, type GridStyleInjectionDraftItem, type LineBackgroundStyleInjectionDraftItem, type MarkStyleInjectionDraftItem, type StyleInjectionDraft, type StyleInjectionDraftItem } from './state';
+import { resolveMarkVariableStyleIdForInputId } from './mark-variable';
+import { formatColorVariableDisplayName } from './variable-display';
 import { setStylePreviewHoverTarget, type StylePreviewTarget } from './preview';
 
 const THICKNESS_MIN = 0;
@@ -42,6 +44,7 @@ const STYLE_CARD_LINKED_HOVER_CLASS = 'is-preview-linked-hover';
 let styleSettingCardHoverBound = false;
 let styleSettingCardsByTargetCache: Map<StylePreviewTarget, HTMLElement[]> | null = null;
 let activeStyleSettingHoverCards: HTMLElement[] = [];
+let markVariableStyleListRequested = false;
 
 function markFillEnabled() {
     return chartTypeUsesMarkFill(state.chartType);
@@ -398,12 +401,61 @@ export function updateHexPreview(input: HTMLInputElement, swatch: HTMLElement, f
     swatch.title = color;
 }
 
+export function syncMarkVariableNameDisplay() {
+    const labelNodes = Array.from(document.querySelectorAll<HTMLElement>('[data-style-variable-name-for]'));
+    if (labelNodes.length === 0) return;
+
+    labelNodes.forEach((label) => {
+        const inputId = label.dataset.styleVariableNameFor;
+        if (!inputId || !inputId.startsWith('style-mark-')) return;
+        const input = document.getElementById(inputId) as HTMLInputElement | null;
+        if (!input) return;
+
+        const variableState = resolveMarkVariableStyleIdForInputId(inputId);
+        const styleId = variableState.styleId;
+        const linkedStyle = styleId
+            ? stylePopoverPaintStyles.find((item) => item.id === styleId) || null
+            : null;
+        if (styleId && !linkedStyle && !markVariableStyleListRequested) {
+            markVariableStyleListRequested = true;
+            document.dispatchEvent(new CustomEvent('request-color-variable-list'));
+        } else if (linkedStyle) {
+            markVariableStyleListRequested = false;
+        }
+
+        const showVariableName = Boolean(styleId);
+        const styleName = styleId
+            ? (linkedStyle ? formatColorVariableDisplayName(linkedStyle.name) : styleId)
+            : '';
+        const wrapper = input.closest<HTMLElement>('.hex-input-with-preview');
+        label.classList.toggle('hidden', !showVariableName);
+        label.textContent = showVariableName ? styleName : '';
+        if (wrapper) {
+            wrapper.classList.toggle('is-variable-mode', showVariableName);
+        }
+        if (showVariableName) {
+            input.style.setProperty('color', 'transparent', 'important');
+            input.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
+            input.style.setProperty('caret-color', 'transparent', 'important');
+            input.style.setProperty('text-shadow', 'none', 'important');
+        } else {
+            input.style.removeProperty('color');
+            input.style.removeProperty('-webkit-text-fill-color');
+            input.style.removeProperty('caret-color');
+            input.style.removeProperty('text-shadow');
+        }
+        input.readOnly = showVariableName;
+        input.title = showVariableName ? styleName : '';
+    });
+}
+
 export function syncAllHexPreviewsFromDom() {
     getStyleColorInputs().forEach((input) => {
         const swatch = getHexPreviewElement(input);
         if (!swatch) return;
         updateHexPreview(input, swatch, getHexPreviewFallback(input));
     });
+    syncMarkVariableNameDisplay();
 }
 
 export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSelectElement> {

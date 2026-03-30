@@ -6,6 +6,7 @@ import {
     buildLineBundleMatrix,
     detectLineSeriesCountInColumns,
     type LineBundle,
+    type LineBundleMatrix,
     type LineStructureIssue,
     type LineStructureIssueReason,
     readInstanceVariantValue,
@@ -40,6 +41,11 @@ export type LineDrawChunkControl = {
     chunkSize?: number;
     shouldCancel?: () => boolean;
     yieldControl?: () => Promise<void>;
+};
+
+export type LinePrecomputedLayout = {
+    cols?: ReturnType<typeof collectColumns>;
+    matrix?: LineBundleMatrix;
 };
 
 const LINE_POINT_PROPERTY_KEY = 'line_point';
@@ -248,6 +254,35 @@ function resolveLineSegmentTargets(lineRoot: SceneNode): SceneNode[] {
     return targets;
 }
 
+function resolveLinePointTargets(lineRoot: SceneNode): SceneNode[] {
+    const targets: SceneNode[] = [];
+    traverse(lineRoot, (node) => {
+        if (node.id === lineRoot.id || !node.visible) return;
+        if (!isPointLikeNode(node)) return;
+        targets.push(node);
+    });
+    return targets;
+}
+
+type LineNodeTargetCacheEntry = {
+    segmentTargets: SceneNode[];
+    pointTargets: SceneNode[];
+};
+
+function resolveLineNodeTargets(
+    lineRoot: SceneNode,
+    cache: Map<string, LineNodeTargetCacheEntry>
+): LineNodeTargetCacheEntry {
+    const cached = cache.get(lineRoot.id);
+    if (cached) return cached;
+    const entry: LineNodeTargetCacheEntry = {
+        segmentTargets: resolveLineSegmentTargets(lineRoot),
+        pointTargets: resolveLinePointTargets(lineRoot)
+    };
+    cache.set(lineRoot.id, entry);
+    return entry;
+}
+
 function applyStrokeThickness(target: SceneNode, thickness: number) {
     if (!('strokeWeight' in target)) return false;
     const t = target as SceneNode & GeometryMixin;
@@ -292,8 +327,7 @@ function getLineStyleId(config: any, rowIndex: number): string | null {
     return id.trim() ? id : null;
 }
 
-function applyLineColorAndStroke(targetNode: SceneNode, rowColor: string | null, rowStyleId: string | null, thickness: number) {
-    const segmentTargets = resolveLineSegmentTargets(targetNode);
+function applyLineColorAndStroke(segmentTargets: SceneNode[], rowColor: string | null, rowStyleId: string | null, thickness: number) {
     segmentTargets.forEach((target) => {
         applyStrokeThickness(target, thickness);
         const isVectorLike = target.type === 'VECTOR' || target.type === 'LINE' || target.type === 'POLYGON' || target.type === 'RECTANGLE';
@@ -329,24 +363,21 @@ function resolveLinePointStyle(config: any, rowIndex: number, fallbackColor: str
 }
 
 function applyLinePointColors(
-    targetNode: SceneNode,
+    pointTargets: SceneNode[],
     style: { strokeColor: string | null; fillColor: string | null; thickness: number; padding?: number }
 ) {
     if (!style.strokeColor && !style.fillColor) return;
-    traverse(targetNode, (child) => {
-        if (child.id === targetNode.id || !child.visible) return;
-        if (!isPointLikeNode(child)) return;
-        if (style.fillColor) tryApplyFill(child, style.fillColor);
-        if (style.strokeColor) tryApplyStroke(child, style.strokeColor);
-        applyStrokeThickness(child, style.thickness);
+    pointTargets.forEach((target) => {
+        if (style.fillColor) tryApplyFill(target, style.fillColor);
+        if (style.strokeColor) tryApplyStroke(target, style.strokeColor);
+        applyStrokeThickness(target, style.thickness);
         if (typeof style.padding === 'number') {
-            setUniformPadding(child, style.padding);
+            setUniformPadding(target, style.padding);
         }
     });
 }
 
-function setLineStrokeVisibility(lineRoot: SceneNode, visible: boolean) {
-    const segmentTargets = resolveLineSegmentTargets(lineRoot);
+function setLineStrokeVisibility(segmentTargets: SceneNode[], visible: boolean) {
     segmentTargets.forEach((target) => {
         setStrokeVisibility(target, visible);
     });
@@ -443,7 +474,8 @@ export async function applyLine(
     config: any,
     H: number,
     graph: SceneNode,
-    control?: LineDrawChunkControl
+    control?: LineDrawChunkControl,
+    precomputed?: LinePrecomputedLayout
 ): Promise<LineApplyResult> {
     const flatEpsilon = 1e-6;
     const values = Array.isArray(config?.values) ? config.values : [];
@@ -452,7 +484,10 @@ export async function applyLine(
     const linePointVisible = config?.linePointVisible !== false;
     const lineCurveEnabled = config?.lineFeature2Enabled === true;
     const deferSegmentStrokeStyling = config?.deferLineSegmentStrokeStyling === true;
-    const cols = collectColumns(graph).filter((col) => col.node.visible);
+    const layoutOnly = config?.layoutOnly === true;
+    const shouldApplyStrokeStyling = !deferSegmentStrokeStyling && !layoutOnly;
+    const shouldApplyPointStyling = !layoutOnly;
+    const cols = (precomputed?.cols ?? collectColumns(graph)).filter((col) => col.node.visible);
     const maxSegmentsFromValues = values.reduce((max: number, row: any) => {
         const count = Array.isArray(row) ? Math.max(0, row.length - 1) : 0;
         return Math.max(max, count);
@@ -464,7 +499,7 @@ export async function applyLine(
     }
 
     const resolveStart = Date.now();
-    const matrix = buildLineBundleMatrix(cols, rowCount);
+    const matrix = precomputed?.matrix ?? buildLineBundleMatrix(cols, rowCount);
     const validation = validateLineStructureOrError(matrix, rowCount, segmentCount, validateBundleCompatibility);
     const resolveMs = Date.now() - resolveStart;
     if (!validation.ok) {
@@ -485,6 +520,7 @@ export async function applyLine(
     const chunkSize = Math.max(1, Number(control?.chunkSize) || 10);
     let processedSegmentsForYield = 0;
     let appliedSegments = 0;
+    const lineNodeTargetCache = new Map<string, LineNodeTargetCacheEntry>();
     for (let r = 0; r < rowCount; r++) {
         if (control?.shouldCancel?.()) {
             return {
@@ -493,8 +529,13 @@ export async function applyLine(
                 message: 'Line apply cancelled.'
             };
         }
-        const rowColor = normalizeHexColor(Array.isArray(config?.rowColors) ? config.rowColors[r] : null);
-        const rowStyleId = getLineStyleId(config, r);
+        const rowColor = (shouldApplyStrokeStyling || shouldApplyPointStyling)
+            ? normalizeHexColor(Array.isArray(config?.rowColors) ? config.rowColors[r] : null)
+            : null;
+        const rowStyleId = shouldApplyStrokeStyling ? getLineStyleId(config, r) : null;
+        const pointStyle = shouldApplyPointStyling
+            ? resolveLinePointStyle(config, r, rowColor, thickness)
+            : null;
         const seriesData = Array.isArray(values[r]) ? values[r] : [];
         const rowSegmentCount = Math.max(0, Math.min(segmentCount, seriesData.length - 1));
 
@@ -528,11 +569,14 @@ export async function applyLine(
             bundle.container.visible = true;
             bundle.lineNode.visible = true;
             bundle.fillNode.visible = true;
-            if (!deferSegmentStrokeStyling) {
-                applyLineColorAndStroke(bundle.lineNode, rowColor, rowStyleId, thickness);
+            const bundleTargets = resolveLineNodeTargets(bundle.lineNode, lineNodeTargetCache);
+            if (shouldApplyStrokeStyling) {
+                applyLineColorAndStroke(bundleTargets.segmentTargets, rowColor, rowStyleId, thickness);
             }
-            applyLinePointColors(bundle.lineNode, resolveLinePointStyle(config, r, rowColor, thickness));
-            setLineStrokeVisibility(bundle.lineNode, !isFlat);
+            if (pointStyle) {
+                applyLinePointColors(bundleTargets.pointTargets, pointStyle);
+            }
+            setLineStrokeVisibility(bundleTargets.segmentTargets, !isFlat);
             const layoutIssue = applyLineBundleLayout(
                 bundle,
                 pTop,
@@ -593,12 +637,15 @@ export async function applyLine(
     };
 }
 
-export function syncFlatLineFillBottomPadding(graph: SceneNode, precomputedCols?: ReturnType<typeof collectColumns>) {
+export function syncFlatLineFillBottomPadding(
+    graph: SceneNode,
+    precomputedCols?: ReturnType<typeof collectColumns>,
+    precomputedMatrix?: LineBundleMatrix
+) {
     const cols = (precomputedCols ?? collectColumns(graph)).filter((col) => col.node.visible);
     if (cols.length === 0) return;
 
-    const detectedRows = detectLineSeriesCountInColumns(cols);
-    const matrix = buildLineBundleMatrix(cols, detectedRows);
+    const matrix = precomputedMatrix ?? buildLineBundleMatrix(cols, detectLineSeriesCountInColumns(cols));
 
     matrix.forEach((row) => {
         row.forEach((bundle) => {

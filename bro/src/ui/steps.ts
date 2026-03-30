@@ -323,6 +323,7 @@ export function buildSubmissionPayload(options?: SubmissionBuildOptions) {
         rowColors: ensureRowColorsLength(state.rows),
         rowColorModes: ensureRowColorModesLength(state.rows),
         rowPaintStyleIds: ensureRowPaintStyleIdsLength(state.rows),
+        markVariableSlotMap: { ...(state.markVariableSlotMap || {}) },
         rowHeaderLabels: ensureRowHeaderLabelsLength(state.rows, state.chartType),
         colColors: state.colHeaderColors,
         colColorModes: ensureColHeaderColorModesLength(getGridColsForChart(state.chartType, state.cols)),

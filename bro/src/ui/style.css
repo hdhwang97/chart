@@ -264,6 +264,21 @@ input[type=number]::-webkit-outer-spin-button {
     color: #64748B;
 }
 
+.style-item-style-id-text {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #E5E7EB;
+    border-radius: 6px;
+    background: #F8FAFC;
+    color: #334155;
+    font-size: 10px;
+    line-height: 1.3;
+    padding: 4px 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    word-break: break-all;
+}
+
 .style-item-close-btn {
     border: 0;
     background: transparent;
@@ -374,10 +389,39 @@ input[type=number]::-webkit-outer-spin-button {
     display: flex;
     align-items: center;
     gap: 6px;
+    position: relative;
 }
 
 .hex-input-with-preview input {
     min-width: 0;
+}
+
+.hex-input-with-preview.is-variable-mode input {
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+    caret-color: transparent !important;
+    user-select: none;
+    text-shadow: none !important;
+}
+
+.hex-input-with-preview.is-variable-mode input::selection {
+    background: transparent;
+}
+
+.style-variable-name-overlay {
+    position: absolute;
+    top: 50%;
+    left: 9px;
+    right: 26px;
+    transform: translateY(-50%);
+    font-size: 10px;
+    line-height: 1.2;
+    font-weight: 600;
+    color: #0F766E;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
 }
 
 .style-hex-preview {
@@ -430,6 +474,13 @@ input[type=number]::-webkit-outer-spin-button {
 
 .style-section-header {
     flex: 0 0 auto;
+}
+
+.style-section-heading-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
 }
 
 .style-section-scroll-area {
