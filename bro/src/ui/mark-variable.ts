@@ -45,7 +45,6 @@ export function resolveMarkVariableSlotKeysForInputId(inputId: string | null | u
     if (normalized === MARK_INPUT_IDS.fill) return [`color/${markIndex}_fill`];
     if (normalized === MARK_INPUT_IDS.lineBackground) {
         return [
-            `color/${markIndex}_area`,
             `color/${markIndex}_area_top`,
             `color/${markIndex}_area_bot`
         ];
@@ -73,6 +72,14 @@ export function resolveMarkVariableStyleIdForInputId(inputId: string | null | un
         const id = state.markVariableSlotMap[slotKey];
         if (typeof id === 'string' && id.trim()) {
             return { styleId: id, slotKeys, fromSlotMap: true };
+        }
+    }
+    if (normalizeInputId(inputId) === MARK_INPUT_IDS.lineBackground) {
+        const markIndex = resolveActiveMarkIndexOneBased();
+        const legacyAreaSlotKey = `color/${markIndex}_area`;
+        const legacyId = state.markVariableSlotMap[legacyAreaSlotKey];
+        if (typeof legacyId === 'string' && legacyId.trim()) {
+            return { styleId: legacyId, slotKeys, fromSlotMap: true };
         }
     }
 
@@ -109,4 +116,3 @@ export function setMarkVariableStyleIdForInputId(
     state.markVariableSlotMap = next;
     return slotKeys;
 }
-

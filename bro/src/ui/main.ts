@@ -254,7 +254,33 @@ function normalizeIncomingMarkVariableSlotMap(value: unknown): Record<string, st
         if (typeof variableId !== 'string' || !variableId.trim()) return;
         next[slotKey] = variableId;
     });
-    return next;
+    const normalized = { ...next };
+    const seriesIndexes = new Set<number>();
+    Object.keys(normalized).forEach((slotKey) => {
+        const match = /^color\/(\d+)_area(?:_(top|bot))?$/i.exec(slotKey);
+        if (!match) return;
+        const seriesIndex = Number(match[1]);
+        if (!Number.isFinite(seriesIndex) || seriesIndex <= 0) return;
+        seriesIndexes.add(Math.floor(seriesIndex));
+    });
+    seriesIndexes.forEach((seriesIndex) => {
+        const areaKey = `color/${seriesIndex}_area`;
+        const topKey = `color/${seriesIndex}_area_top`;
+        const botKey = `color/${seriesIndex}_area_bot`;
+        const areaId = normalized[areaKey];
+        const topId = normalized[topKey];
+        const botId = normalized[botKey];
+        if (topId || botId) {
+            delete normalized[areaKey];
+            return;
+        }
+        if (areaId) {
+            normalized[topKey] = areaId;
+            normalized[botKey] = areaId;
+            delete normalized[areaKey];
+        }
+    });
+    return normalized;
 }
 
 function updateChartTargetStepperUi() {

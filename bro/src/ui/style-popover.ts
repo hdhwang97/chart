@@ -123,6 +123,8 @@ let styleItemVariableActionBusy = false;
 let variableLinkRequestSeq = 0;
 let variableActionRequestSeq = 0;
 let pendingVariableLinkRequestId: number | null = null;
+let pendingVariableLinkRequestKey: string | null = null;
+let lastResolvedVariableStatusRequestKey: string | null = null;
 const variableAutoRecoveryAttemptedKeys = new Set<string>();
 
 function isMarkVariablePopoverContext() {
@@ -137,6 +139,16 @@ function isMarkVariablePopoverContext() {
 function resolveActiveVariableInputId() {
     if (!isMarkVariablePopoverContext()) return null;
     return resolveMarkVariableInputId(styleItemPopoverTarget as StyleItemPopoverTarget, styleItemPopoverSourceInput);
+}
+
+function resolveStyleSettingDefaultVariableInputId() {
+    return state.chartType === 'line'
+        ? ui.styleMarkStrokeColorInput.id
+        : ui.styleMarkFillColorInput.id;
+}
+
+function resolveVariableStatusSourceInputId() {
+    return resolveActiveVariableInputId() || resolveStyleSettingDefaultVariableInputId();
 }
 
 function resolveActiveVariableSlotKeys() {
@@ -155,6 +167,10 @@ function updateVariableActionButtonsUi() {
     ui.styleItemVariableStatusRow.classList.toggle('hidden', !showVariableControls);
     // Variable writes are controlled from Style Setting action buttons.
     ui.styleItemVariableActionsRow.classList.add('hidden');
+    ui.styleVariableCreateBtn.classList.toggle(
+        'hidden',
+        styleItemVariableLinkState === 'owned'
+    );
     if (!showVariableControls) {
         return;
     }
@@ -213,20 +229,33 @@ function buildVariableRecoveryKey(targetId: string, sourceInputId: string) {
     return `${targetId}::${sourceInputId}`;
 }
 
-function requestMarkVariableLinkState() {
-    if (!isMarkVariablePopoverContext()) return;
+function requestMarkVariableLinkState(options?: { force?: boolean }) {
     const targetId = state.activeTargetId;
-    const sourceInputId = resolveActiveVariableInputId();
-    const slotKeys = resolveActiveVariableSlotKeys();
+    const sourceInputId = resolveVariableStatusSourceInputId();
+    const slotKeys = sourceInputId ? resolveMarkVariableSlotKeysForInputId(sourceInputId) : [];
     if (!targetId || !sourceInputId || slotKeys.length === 0) {
         styleItemVariableLinkState = 'unlinked';
         styleItemVariableLinkSlots = [];
         styleItemVariableLinkMessage = '';
+        pendingVariableLinkRequestId = null;
+        pendingVariableLinkRequestKey = null;
+        lastResolvedVariableStatusRequestKey = null;
+        updateVariableActionButtonsUi();
+        return;
+    }
+    const slotFingerprint = slotKeys
+        .map((slotKey) => `${slotKey}:${state.markVariableSlotMap?.[slotKey] || ''}`)
+        .join('|');
+    const requestKey = `${targetId}|${sourceInputId}|${slotFingerprint}`;
+    const hasSamePendingRequest = pendingVariableLinkRequestId !== null && requestKey === pendingVariableLinkRequestKey;
+    const hasSameResolvedRequest = pendingVariableLinkRequestId === null && requestKey === lastResolvedVariableStatusRequestKey;
+    if (!options?.force && (hasSamePendingRequest || hasSameResolvedRequest)) {
         updateVariableActionButtonsUi();
         return;
     }
     const requestId = ++variableLinkRequestSeq;
     pendingVariableLinkRequestId = requestId;
+    pendingVariableLinkRequestKey = requestKey;
     parent.postMessage({
         pluginMessage: {
             type: 'resolve_mark_variable_links',
@@ -342,10 +371,11 @@ function updateVariableLinkStateFromSlots(slots: VariableLinkSlotInfo[]) {
 }
 
 export function handleMarkVariableLinksResolvedMessage(msg: any) {
-    if (!isMarkVariablePopoverContext()) return;
     const requestId = Number(msg?.requestId);
     if (!Number.isFinite(requestId) || pendingVariableLinkRequestId !== Number(requestId)) return;
     pendingVariableLinkRequestId = null;
+    lastResolvedVariableStatusRequestKey = pendingVariableLinkRequestKey;
+    pendingVariableLinkRequestKey = null;
     const slots = Array.isArray(msg?.slots) ? msg.slots : [];
     const normalizedSlots: VariableLinkSlotInfo[] = slots.map((slot: any) => ({
         slotKey: typeof slot?.slotKey === 'string' ? slot.slotKey : '',
@@ -359,6 +389,10 @@ export function handleMarkVariableLinksResolvedMessage(msg: any) {
     applyResolvedSlotMap(normalizedSlots);
     updateVariableLinkStateFromSlots(normalizedSlots);
     syncAllHexPreviewsFromDom();
+}
+
+export function refreshStyleSettingVariableStatus(options?: { force?: boolean }) {
+    requestMarkVariableLinkState(options);
 }
 
 export function handleMarkVariableOverwriteResultMessage(msg: any): { toast?: string } {
@@ -1467,10 +1501,8 @@ export function closeStyleItemPopover(options: { commit: boolean }) {
     styleItemPopoverSessionSnapshot = null;
     styleItemPopoverVariableEligible = false;
     styleItemVariableActionBusy = false;
-    styleItemVariableLinkState = 'unlinked';
-    styleItemVariableLinkSlots = [];
-    styleItemVariableLinkMessage = '';
     pendingVariableLinkRequestId = null;
+    pendingVariableLinkRequestKey = null;
     ui.styleItemPopover.classList.add('hidden');
     ui.styleItemNavRow.classList.add('hidden');
     setStylePopoverLinkedColumn(null);
