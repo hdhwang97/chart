@@ -365,24 +365,32 @@ function buildDataCell(
     cell.type = 'text';
     cell.inputMode = 'decimal';
     cell.className = 'grid-cell w-16 h-6 text-center text-xs border-r border-b border-border focus:outline-none focus:border-primary focus:bg-blue-50 hover:bg-gray-50 transition-colors';
-    cell.value = state.data[r]?.[c] || '';
+    const rawStoredValue = state.data[r]?.[c] || '';
+    cell.value = formatDataGridCellDisplayValue(rawStoredValue);
 
     if (state.mode === 'read') {
         cell.readOnly = true;
         cell.classList.add('cursor-default', 'bg-gray-50');
     }
 
-    if (state.dataMode === 'percent' && cell.value !== '') {
-        const n = Number(cell.value);
+    if (state.dataMode === 'percent' && rawStoredValue !== '') {
+        const n = Number(rawStoredValue);
         if (n < 0 || n > 100) {
             cell.classList.add('border-danger', 'border-2');
         }
     }
 
     cell.addEventListener('input', (e) => {
-        const val = (e.target as HTMLInputElement).value;
+        const input = e.target as HTMLInputElement;
+        const val = input.value;
+        const normalizedVal = state.dataMode === 'percent'
+            ? normalizePercentDataGridCellValue(val)
+            : val;
         if (!state.data[r]) state.data[r] = [];
-        state.data[r][c] = val;
+        state.data[r][c] = normalizedVal;
+        if (state.dataMode === 'percent' && val.includes('%')) {
+            input.value = normalizedVal;
+        }
         syncYMaxValidationUi();
         renderPreview();
         checkCtaValidation();
@@ -398,7 +406,7 @@ function buildDataCell(
             const commitVal = cell.dataset.remainingValue || '';
             if (!state.data[r]) state.data[r] = [];
             state.data[r][c] = commitVal;
-            cell.value = commitVal;
+            cell.value = formatDataGridCellDisplayValue(commitVal);
             cell.dataset.remainingPreview = 'false';
             cell.dataset.remainingValue = '';
             cell.placeholder = '';
@@ -466,6 +474,19 @@ function buildDataCell(
     cell.addEventListener('mouseleave', () => {
         cell.classList.remove('grid-cell-self-hover');
         resetPreviewHighlight();
+    });
+
+    cell.addEventListener('focus', () => {
+        if (state.dataMode !== 'percent') return;
+        cell.value = normalizePercentDataGridCellValue(cell.value);
+    });
+
+    cell.addEventListener('blur', () => {
+        if (state.dataMode !== 'percent') return;
+        const normalizedVal = normalizePercentDataGridCellValue(cell.value);
+        if (!state.data[r]) state.data[r] = [];
+        state.data[r][c] = normalizedVal;
+        cell.value = formatDataGridCellDisplayValue(normalizedVal);
     });
 
     cell.dataset.r = String(r);
@@ -580,6 +601,16 @@ function startColHeaderInlineEdit(
 function formatNumeric(value: number): string {
     if (Number.isInteger(value)) return String(value);
     return String(Math.round(value * 100) / 100);
+}
+
+function normalizePercentDataGridCellValue(value: string): string {
+    return value.replace(/%/g, '').trim();
+}
+
+function formatDataGridCellDisplayValue(value: string): string {
+    if (state.dataMode !== 'percent') return value;
+    const normalized = normalizePercentDataGridCellValue(value);
+    return normalized === '' ? '' : `${normalized}%`;
 }
 
 function toFiniteNumberOrNull(value: unknown): number | null {

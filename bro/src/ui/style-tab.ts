@@ -637,6 +637,28 @@ export function hydrateStyleTab(draft: StyleInjectionDraft) {
     syncAllHexPreviewsFromDom();
 }
 
+export function syncLineMarkThicknessFromStrokeWidth(strokeWidth: number) {
+    if (state.chartType !== 'line') return;
+    const normalized = clampThickness(strokeWidth, state.styleInjectionDraft.mark.thickness);
+    const styles = ensureMarkDraftSeriesCount(state.markStylesDraft).map((item) => ({
+        ...item,
+        thickness: normalized
+    }));
+    state.markStylesDraft = styles;
+    const nextDraft: StyleInjectionDraft = {
+        ...state.styleInjectionDraft,
+        mark: {
+            ...state.styleInjectionDraft.mark,
+            thickness: normalized
+        }
+    };
+    setStyleInjectionDraft(nextDraft);
+    ui.styleMarkThicknessInput.value = String(normalized);
+    if (styleItemPopoverOpen && styleItemPopoverConfig) {
+        syncStyleItemPopoverFromConfig(styleItemPopoverConfig);
+    }
+}
+
 export function readStyleTabDraft(): StyleInjectionDraft {
     const allowMarkFill = markFillEnabled();
     const allowLineBackground = markLineBackgroundEnabled();
