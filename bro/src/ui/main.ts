@@ -34,7 +34,7 @@ import { handleCsvUpload, downloadCsv, removeCsv, updateCsvUi } from './csv';
 import { addRow, addColumn, handleDimensionInput, updateGridSize, syncMarkCountFromRows, syncRowsFromMarkCount, applySegmentCountToAllGroups } from './data-ops';
 import { goToStep, selectType, resetData, serializeApplySnapshot, updateSettingInputs, submitData, submitVariablesOnly } from './steps';
 import { switchTab, handleStyleExtracted, setDataTabRenderer, setStyleTabRenderer, refreshExportPreview } from './export';
-import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, handleMarkVariableCreateResultMessage, handleMarkVariableLinksResolvedMessage, handleMarkVariableOverwriteResultMessage, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncLineMarkThicknessFromStrokeWidth, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, validateStyleTabDraft } from './style-tab';
+import { bindStyleTabEvents, buildTemplatePayloadFromDraft,  commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, handleMarkVariableCreateResultMessage, handleMarkVariableLinksResolvedMessage, handleMarkVariableOverwriteResultMessage, initializeStyleTabDraft, openStyleItemPopoverWithMeta, readStyleTabDraft, renderStyleTemplateGallery, requestNewTemplateName, setStyleInjectionDraft, setStylePopoverPaintStyles, setStyleSettingCardHoverState, setStyleTemplateList, setStyleTemplateMode, syncAllHexPreviewsFromDom, syncLineMarkThicknessFromStrokeWidth, syncMarkStyleCardVisibility, syncMarkStylesFromHeaderColors, syncStyleTabDraftFromExtracted, syncVariableOverwriteBaseline, validateStyleTabDraft } from './style-tab';
 import type { ColorMode, LocalStyleOverrideMask, LocalStyleOverrides, PaintStyleSelection, UpdateType } from '../shared/style-types';
 import { normalizeYLabelFormatMode } from '../shared/y-label-format';
 import { initGraphSettingTooltip, refreshGraphSettingTooltipContent } from './components/graph-setting-tooltip';
@@ -67,6 +67,8 @@ let rowColorDraftMode: ColorMode | null = null;
 let rowColorDraftStyleId: string | null = null;
 let rowColorDraftColReset = false;
 const lineSwitchToggleClass = 'line-switch-toggle';
+let errorToastHideTimer: ReturnType<typeof setTimeout> | null = null;
+let createVariableToastVisible = false;
 
 function normalizeBarLabelSource(value: unknown): 'row' | 'y' {
     return value === 'y' ? 'y' : 'row';
@@ -78,22 +80,55 @@ function resolveSubmissionUpdateType(): UpdateType {
     return 'both';
 }
 
-function showTransientErrorToast(message: string) {
+function clearErrorToastTimer() {
+    if (!errorToastHideTimer) return;
+    clearTimeout(errorToastHideTimer);
+    errorToastHideTimer = null;
+}
+
+function hideErrorToast() {
+    clearErrorToastTimer();
+    const toast = ui.errorToast;
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(8px)';
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 300);
+}
+
+function showUiToast(message: string, options?: { autoHideMs?: number }) {
     const toast = ui.errorToast;
     const msgNode = toast.querySelector('span');
     if (msgNode) {
         msgNode.textContent = message;
     }
+    clearErrorToastTimer();
     toast.classList.remove('hidden');
     requestAnimationFrame(() => {
         toast.style.opacity = '1';
         toast.style.transform = 'translateX(-50%) translateY(0)';
     });
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(-50%) translateY(8px)';
-        setTimeout(() => toast.classList.add('hidden'), 300);
-    }, 3000);
+    if (typeof options?.autoHideMs === 'number' && options.autoHideMs > 0) {
+        errorToastHideTimer = setTimeout(() => {
+            hideErrorToast();
+        }, options.autoHideMs);
+    }
+}
+
+function showTransientErrorToast(message: string) {
+    createVariableToastVisible = false;
+    showUiToast(message, { autoHideMs: 3000 });
+}
+
+function showCreateVariableProgressToast() {
+    createVariableToastVisible = true;
+    showUiToast('create new variable colors...');
+}
+
+function hideCreateVariableProgressToast() {
+    if (!createVariableToastVisible) return;
+    createVariableToastVisible = false;
+    hideErrorToast();
 }
 
 function submitVariablesOnlyIfEditableTarget() {
@@ -109,14 +144,20 @@ function runStyleVariableAction(mode: 'overwrite' | 'create') {
         return;
     }
     if (mode === 'overwrite') {
+        hideCreateVariableProgressToast();
         submitVariablesOnly({ colorsOnly: true });
         return;
     }
+    showCreateVariableProgressToast();
     state.variableUpdateMode = mode;
     submitData({ force: true, updateType: 'style' });
     if (mode === 'create') {
         state.variableUpdateMode = 'overwrite';
     }
+}
+
+function closeStyleVariableSplitMenu() {
+    ui.styleVariableSplitToggleBtn.setAttribute('aria-expanded', 'false');
 }
 
 function getBarLabelSourceLabel(source: 'row' | 'y'): string {
@@ -1247,6 +1288,7 @@ function handlePluginMessage(msg: any) {
             state.rowStrokeStyles = [];
             ensureRowHeaderLabelsLength(state.rows, state.chartType);
             initializeStyleTabDraft({}, {});
+            syncVariableOverwriteBaseline();
             parent.postMessage({ pluginMessage: { type: 'load_style_templates', chartType: state.chartType } }, '*');
             switchTab('data');
             goToStep(1);
@@ -1442,6 +1484,7 @@ function handlePluginMessage(msg: any) {
         );
         updateLineFeatureToggleUi();
         syncAllHexPreviewsFromDom();
+        syncVariableOverwriteBaseline();
         parent.postMessage({ pluginMessage: { type: 'load_style_templates', chartType: state.chartType } }, '*');
         uiPerfMarkStage('hydrate-style');
 
@@ -1745,6 +1788,7 @@ function handlePluginMessage(msg: any) {
         syncStyleTabDraftFromExtracted(extractedDraftPayload);
         updateLineFeatureToggleUi();
         syncAllHexPreviewsFromDom();
+        syncVariableOverwriteBaseline();
         const dataTabActive = document.getElementById('step-2')?.classList.contains('active') === true;
         const styleTabActive = document.getElementById('step-style')?.classList.contains('active') === true;
         const exportTabActive = document.getElementById('step-export')?.classList.contains('active') === true;
@@ -1776,12 +1820,16 @@ function handlePluginMessage(msg: any) {
     }
     if (msg.type === 'variables_only_applied') {
         state.loadedApplySnapshot = serializeApplySnapshot();
+        syncVariableOverwriteBaseline();
     }
     if (msg.type === 'variables_only_requires_style_apply') {
         submitData({ force: true, updateType: 'style' });
     }
     if (msg.type === 'apply_completed') {
+        hideCreateVariableProgressToast();
         state.loadedApplySnapshot = serializeApplySnapshot();
+        syncAllHexPreviewsFromDom({ forceVariableStatus: true });
+        syncVariableOverwriteBaseline();
         if (state.pendingSwitchTargetId && msg.targetId === state.activeTargetId) {
             const nextTargetId = state.pendingSwitchTargetId;
             state.pendingSwitchTargetId = null;
@@ -1789,6 +1837,9 @@ function handlePluginMessage(msg: any) {
             return;
         }
         state.pendingSwitchTargetId = null;
+    }
+    if (msg.type === 'apply_cancelled') {
+        hideCreateVariableProgressToast();
     }
 }
 
@@ -1972,9 +2023,12 @@ function bindUiEvents() {
         updateLineFeatureToggleUi();
     });
     ui.styleVariableOverwriteBtn.addEventListener('click', () => {
+        closeStyleVariableSplitMenu();
         runStyleVariableAction('overwrite');
     });
-    ui.styleVariableCreateBtn.addEventListener('click', () => {
+    ui.styleVariableSplitToggleBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        closeStyleVariableSplitMenu();
         runStyleVariableAction('create');
     });
     ui.styleAssistLineToggleBtn.addEventListener('click', () => {
@@ -2027,6 +2081,7 @@ function bindUiEvents() {
     ui.styleAssistLineControl.addEventListener('click', (e) => e.stopPropagation());
     ui.styleLineOptionPopover.addEventListener('click', (e) => e.stopPropagation());
     ui.styleLineOptionControl.addEventListener('click', (e) => e.stopPropagation());
+    ui.styleVariableSplit.addEventListener('click', (event) => event.stopPropagation());
     ui.rowColorPopover.addEventListener('click', (e) => e.stopPropagation());
     document.addEventListener('row-color-swatch-click', ((event: Event) => {
         const custom = event as CustomEvent<{ row: number; anchorRect: { left: number; top: number; right: number; bottom: number } }>;
@@ -2149,11 +2204,15 @@ function bindUiEvents() {
         updateColorPopoverUi(activeColorTarget, getRowColor(0));
     });
     document.addEventListener('click', () => {
+        closeStyleVariableSplitMenu();
         closeAllAssistLinePopovers();
         if (previewBarLabelPopoverOpen) closePreviewBarLabelPopover(true);
         if (rowColorPopoverOpen) closeRowColorPopover();
     });
     document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeStyleVariableSplitMenu();
+        }
         if (e.key === 'Escape' && rowColorPopoverOpen) {
             closeRowColorPopover();
         }

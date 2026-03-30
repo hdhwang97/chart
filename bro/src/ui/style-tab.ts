@@ -16,7 +16,7 @@ import {
     type ExtractedStylePayload,
     type SavedStylePayload
 } from './style-normalization';
-import { applyQuickSwatchColor, applySelectedPaintStyleColor, applyStylePopoverHexInputValue, bindStylePopoverEvents, canApplyStylePopoverColorEdit, closeStyleItemPopover, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, normalizePopoverSegmentIndex, openStyleColorPopover, openStyleItemPopover, openStyleItemPopoverWithMeta, positionStyleItemPopover, refreshStyleItemModeUi, refreshStyleSettingVariableStatus, setStylePopoverPaintStyles, stepStyleItemPopoverNavigator, styleItemPopoverActiveColorField, styleItemPopoverAnchorRect, styleItemPopoverConfig, styleItemPopoverMode, styleItemPopoverNavigator, styleItemPopoverOpen, styleItemPopoverSegmentIndexCache, styleItemPopoverSelectedStyleId, styleItemPopoverTarget, stylePopoverPaintStyles, suppressOutsideCloseFromInsidePointerDown, switchStyleItemPopoverSegment, syncColumnPopoverStateAndEmit, syncMarkLinkUiState, syncPopoverNavigatorUi, syncStyleItemPopoverFromConfig, updateStyleItemPopoverPreview } from './style-popover';
+import { applyQuickSwatchColor, applySelectedPaintStyleColor, applyStylePopoverHexInputValue, bindStylePopoverEvents, canApplyStylePopoverColorEdit, closeStyleItemPopover, commitStyleColorPopoverIfOpen, forceCloseStyleColorPopover, normalizePopoverSegmentIndex, openStyleColorPopover, openStyleItemPopover, openStyleItemPopoverWithMeta, positionStyleItemPopover, refreshStyleItemModeUi, refreshStyleSettingVariableStatus, setStylePopoverPaintStyles, stepStyleItemPopoverNavigator, styleItemPopoverActiveColorField, styleItemPopoverAnchorRect, styleItemPopoverConfig, styleItemPopoverMode, styleItemPopoverNavigator, styleItemPopoverOpen, styleItemPopoverSegmentIndexCache, styleItemPopoverSelectedStyleId, styleItemPopoverTarget, stylePopoverPaintStyles, suppressOutsideCloseFromInsidePointerDown, switchStyleItemPopoverSegment, syncColumnPopoverStateAndEmit, syncMarkLinkUiState, syncPopoverNavigatorUi, syncStyleItemPopoverFromConfig, syncStyleVariableActionButtonsUi, updateStyleItemPopoverPreview } from './style-popover';
 import { applyTemplateToDraft, bindStyleTemplateEvents, closeTemplateNameEditor, normalizeTemplateNameInput, renderStyleTemplateGallery, requestNewTemplateName, setStyleTemplateList, setStyleTemplateMode } from './style-templates';
 import { ui } from './dom';
 import { DEFAULT_STYLE_INJECTION_DRAFT, DEFAULT_STYLE_INJECTION_ITEM, chartTypeUsesMarkFill, chartTypeUsesMarkLineBackground, deriveRowColorsFromMarkStyles, ensureColHeaderColorEnabledLength, ensureColHeaderColorModesLength, ensureColHeaderColorsLength, ensureColHeaderPaintStyleIdsLength, ensureRowColorModesLength, ensureRowColorsLength, ensureRowPaintStyleIdsLength, getGridColsForChart, getRowColor, getTotalStackedCols, normalizeHexColorInput, recomputeEffectiveStyleSnapshot, seedMarkStylesFromRowColorsIfNeeded, setLocalStyleOverrideField, state, type AssistLineStyleInjectionDraftItem, type GridStyleInjectionDraftItem, type LineBackgroundStyleInjectionDraftItem, type MarkStyleInjectionDraftItem, type StyleInjectionDraft, type StyleInjectionDraftItem } from './state';
@@ -180,6 +180,7 @@ function setActiveStyleInjectionTab(tabKey: StyleInjectionTabKey) {
     panels.forEach((panel) => {
         panel.classList.toggle('is-active', panel.dataset.styleInjectionPanel === tabKey);
     });
+    syncStyleVariableActionButtonsUi();
 }
 
 function setExpandedStyleSection(sectionKey: StyleSectionKey | null) {
@@ -449,14 +450,14 @@ export function syncMarkVariableNameDisplay() {
     });
 }
 
-export function syncAllHexPreviewsFromDom() {
+export function syncAllHexPreviewsFromDom(options?: { forceVariableStatus?: boolean }) {
     getStyleColorInputs().forEach((input) => {
         const swatch = getHexPreviewElement(input);
         if (!swatch) return;
         updateHexPreview(input, swatch, getHexPreviewFallback(input));
     });
     syncMarkVariableNameDisplay();
-    refreshStyleSettingVariableStatus();
+    refreshStyleSettingVariableStatus(options?.forceVariableStatus ? { force: true } : undefined);
 }
 
 export function getStyleFormInputsForSnapshot(): Array<HTMLInputElement | HTMLSelectElement> {

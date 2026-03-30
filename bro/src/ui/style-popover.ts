@@ -125,7 +125,40 @@ let variableActionRequestSeq = 0;
 let pendingVariableLinkRequestId: number | null = null;
 let pendingVariableLinkRequestKey: string | null = null;
 let lastResolvedVariableStatusRequestKey: string | null = null;
+let variableOverwriteBaselineHash: string | null = null;
 const variableAutoRecoveryAttemptedKeys = new Set<string>();
+
+function formatVariableHashColor(value: unknown) {
+    return normalizeHexColorInput(value) || null;
+}
+
+function formatVariableHashOpacity(value: unknown) {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.max(0, Math.min(100, parsed));
+}
+
+function buildVariableOverwriteSourceHash() {
+    const styles = Array.isArray(state.markStylesDraft) ? state.markStylesDraft : [];
+    const normalized = styles.map((item) => ({
+        fillColor: formatVariableHashColor(item?.fillColor),
+        strokeColor: formatVariableHashColor(item?.strokeColor),
+        lineBackgroundColor: formatVariableHashColor(item?.lineBackgroundColor),
+        lineBackgroundOpacity: formatVariableHashOpacity(item?.lineBackgroundOpacity),
+        linePointStrokeColor: formatVariableHashColor(item?.linePointStrokeColor),
+        linePointFillColor: formatVariableHashColor(item?.linePointFillColor)
+    }));
+    return JSON.stringify(normalized);
+}
+
+function hasPendingVariableOverwriteChanges() {
+    const currentHash = buildVariableOverwriteSourceHash();
+    if (variableOverwriteBaselineHash === null) {
+        variableOverwriteBaselineHash = currentHash;
+        return false;
+    }
+    return currentHash !== variableOverwriteBaselineHash;
+}
 
 function isMarkVariablePopoverContext() {
     if (!styleItemPopoverOpen) return false;
@@ -163,14 +196,21 @@ function resolveSlotKeyCollection() {
 }
 
 function updateVariableActionButtonsUi() {
+    const activeInjectionTab = document
+        .querySelector<HTMLElement>('.style-injection-tab.is-active')
+        ?.dataset.styleInjectionTab;
+    const hideVariableActions = activeInjectionTab === 'plot-area';
+    ui.styleVariableMode.classList.toggle('hidden', hideVariableActions);
     const showVariableControls = isMarkVariablePopoverContext();
     ui.styleItemVariableStatusRow.classList.toggle('hidden', !showVariableControls);
     // Variable writes are controlled from Style Setting action buttons.
     ui.styleItemVariableActionsRow.classList.add('hidden');
-    ui.styleVariableCreateBtn.classList.toggle(
-        'hidden',
-        styleItemVariableLinkState === 'owned'
-    );
+    const hideCreateAction = styleItemVariableLinkState === 'owned';
+    ui.styleVariableSplit.classList.toggle('style-variable-split--overwrite-only', hideCreateAction);
+    ui.styleVariableSplitToggleBtn.disabled = hideCreateAction;
+    if (hideCreateAction) {
+        ui.styleVariableSplitToggleBtn.setAttribute('aria-expanded', 'false');
+    }
     if (!showVariableControls) {
         return;
     }
@@ -195,6 +235,11 @@ function updateVariableActionButtonsUi() {
         && slot.resolvedType === 'COLOR'
         && !slot.remote
     ));
+    const hasPendingOverwriteChanges = hasPendingVariableOverwriteChanges();
+    const canOverwriteAction = hasWritableLinkedColor
+        && hasPendingOverwriteChanges
+        && !styleItemVariableActionBusy;
+    ui.styleVariableOverwriteBtn.disabled = !canOverwriteAction;
     const canOverwrite = Boolean(color) && hasWritableLinkedColor && !styleItemVariableActionBusy;
     const canCreate = Boolean(color) && styleItemVariableLinkState !== 'owned' && !styleItemVariableActionBusy;
 
@@ -393,6 +438,15 @@ export function handleMarkVariableLinksResolvedMessage(msg: any) {
 
 export function refreshStyleSettingVariableStatus(options?: { force?: boolean }) {
     requestMarkVariableLinkState(options);
+}
+
+export function syncStyleVariableActionButtonsUi() {
+    updateVariableActionButtonsUi();
+}
+
+export function syncVariableOverwriteBaseline() {
+    variableOverwriteBaselineHash = buildVariableOverwriteSourceHash();
+    updateVariableActionButtonsUi();
 }
 
 export function handleMarkVariableOverwriteResultMessage(msg: any): { toast?: string } {

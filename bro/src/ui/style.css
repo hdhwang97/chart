@@ -978,10 +978,12 @@ input[type=number]::-webkit-outer-spin-button {
 }
 
 .style-variable-mode {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: flex-end;
+    flex: 1 1 auto;
     margin-left: auto;
+    min-width: 0;
 }
 
 .style-variable-mode-label {
@@ -995,33 +997,134 @@ input[type=number]::-webkit-outer-spin-button {
 .style-variable-mode-actions {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    position: relative;
+    margin-left: auto;
 }
 
-.style-variable-action-btn {
-    border: 1px solid #D1D5DB;
-    border-radius: 6px;
-    background: #FFFFFF;
-    color: #334155;
+.style-variable-split {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    height: 28px;
+    border-radius: 12px;
+    overflow: visible;
+    background: linear-gradient(180deg, #2292FF 0%, var(--mac-accent) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 20px rgba(10, 132, 255, 0.18);
+}
+
+.style-variable-action-tooltip-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    height: 100%;
+}
+
+.style-variable-split-main,
+.style-variable-split-toggle {
+    border: 0;
+    background: transparent;
+    color: #FFFFFF;
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 500;
     line-height: 1.2;
-    height: 24px;
-    padding: 0 6px;
     cursor: pointer;
-    transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+    transition: opacity 0.12s ease;
 }
 
-.style-variable-action-btn:hover {
-    border-color: #93C5FD;
-    background: #EFF6FF;
-    color: #1D4ED8;
+.style-variable-split-main {
+    height: 100%;
+    min-width: 70px;
+    padding: 0 12px;
 }
 
-.style-variable-action-btn.is-primary {
-    border-color: #93C5FD;
-    background: #EFF6FF;
-    color: #1D4ED8;
+.style-variable-split-toggle {
+    width: 27px;
+    border-left: 1px solid rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0;
+}
+
+.style-variable-split-main:hover,
+.style-variable-split-toggle:hover {
+    background: transparent;
+    opacity: 0.95;
+}
+
+.style-variable-split-main:disabled,
+.style-variable-split-toggle:disabled {
+    opacity: 1;
+    color: #94A3B8;
+    background: rgba(148, 163, 184, 0.24);
+    cursor: default;
+}
+
+.style-variable-split-main:disabled:hover,
+.style-variable-split-toggle:disabled:hover {
+    color: #94A3B8;
+    background: rgba(148, 163, 184, 0.24);
+}
+
+.style-variable-split-toggle:disabled {
+    border-left-color: rgba(148, 163, 184, 0.5);
+}
+
+.style-variable-split:hover {
+    background: linear-gradient(180deg, #1A88FF 0%, var(--mac-accent-hover) 100%);
+}
+
+.style-variable-split-main:focus-visible,
+.style-variable-split-toggle:focus-visible {
+    outline: 2px solid rgba(10, 132, 255, 0.85);
+    outline-offset: -2px;
+}
+
+.style-variable-action-tooltip {
+    position: absolute;
+    left: auto;
+    right: 0;
+    top: calc(100% + 6px);
+    --tooltip-x: 0%;
+    transform: translateX(var(--tooltip-x)) translateY(-2px);
+    background: rgba(34, 39, 46, 0.94);
+    color: #FFFFFF;
+    border-radius: 8px;
+    padding: 5px 7px;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    z-index: 20;
+}
+
+.style-variable-action-tooltip-wrap:hover .style-variable-action-tooltip,
+.style-variable-action-tooltip-wrap:focus-within .style-variable-action-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(var(--tooltip-x)) translateY(0);
+}
+
+.style-variable-split--overwrite-only .style-variable-split-main {
+    border-right: 0;
+}
+
+.style-variable-split--overwrite-only .style-variable-create-wrap {
+    display: none;
+}
+
+.style-variable-split--overwrite-only {
+    margin-left: auto;
+}
+
+.style-variable-split--overwrite-only .style-variable-action-tooltip {
+    left: auto;
+    right: 0;
+    --tooltip-x: 0%;
 }
 
 .style-injection-panels {

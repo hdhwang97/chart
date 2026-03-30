@@ -551,11 +551,22 @@
                                 <button type="button" class="style-injection-tab is-active" data-style-injection-tab="mark">Mark</button>
                                 <button type="button" class="style-injection-tab" data-style-injection-tab="plot-area">Plot Area</button>
                             </div>
-                            <div class="style-variable-mode">
-                                <span class="style-variable-mode-label">Variable Action</span>
+                            <div id="style-variable-mode" class="style-variable-mode">
                                 <div class="style-variable-mode-actions">
-                                    <button id="style-variable-overwrite-btn" type="button" class="style-variable-action-btn is-primary">Overwrite</button>
-                                    <button id="style-variable-create-btn" type="button" class="style-variable-action-btn">Create Variable</button>
+                                    <div id="style-variable-split" class="style-variable-split">
+                                        <span class="style-variable-action-tooltip-wrap">
+                                            <button id="style-variable-overwrite-btn" type="button" class="style-variable-split-main">Overwrite</button>
+                                            <span class="style-variable-action-tooltip">Changes styles for all charts linked to this variable.</span>
+                                        </span>
+                                        <span class="style-variable-action-tooltip-wrap style-variable-create-wrap">
+                                            <button
+                                                id="style-variable-split-toggle-btn"
+                                                type="button"
+                                                class="style-variable-split-toggle"
+                                                aria-label="Create variable">+</button>
+                                            <span class="style-variable-action-tooltip">create new variable</span>
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
